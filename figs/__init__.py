@@ -17,7 +17,7 @@ MAIN = [
     "umap_harmonization",   # Fig 3 UMAP（補正なし / centroid / GAN）と施設差指標
     "shift_geometry",       # Fig 4 施設差の幾何
     "classification",       # Fig 5 施設間の分類性能
-    "subtype_structure",    # Fig 6 サブタイプ構造（樹形図 補正前 / centroid 後、euc_mean）と SFT からの距離
+    "subtype_structure",    # Fig 6 サブタイプ構造（樹形図 補正なし / centroid / GAN の 3 段、euc_mean）
 ]
 # 表（順 = Table 番号）
 TABLES = [
@@ -26,8 +26,8 @@ TABLES = [
 ]
 # Supplementary（順 = Fig S 番号）
 SUPP = [
-    "subtype_structure_gan",          # GAN 補正後の樹形図（Fig 6 と同形式）
-    "subtype_distance_heatmap",       # 生のユークリッド距離の clustered heatmap（補正前 / centroid 後）
+    "subtype_distance_heatmap",       # サブタイプ間距離のヒートマップ 3 枚（補正なし / centroid / GAN、euc_mean、固定順）
+    "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
 ]
 
 
