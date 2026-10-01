@@ -149,5 +149,12 @@ sft_distance:
   variant:    centroid          # 補正後 variant を使用
   metric:     euc_mean          # 平均ベクトル間ユークリッド距離
 
+# ---- shift_direction.py ----
+shift_direction:
+  variant: original   # 補正前の埋め込みで施設間シフトの向きを見る
+  min_n:   5          # 両施設でこの例数以上のサブタイプだけ群にする
+  n_perm:  1000       # 帰無（シャッフル / 例数を揃えた抽出）の回数
+  seed:    42
+
 # ---- 出力 ----
 output_dir: ./output

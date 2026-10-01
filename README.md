@@ -16,6 +16,7 @@ confusion_mtx.py     # 施設間距離行列（補正前後）
 dendrogram.py        # 施設間距離の樹形図（補正前後）
 dataset.py           # データセット構成の円グラフ
 sft_distance_bar.py  # SFT と各サブタイプ間の距離棒グラフ
+shift_direction.py   # 群ごとの施設間シフトの向きの一致度（centroid 補正の前提の検証）
 utils/
   loader.py          # load_config / load_data（各スクリプトが共通利用）
   display.py         # 色・順序・略称ヘルパー（ordered_subtypes / subtype_color_map / make_abbrev 等）
@@ -47,6 +48,7 @@ uv run python subtype.py
 uv run python confusion_mtx.py
 uv run python dendrogram.py
 uv run python sft_distance_bar.py
+uv run python shift_direction.py
 uv run python dataset.py   # 他スクリプトと独立。任意のタイミングで実行可
 ```
 
@@ -162,4 +164,5 @@ HDF5: cache/{size}/gan/patches
   confusion_mtx.py      施設間距離行列（補正前後）
   dendrogram.py         施設間距離の樹形図（補正前後）
   sft_distance_bar.py   SFT と各サブタイプ間の距離棒グラフ
+  shift_direction.py    群ごとの施設間シフトの向き（全体シフトとの cos、例数を揃えた帰無と比較）
 ```
