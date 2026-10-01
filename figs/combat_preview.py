@@ -196,10 +196,10 @@ def table_md(cfg: dict, test: pd.DataFrame, null: pd.DataFrame) -> str:
 
     out = ["# ComBat を含めた比較（プレビュー、本番図表には未反映）", "",
            "ComBat: neuroCombat、共変量なし、ref_batch = EBRAINS（EBRAINS の値は不変）。", "", *lines, "",
-           "## 組織型の分離の検定（centroid vs ComBat）", "",
-           "スライドごとの組織型シルエット値と組織型 LISI を両条件で計算し、差（ComBat − centroid）を患者ごとに平均、"
+           "## 組織型の分離の検定（平行移動（centroid）vs ComBat）", "",
+           "スライドごとの組織型シルエット値と組織型 LISI を両条件で計算し、差（ComBat − 平行移動）を患者ごとに平均、"
            f"符号反転の並べ替え検定（{N_FLIP:,} 回）で平均差を検定（PCA 50 次元、k = {cfg.get('harmonization', {}).get('lisi_k', 30)}）。", "",
-           "| 指標 | 平均差 ComBat − centroid | 患者数 | p（符号反転） |", "|---|---|---|---|"]
+           "| 指標 | 平均差 ComBat − 平行移動 | 患者数 | p（符号反転） |", "|---|---|---|---|"]
     for r in test.itertuples():
         out.append(f"| {r.metric} | {r.diff_combat_minus_centroid:+.4f} | {r.n_patients} | {r.p_signflip:.4f} |")
     out += ["", f"偶然のレベル（組織型ラベルを施設内で並べ替え、{N_NULL} 回）:", "",

@@ -6,8 +6,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from figs import stem
-from utils.display import (CONDITION_COLORS, CONDITION_ORDER, CONDITIONS_CORE, CONDITIONS_FULL,  # noqa: F401
-                           order_conditions)
+from utils.display import (CONDITION_COLORS, CONDITION_LABELS, CONDITION_LABELS_JA, CONDITION_LABELS_SHORT,  # noqa: F401
+                           CONDITION_ORDER, CONDITIONS_CORE, CONDITIONS_FULL, order_conditions)
 from utils.loader import load_config
 
 FONT = 8
@@ -18,7 +18,7 @@ plt.rcParams.update({
 })
 
 SITE_DISPLAY = {"ebrains": "EBRAINS", "patho2": "patho2"}
-VARIANT_DISPLAY = {"original": "No correction", "gan": "GAN", "centroid": "Centroid", "combat": "ComBat"}
+VARIANT_DISPLAY = CONDITION_LABELS  # 表示名は utils/display.py の 1 か所で定義
 VARIANT_COLOR = CONDITION_COLORS
 
 

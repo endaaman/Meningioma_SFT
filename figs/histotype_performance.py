@@ -14,7 +14,7 @@ from __future__ import annotations
 import pandas as pd
 
 from figs import label
-from figs.common import CONDITIONS_FULL, SITE_DISPLAY, VARIANT_DISPLAY, config, order_conditions, out_root, table_path
+from figs.common import CONDITION_LABELS_JA, CONDITIONS_FULL, SITE_DISPLAY, config, order_conditions, out_root, table_path
 from histotype_labels import apply_set
 
 NAME = "histotype_performance"
@@ -37,7 +37,7 @@ def main() -> None:
             sub = bs[(bs.train_source == tr) & (bs.variant == v)].set_index("metric")
             if sub.empty:
                 continue
-            rec = {"学習 → 評価": f"{SITE_DISPLAY[tr]} → {SITE_DISPLAY[te]}", "補正": VARIANT_DISPLAY[v]}
+            rec = {"学習 → 評価": f"{SITE_DISPLAY[tr]} → {SITE_DISPLAY[te]}", "補正": CONDITION_LABELS_JA[v]}
             for m, col in METRICS:
                 r = sub.loc[m]
                 rec[col] = f"{r['value']:.3f} [{r['ci_low']:.3f}, {r['ci_high']:.3f}]"

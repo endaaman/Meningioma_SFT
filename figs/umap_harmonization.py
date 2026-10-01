@@ -30,12 +30,13 @@ from matplotlib.patches import Patch
 
 import harmonization
 from figs import label
-from figs.common import CONDITION_COLORS, CONDITIONS_FULL, FONT, config, fig_dir, out_root, panel, save, src_markers
+from figs.common import (CONDITION_COLORS, CONDITION_LABELS, CONDITIONS_FULL, FONT, config, fig_dir, out_root, panel,
+                         save, src_markers)
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 
 NAME = "umap_harmonization"
 VARIANTS = CONDITIONS_FULL  # a–d すべて ComBat を含む 4 条件
-TITLES = {"original": "Uncorrected", "gan": "GAN", "combat": "ComBat", "centroid": "Centroid"}
+TITLES = {**CONDITION_LABELS, "original": "Uncorrected"}
 METRIC_KEYS = ["asw_batch", "ilisi", "asw_class", "asw_bio", "clisi"]
 # e の見出し（指標名と、良い向き）
 METRIC_TITLES = {

@@ -13,7 +13,7 @@ import csv
 import pandas as pd
 
 from figs import label
-from figs.common import CONDITIONS_FULL, SITE_DISPLAY, config, order_conditions, out_root, table_path
+from figs.common import CONDITION_LABELS_JA, CONDITIONS_FULL, SITE_DISPLAY, config, order_conditions, out_root, table_path
 
 NAME = "performance"
 METRIC_JA = {
@@ -21,7 +21,7 @@ METRIC_JA = {
     "sensitivity": "感度（SFT）", "specificity": "特異度", "f1_macro": "F1 macro",
     "roc_auc": "ROC AUC", "pr_auc": "PR AUC",
 }
-VARIANT_JA = {"original": "なし", "gan": "GAN", "combat": "ComBat", "centroid": "centroid"}
+VARIANT_JA = CONDITION_LABELS_JA
 
 
 def main() -> None:

@@ -41,10 +41,10 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.neighbors import NearestNeighbors
 
-from utils.display import CONDITION_COLORS, CONDITIONS_CORE, order_conditions
+from utils.display import CONDITION_COLORS, CONDITION_LABELS_SHORT, CONDITIONS_CORE, order_conditions
 from utils.loader import load_config, load_data
 
-STATE_LABELS = {"original": "None", "gan": "GAN", "centroid": "Centroid", "combat": "ComBat"}  # 補正の種類
+STATE_LABELS = CONDITION_LABELS_SHORT  # 補正の種類の表示名（utils/display.py で定義）
 STATE_COLORS = CONDITION_COLORS
 METRIC_INFO = {
     # key: (表示名, 良い向きの注記)
