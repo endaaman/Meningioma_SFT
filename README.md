@@ -71,6 +71,7 @@ label:
   site_a:
     label:   path/to/site_a/case_labels.csv
     subtype: path/to/site_a/case_subtypes.csv
+    patient: path/to/site_a/case_patients.csv   # 任意（下記）
   site_b:
     label:   path/to/site_b/case_labels.csv
     subtype: path/to/site_b/case_subtypes.csv
@@ -86,6 +87,7 @@ embedding:
     gan:        path/to/gan/site_b
     tile_model: conch15_768
 ```
+- `patient`（`case_id,patient_id`）は任意。`lp.py` の train/val split を患者単位にするのに使い、無い施設は 1 症例 = 1 患者とみなす。EBRAINS は 1 患者に複数スライド（再発標本など）があるため必須で、`annotation.csv` の `uuid` 先頭 8 桁（= case_id）→ `pat_id` で作る。
 - HDF5 ファイルは **variant ごとに別ディレクトリ**（`embedding.*.original` / `.gan` / `.centroid`）に配置する。3 variant は同じキー `{tile_model}/aggregates/titan/feature` に slide embedding を書くため、同一 HDF5 に共存させられない。
 
 ```

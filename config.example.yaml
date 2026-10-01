@@ -6,6 +6,7 @@ label:
   site_a:
     label:   path/to/site_a/case_labels.csv
     subtype: path/to/site_a/case_subtypes.csv
+    patient: path/to/site_a/case_patients.csv   # 任意。case_id,patient_id。無ければ 1 症例 = 1 患者（lp.py の val split に使う）
   site_b:
     label:   path/to/site_b/case_labels.csv
     subtype: path/to/site_b/case_subtypes.csv
@@ -137,7 +138,7 @@ lp:
   weight_decay: 0.0
   dropout:      0.0
   num_workers:  0
-  val_fraction: 0.3    # hold-out 割合
+  val_fraction: 0.3    # hold-out 割合（患者単位。実際は 1/round(1/val_fraction) ≒ 1/3）
   patience:     50     # early stopping patience (val_loss 基準)
   class_names:   {0: Meningioma, 1: SFT}
   variants:      [original, centroid, gan]

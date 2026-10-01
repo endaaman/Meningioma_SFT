@@ -33,7 +33,7 @@ import yaml
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 from sklearn.metrics import balanced_accuracy_score, f1_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedGroupKFold
 from torch.utils.data import DataLoader, Dataset, Subset
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
@@ -133,26 +133,41 @@ def _collate(batch: list[tuple[torch.Tensor, int]]):
 
 # ── training ──────────────────────────────────────────────────────────────────
 
-def _make_split(dataset: TitanDataset, val_fraction: float) -> tuple[list[int], list[int]]:
-    indices = list(range(len(dataset)))
-    return train_test_split(
-        indices,
-        test_size=val_fraction,
-        stratify=dataset.labels,
-        random_state=42,
-    )
+def _load_patients(dataset: TitanDataset, patient_csv: str | Path | None) -> list[str]:
+    """case_id ごとの患者 ID を返す。patient_csv が無ければ 1 症例 = 1 患者とみなす。"""
+    if patient_csv is None:
+        return list(dataset.case_ids)
+    with open(patient_csv) as f:
+        mapping = {row["case_id"]: row["patient_id"] for row in csv.DictReader(f)}
+    missing = [cid for cid in dataset.case_ids if cid not in mapping]
+    if missing:
+        raise ValueError(f"patient_id not found for {len(missing)} cases in {patient_csv}: {missing[:5]}")
+    return [mapping[cid] for cid in dataset.case_ids]
 
 
-def _save_split(dataset: TitanDataset, train_idx: list[int], val_idx: list[int],
-                path: Path) -> None:
+def _make_split(dataset: TitanDataset, patients: list[str],
+                val_fraction: float) -> tuple[list[int], list[int]]:
+    """患者単位・ラベル層別で train/val に分ける（同一患者のスライドは同じ側に入る）。
+
+    StratifiedGroupKFold の 1 fold を val とするため、val の割合は 1/round(1/val_fraction) になる
+    （val_fraction=0.3 なら約 1/3）。
+    """
+    n_splits = max(2, round(1 / val_fraction))
+    sgkf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    train_idx, val_idx = next(sgkf.split(np.zeros(len(dataset)), dataset.labels, groups=patients))
+    return train_idx.tolist(), val_idx.tolist()
+
+
+def _save_split(dataset: TitanDataset, patients: list[str], train_idx: list[int],
+                val_idx: list[int], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["case_id", "label", "split"])
+        w.writerow(["case_id", "patient_id", "label", "split"])
         for i in train_idx:
-            w.writerow([dataset.case_ids[i], dataset.labels[i], "train"])
+            w.writerow([dataset.case_ids[i], patients[i], dataset.labels[i], "train"])
         for i in val_idx:
-            w.writerow([dataset.case_ids[i], dataset.labels[i], "val"])
+            w.writerow([dataset.case_ids[i], patients[i], dataset.labels[i], "val"])
     print(f"  saved: {path}")
 
 
@@ -413,9 +428,11 @@ def main() -> None:
         )
         src_out_dir = out_root / f"trained_by_{train_src}"
         if not evaluate_only:
-            train_idx, val_idx = _make_split(base_ds, lp_cfg.get("val_fraction", 0.2))
-            _save_split(base_ds, train_idx, val_idx, src_out_dir / "split.csv")
-            print(f"\n[trained_by_{train_src}]  train={len(train_idx)}  val={len(val_idx)}")
+            patients = _load_patients(base_ds, cfg["label"][train_src].get("patient"))
+            train_idx, val_idx = _make_split(base_ds, patients, lp_cfg.get("val_fraction", 0.2))
+            _save_split(base_ds, patients, train_idx, val_idx, src_out_dir / "split.csv")
+            print(f"\n[trained_by_{train_src}]  train={len(train_idx)}  val={len(val_idx)}"
+                  f"  patients={len(set(patients))}")
         else:
             train_idx, val_idx = [], []
 
