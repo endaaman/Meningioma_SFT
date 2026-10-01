@@ -156,6 +156,8 @@ def main_histotype(cfg: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", choices=["sft", "histotype"], default="sft")
+    parser.add_argument("--lp-subdir", default="lp",
+                        help="sft の入出力先 output_dir/<この名前>（既定 lp。重み付きの結果は lp_weighted など）")
     add_set_arg(parser)
     args = parser.parse_args()
     cfg = apply_set(load_config(), args.set)
@@ -167,7 +169,7 @@ def main() -> None:
     seed = bs_cfg.get("seed", 42)
     variants = order_conditions(cfg["lp"].get("variants", ["original"]))
     sources = list(cfg["embedding"].keys())
-    lp_root = Path(cfg["output_dir"]) / "lp"
+    lp_root = Path(cfg["output_dir"]) / args.lp_subdir
 
     rows, mc_rows = [], []
     for train_src in sources:

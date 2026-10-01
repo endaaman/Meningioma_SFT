@@ -58,9 +58,13 @@ class LinearProbeModel(L.LightningModule):
         lr: float = 1e-3,
         dropout: float = 0.0,
         weight_decay: float = 0.0,
+        class_weights: list[float] | None = None,
     ):
         super().__init__()
         self.save_hyperparameters()
+        # 損失のクラス重み（None なら重みなし = 従来どおり）
+        self.register_buffer("class_w", torch.tensor(class_weights, dtype=torch.float32)
+                             if class_weights is not None else None, persistent=False)
         layers: list[torch.nn.Module] = []
         if dropout > 0.0:
             layers.append(torch.nn.Dropout(dropout))
@@ -73,7 +77,7 @@ class LinearProbeModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         out = self(x)
-        loss = torch.nn.functional.cross_entropy(out["logits"], y)
+        loss = torch.nn.functional.cross_entropy(out["logits"], y, weight=self.class_w)
         acc = (out["logits"].argmax(-1) == y).float().mean()
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("train_acc",  acc,  on_step=True, on_epoch=True, prog_bar=True)
@@ -82,7 +86,7 @@ class LinearProbeModel(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         out = self(x)
-        loss = torch.nn.functional.cross_entropy(out["logits"], y)
+        loss = torch.nn.functional.cross_entropy(out["logits"], y, weight=self.class_w)
         acc = (out["logits"].argmax(-1) == y).float().mean()
         self.log("val_loss", loss, prog_bar=True, sync_dist=True)
         self.log("val_acc",  acc,  prog_bar=True, sync_dist=True)
@@ -209,12 +213,21 @@ def train_all(dataset: TitanDataset, train_idx: list[int], val_idx: list[int],
     num_classes   = len(set(dataset.labels))
     num_workers   = lp_cfg.get("num_workers", 0)
 
+    # class_weight: "balanced" なら学習データのクラス頻度の逆数（sklearn の "balanced" と同じ n / (K * n_c)）
+    class_weights = None
+    if lp_cfg.get("class_weight", "none") == "balanced":
+        y_tr = np.array([dataset.labels[i] for i in train_idx])
+        counts = np.bincount(y_tr, minlength=num_classes)
+        class_weights = (len(y_tr) / (num_classes * counts)).tolist()
+        print(f"  class_weight=balanced: {[round(w, 3) for w in class_weights]}")
+
     model = LinearProbeModel(
         embedding_dim=embedding_dim,
         num_classes=num_classes,
         lr=lp_cfg["lr"],
         dropout=lp_cfg.get("dropout", 0.0),
         weight_decay=lp_cfg.get("weight_decay", 0.0),
+        class_weights=class_weights,
     )
     train_loader = DataLoader(train_ds, batch_size=lp_cfg["batch_size"],
                               shuffle=True, num_workers=num_workers, collate_fn=_collate)
@@ -481,10 +494,18 @@ def main() -> None:
                         help="この variant だけ学習・評価する（既存の split.csv を使い、comparison.csv は該当行だけ差し替え）")
     parser.add_argument("--task", choices=["sft", "histotype"], default="sft",
                         help="sft: 髄膜腫 vs SFT（既定）/ histotype: 組織型の多クラス分類（出力は output_dir/lp_histotype）")
+    parser.add_argument("--class-weight", choices=["none", "balanced"], default=None,
+                        help="損失のクラス重み（既定は config の lp.class_weight、無ければ none）")
+    parser.add_argument("--output-subdir", default=None,
+                        help="出力先 output_dir/<この名前>（既定は lp.output_subdir、無ければ lp）。既存の結果を上書きしないために使う")
     add_set_arg(parser)
     args = parser.parse_args()
 
     cfg = task_config(apply_set(load_config(), args.set), args.task)
+    if args.class_weight is not None:
+        cfg["lp"]["class_weight"] = args.class_weight
+    if args.output_subdir is not None:
+        cfg["lp"]["output_subdir"] = args.output_subdir
     lp_cfg    = cfg["lp"]
     slide_key = cfg["keys"]["slide_feature"]
     reference = cfg.get("reference")
