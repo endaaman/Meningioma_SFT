@@ -8,11 +8,16 @@ SFT、grade を規定する診断名（Atypical / Anaplastic）、希少な組�
       lp_histotype.label_dir/<site>/counts.csv（全 subtype の例数と採否）
 クラス番号は classes の並び順（0 始まり）。lp.py --task histotype が読む。
 
+クラス集合の変種（例: Transitional を除く no_tran）は config の lp_histotype_sets.<name> に置き、
+--set <name> で lp_histotype の値を上書きする（classes / label_dir / output_subdir / preview_prefix）。
+
 Usage:
-    uv run python histotype_labels.py
+    uv run python histotype_labels.py [--set no_tran]
 """
 from __future__ import annotations
 
+import argparse
+import copy
 from pathlib import Path
 
 import pandas as pd
@@ -20,8 +25,24 @@ import pandas as pd
 from utils.loader import load_config
 
 
+def apply_set(cfg: dict, name: str | None) -> dict:
+    """lp_histotype を lp_histotype_sets.<name> で上書きした cfg を返す（name が None なら元のまま）。"""
+    if not name:
+        return cfg
+    new = copy.deepcopy(cfg)
+    new["lp_histotype"] = {**cfg["lp_histotype"], **cfg["lp_histotype_sets"][name]}
+    return new
+
+
+def add_set_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--set", default=None, help="lp_histotype_sets のクラス集合の変種名（例 no_tran）")
+
+
 def main() -> None:
-    cfg = load_config()
+    parser = argparse.ArgumentParser()
+    add_set_arg(parser)
+    args = parser.parse_args()
+    cfg = apply_set(load_config(), args.set)
     h_cfg = cfg["lp_histotype"]
     classes: list[str] = h_cfg["classes"]
     index = {c: i for i, c in enumerate(classes)}

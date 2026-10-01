@@ -42,6 +42,8 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 from sklearn.metrics import balanced_accuracy_score, f1_score
 from sklearn.model_selection import StratifiedGroupKFold
+
+from histotype_labels import add_set_arg, apply_set
 from torch.utils.data import DataLoader, Dataset, Subset
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
@@ -479,9 +481,10 @@ def main() -> None:
                         help="この variant だけ学習・評価する（既存の split.csv を使い、comparison.csv は該当行だけ差し替え）")
     parser.add_argument("--task", choices=["sft", "histotype"], default="sft",
                         help="sft: 髄膜腫 vs SFT（既定）/ histotype: 組織型の多クラス分類（出力は output_dir/lp_histotype）")
+    add_set_arg(parser)
     args = parser.parse_args()
 
-    cfg = task_config(load_config(), args.task)
+    cfg = task_config(apply_set(load_config(), args.set), args.task)
     lp_cfg    = cfg["lp"]
     slide_key = cfg["keys"]["slide_feature"]
     reference = cfg.get("reference")

@@ -30,6 +30,7 @@ from scipy.stats import binomtest
 from sklearn.metrics import balanced_accuracy_score, f1_score, roc_auc_score
 
 from utils.display import order_conditions
+from histotype_labels import add_set_arg, apply_set
 from utils.loader import load_config
 
 METRICS = ["accuracy", "balanced_accuracy", "sensitivity", "specificity", "f1_macro"]
@@ -155,8 +156,9 @@ def main_histotype(cfg: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", choices=["sft", "histotype"], default="sft")
+    add_set_arg(parser)
     args = parser.parse_args()
-    cfg = load_config()
+    cfg = apply_set(load_config(), args.set)
     if args.task == "histotype":
         main_histotype(cfg)
         return
