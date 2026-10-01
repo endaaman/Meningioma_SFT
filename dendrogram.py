@@ -9,6 +9,7 @@
 出力 (output_dir/dendrogram/):
     {variant}/*_dendrogram_*.png            — 既存（正規化した各 metric）
     {variant}/euc_mean_raw_clustered_cross.png — 生のユークリッド距離の clustered heatmap
+    {variant}/euc_mean_raw_groups.csv / euc_mean_raw.npz — 群情報・距離行列 D・連結 Z（論文図 figs/ が読む）
     pairs.csv                               — variant ごとのペアの定量
 
 Usage:
@@ -219,6 +220,21 @@ def save_clustered(groups: pd.DataFrame, D: np.ndarray, Z: np.ndarray, cfg: dict
     print(f"  saved: {path}")
 
 
+def save_raw(groups: pd.DataFrame, D: np.ndarray, Z: np.ndarray, out_dir: Path) -> None:
+    """論文図用に群情報（label, source, subtype, n）と D・Z を保存する。"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    groups[["label", "source", "subtype", "n"]].to_csv(out_dir / "euc_mean_raw_groups.csv", index=False)
+    np.savez(out_dir / "euc_mean_raw.npz", D=D, Z=Z)
+    print(f"  saved: {out_dir / 'euc_mean_raw_groups.csv'} / euc_mean_raw.npz")
+
+
+def load_raw(out_dir: Path) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    """save_raw の逆。"""
+    groups = pd.read_csv(out_dir / "euc_mean_raw_groups.csv")
+    arr = np.load(out_dir / "euc_mean_raw.npz")
+    return groups, arr["D"], arr["Z"]
+
+
 def run_raw(merged: pd.DataFrame, out_dir: Path, cfg: dict, variant: str) -> dict:
     """生のユークリッド距離の clustered heatmap を保存し、ペアの定量を返す。"""
     groups = group_means(merged, cfg)
@@ -226,6 +242,7 @@ def run_raw(merged: pd.DataFrame, out_dir: Path, cfg: dict, variant: str) -> dic
     Z = ward_linkage(D)
     save_clustered(groups, D, Z, cfg, out_dir / "euc_mean_raw_clustered_cross.png",
                    title=f"{variant}: Euclidean distance between mean embeddings (Ward)")
+    save_raw(groups, D, Z, out_dir)
     stats = {"variant": variant, **pair_stats(D, Z, groups)}
     print("  pairs: " + "  ".join(f"{k}={v}" for k, v in stats.items() if k != "variant"))
     return stats

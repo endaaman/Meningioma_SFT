@@ -2,7 +2,8 @@
 
 出力 (output_dir/dataset/):
     pie_{source}.png / legend.png — サブタイプ構成の円グラフ
-    table1.csv / table1.md        — 施設ごとのスライド数・患者数・SFT/髄膜腫・年齢性別・サブタイプ内訳
+    table1.csv                    — 施設ごとのスライド数・患者数・SFT/髄膜腫・年齢性別・サブタイプ内訳
+    table1_notes.json             — 脚注用（SFT と髄膜腫の両方を持つ患者）。論文の表は figs/table1.py が組む
 
 患者数は label.<source>.patient（case_id,patient_id）があればそれで数え、無ければ 1 症例 = 1 患者。
 年齢・性別は dataset.demographics.<source> の CSV（EBRAINS annotation.csv 形式: uuid, pat_id, age, sex）
@@ -13,6 +14,7 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -154,21 +156,9 @@ def build_table1(cfg: dict) -> pd.DataFrame:
 def save_table1(table: pd.DataFrame, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     table.to_csv(out_dir / "table1.csv", index=False)
-    sources = [c for c in table.columns if c != "item"]
-    lines = ["| | " + " | ".join(sources) + " |", "|---|" + "---|" * len(sources)]
-    for _, r in table.iterrows():
-        item = r["item"]
-        item = f"&emsp;{item.strip()}" if item.startswith("  ") else item
-        lines.append(f"| {item} | " + " | ".join(str(r[s]) for s in sources) + " |")
-    notes = []
-    for ds, pts in table.attrs.get("both_class_patients", {}).items():
-        if pts:
-            notes.append(f"{ds}: {len(pts)} 名（patient_id {', '.join(pts)}）は SFT と髄膜腫の両方の"
-                         "スライドを持ち、両方の行に数えている。")
-    notes.append("サブタイプ内訳はスライド数。年齢・性別は患者単位（複数スライドの患者は最も若い年齢）。")
-    md = "\n".join(lines) + "\n\n" + "\n".join(f"- {n}" for n in notes) + "\n"
-    (out_dir / "table1.md").write_text(md)
-    print(f"保存先: {out_dir / 'table1.csv'} / table1.md")
+    notes = {"both_class_patients": table.attrs.get("both_class_patients", {})}
+    (out_dir / "table1_notes.json").write_text(json.dumps(notes, ensure_ascii=False, indent=2))
+    print(f"保存先: {out_dir / 'table1.csv'} / table1_notes.json")
 
 
 if __name__ == "__main__":

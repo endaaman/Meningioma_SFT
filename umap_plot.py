@@ -1,7 +1,7 @@
 """umap_plot.py — TITAN スライド埋め込みの UMAP 可視化。
 
 original / centroid / gan ディレクトリからそれぞれ読み込み、
-サブフォルダ別に出力する。
+サブフォルダ別に出力する。UMAP 座標は {variant}/coords.csv に保存し、論文図（figs/）が読む。
 
 Usage:
     uv run python umap_plot.py
@@ -37,6 +37,12 @@ def run_umap(merged: pd.DataFrame, out_dir: Path, cfg: dict) -> None:
             random_state=umap_cfg.get("random_state", 42),
             n_jobs=1,
         ).fit_transform(X)
+
+    coords_path = out_dir / "coords.csv"
+    pd.DataFrame({"case_id": merged["case_id"].values, "source": merged["source"].values,
+                  "subtype": merged["subtype"].values,
+                  "umap1": coords[:, 0], "umap2": coords[:, 1]}).to_csv(coords_path, index=False)
+    print(f"  saved: {coords_path}")
 
     subtypes = merged["subtype"].values
     sources  = merged["source"].values

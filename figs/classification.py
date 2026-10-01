@@ -1,30 +1,25 @@
-"""paper_fig4.py — 論文 Fig 4（施設間の分類性能）を組み立てる。
+"""施設間の分類性能: 混同行列（a）と balanced accuracy・SFT 感度の点推定＋95% CI（b）。
 
     a: 混同行列（2 方向 × 補正なし / centroid / GAN）。セルは件数、色は行（真のクラス）ごとの割合。
     b: balanced accuracy と SFT 感度の点推定 + 95% CI（患者単位 bootstrap）。
 
-入力: output_dir/lp/trained_by_*/{variant}/predictions.csv, output_dir/lp/bootstrap.csv
-      （lp.py → lp_bootstrap.py を先に実行）
-出力: output_dir/paper/v1/fig/fig4.{png,pdf}
+入力: output_dir/lp/trained_by_*/{variant}/predictions.csv（lp.py）, output_dir/lp/bootstrap.csv（lp_bootstrap.py）
+出力: fig/{fig n}_classification.{png,pdf}（番号は figs/__init__.py）
 
 Usage:
-    uv run python paper_fig4.py
+    uv run python -m figs.classification
 """
 from __future__ import annotations
-
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.gridspec import GridSpec
 
-from utils.display import CONDITION_COLORS
-from utils.loader import load_config
+from figs import label
+from figs.common import SITE_DISPLAY, VARIANT_COLOR, VARIANT_DISPLAY, config, out_root, save
 
-SITE_DISPLAY = {"ebrains": "EBRAINS", "patho2": "patho2"}
-VARIANT_DISPLAY = {"original": "No correction", "centroid": "Centroid", "gan": "GAN"}
-VARIANT_COLOR = CONDITION_COLORS
+NAME = "classification"
 CLASS_NAMES = ["Meningioma", "SFT"]
 
 
@@ -54,9 +49,9 @@ def _draw_cm(ax: plt.Axes, cm: np.ndarray, title: str, show_ylabel: bool, show_x
 
 
 def main() -> None:
-    cfg = load_config()
-    out_root = Path(cfg["output_dir"])
-    lp_root = out_root / "lp"
+    print(f"[{label(NAME)}] {NAME}")
+    cfg = config()
+    lp_root = out_root(cfg) / "lp"
     variants = cfg["lp"].get("variants", ["original"])
     sources = list(cfg["embedding"].keys())
     directions = [(s, next(t for t in sources if t != s)) for s in sources]
@@ -83,7 +78,7 @@ def main() -> None:
     sub = gs[2].subgridspec(1, 2, wspace=0.08)
     metrics = [("balanced_accuracy", "Balanced accuracy"), ("sensitivity", "Sensitivity (SFT)")]
     ylabels, ypos = [], []
-    for k, (metric, label) in enumerate(metrics):
+    for k, (metric, xlabel) in enumerate(metrics):
         ax = fig.add_subplot(sub[k])
         y = 0
         for train_src, test_src in directions:
@@ -101,7 +96,7 @@ def main() -> None:
                 y += 1
             y += 0.6  # 方向の間の余白
         ax.set_xlim(0.45, 1.02)
-        ax.set_xlabel(label, fontsize=8)
+        ax.set_xlabel(xlabel, fontsize=8)
         ax.grid(axis="x", alpha=0.3)
         ax.tick_params(labelsize=8)
         ax.spines[["top", "right"]].set_visible(False)
@@ -114,13 +109,7 @@ def main() -> None:
                             xycoords=("axes fraction", "data"), fontsize=8, fontweight="bold", va="center")
             ax.annotate("b", xy=(-0.62, 1.05), xycoords="axes fraction", fontsize=12, fontweight="bold")
 
-    out_dir = out_root / "paper" / "v1" / "fig"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for ext in ("png", "pdf"):
-        path = out_dir / f"fig4.{ext}"
-        fig.savefig(path, dpi=300, bbox_inches="tight")
-        print(f"  saved: {path}")
-    plt.close(fig)
+    save(fig, cfg, NAME)
 
 
 if __name__ == "__main__":

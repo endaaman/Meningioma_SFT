@@ -9,16 +9,23 @@ config.yaml          # 全設定（パス・色・パラメータ）
 gan.py               # Cycle-GAN による補正後のバッチをエンコードして HDF5 書き込みするラッパー
 titan.py             # TITAN による WSI-level aggregate
 centroid.py          # 重心補正（centroid shift）の可視化・評価
-lp.py                # TITAN 埋め込みの Linear Probe 訓練・評価
-umap_plot.py         # 補正前後の UMAP プロット
+lp.py                # TITAN 埋め込みの Linear Probe 訓練・評価（テスト予測 predictions.csv も出す）
+lp_bootstrap.py      # lp の予測の患者単位 bootstrap（95% CI）と条件間 McNemar
+umap_plot.py         # 補正前後の UMAP プロット（座標 coords.csv も保存）
 subtype.py           # サブタイプ別平均ベクトルの UMAP
 confusion_mtx.py     # 施設間距離行列（補正前後）
-dendrogram.py        # 施設間距離の樹形図（補正前後）
-dataset.py           # データセット構成の円グラフと Table 1
+dendrogram.py        # 施設間距離の樹形図（補正前後）。生のユークリッド距離の行列・連結・ペアの定量も保存
+dataset.py           # データセット構成の円グラフと Table 1 の元データ（table1.csv）
 sft_distance_bar.py  # SFT と各サブタイプ間の距離棒グラフ
 shift_direction.py   # 群ごとの施設間シフトの向きの一致度（centroid 補正の前提の検証）
 harmonization.py     # 補正の効き具合の指標（ASW・LISI、補正なし / centroid / GAN）
-paper_figs.py        # 論文用の図（Fig 2 / 3 / 5）と Table 1 を out/paper/{version}/ に組み立てる
+figs/                # 論文の図表を out/ の解析結果から組み立てる（重い計算はしない）
+  __init__.py        # 図表番号の唯一の定義（MAIN / TABLES / SUPP の順序）
+  common.py          # 出力先・共通スタイル・保存
+  umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py  # 図（内容名）
+  cohort.py / performance.py  # 表
+  subtype_structure_uncorrected.py  # Supplementary
+  all.py             # 自分の出力を掃除してから全部作る
 utils/
   loader.py          # load_config / load_data（各スクリプトが共通利用）
   display.py         # 色・順序・略称ヘルパー（ordered_subtypes / subtype_color_map / make_abbrev 等）
@@ -45,6 +52,7 @@ uv run python centroid.py  # slide-level を施設間で重心補正し centroid
 
 # 以下は順不同（可視化・評価）
 uv run python lp.py
+uv run python lp_bootstrap.py   # lp.py の後
 uv run python umap_plot.py
 uv run python subtype.py
 uv run python confusion_mtx.py
@@ -54,8 +62,10 @@ uv run python shift_direction.py
 uv run python harmonization.py
 uv run python dataset.py   # 他スクリプトと独立。任意のタイミングで実行可
 
-# 論文用の図表（上の出力を使う）
-uv run python paper_figs.py
+# 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
+# ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる
+uv run python -m figs.all
+uv run python -m figs.umap_harmonization   # 1 つだけ作る場合
 ```
 
 

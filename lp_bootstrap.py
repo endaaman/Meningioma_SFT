@@ -7,15 +7,13 @@ lp.py が書き出す trained_by_{src}/{variant}/predictions.csv を読み、
 出力 (output_dir/lp/):
     bootstrap.csv  — 条件 × 指標の点推定と 95% CI
     mcnemar.csv    — 同じテスト集合での variant 間の McNemar exact 検定
-出力 (output_dir/paper/v1/tables/):
-    table2.csv / table2.md — 論文 Table 2
+論文 Table 2 は figs/table2.py が bootstrap.csv から組む。
 
 Usage:
     uv run python lp_bootstrap.py
 """
 from __future__ import annotations
 
-import csv
 from itertools import combinations
 from pathlib import Path
 
@@ -27,12 +25,6 @@ from sklearn.metrics import balanced_accuracy_score, f1_score
 from utils.loader import load_config
 
 METRICS = ["accuracy", "balanced_accuracy", "sensitivity", "specificity", "f1_macro"]
-METRIC_JA = {
-    "accuracy": "Accuracy", "balanced_accuracy": "Balanced acc.",
-    "sensitivity": "感度（SFT）", "specificity": "特異度", "f1_macro": "F1 macro",
-}
-SITE_DISPLAY = {"ebrains": "EBRAINS", "patho2": "patho2"}
-VARIANT_JA = {"original": "なし", "centroid": "centroid", "gan": "GAN"}
 
 
 def _metrics(t: np.ndarray, p: np.ndarray) -> dict[str, float]:
@@ -116,35 +108,6 @@ def main() -> None:
     bs.to_csv(lp_root / "bootstrap.csv", index=False)
     pd.DataFrame(mc_rows).to_csv(lp_root / "mcnemar.csv", index=False)
     print(f"  saved: {lp_root / 'bootstrap.csv'}\n  saved: {lp_root / 'mcnemar.csv'}")
-    _write_table2(bs, Path(cfg["output_dir"]) / "paper" / "v1" / "tables")
-
-
-def _write_table2(bs: pd.DataFrame, out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    records = []
-    for (train_src, test_src, variant), g in bs.groupby(["train_source", "test_source", "variant"], sort=False):
-        rec = {"学習 → 評価": f"{SITE_DISPLAY.get(train_src, train_src)} → {SITE_DISPLAY.get(test_src, test_src)}",
-               "補正": VARIANT_JA.get(variant, variant)}
-        for _, r in g.iterrows():
-            rec[METRIC_JA[r["metric"]]] = f"{r['value']:.3f} [{r['ci_low']:.3f}, {r['ci_high']:.3f}]"
-        records.append(rec)
-    table = pd.DataFrame(records)
-    table.to_csv(out_dir / "table2.csv", index=False, quoting=csv.QUOTE_MINIMAL)
-
-    cols = list(table.columns)
-    lines = ["| " + " | ".join(cols) + " |", "|" + "|".join(["---"] * len(cols)) + "|"]
-    prev = None
-    for _, r in table.iterrows():
-        cells = [str(r[c]) for c in cols]
-        if cells[0] == prev:
-            cells[0] = ""
-        else:
-            prev = cells[0]
-        lines.append("| " + " | ".join(cells) + " |")
-    lines += ["", ": 施設間の分類性能。各値は点推定 [95% CI]（テスト側施設の患者単位 bootstrap、2000 回）。"
-              "感度は SFT を陽性とした値。 {#tbl:table2}"]
-    (out_dir / "table2.md").write_text("\n".join(lines) + "\n")
-    print(f"  saved: {out_dir / 'table2.csv'}\n  saved: {out_dir / 'table2.md'}")
 
 
 if __name__ == "__main__":
