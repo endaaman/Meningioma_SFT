@@ -4,8 +4,9 @@
     fig/_preview_combat_umap.png        — UMAP 4 列（補正なし / GAN / centroid / ComBat）
     fig/_preview_combat_dendrogram.png  — 樹形図 4 段（Fig 6 と同じ描き方）
     fig/_preview_combat_lp.png          — LP の balanced accuracy・SFT 感度の点推定と 95% CI（2 方向）
-    _preview_combat_table.md            — 施設指標・組織型指標・ペア数・LP の比較表と、組織型の分離の検定
-    _preview_combat_subtype_test.csv    — 組織型の分離の検定（下記）の結果
+出力（解析の結果。本文・figures.md から参照する）:
+    {output_dir}/combat/comparison.md   — 施設指標・組織型指標・ペア数・LP の比較表と、組織型の分離の検定
+    {output_dir}/combat/subtype_test.csv — 組織型の分離の検定（下記）の結果
 
 組織型の分離の検定（centroid vs ComBat）:
     1) スライドごとの対応ありの比較: 各スライドの組織型のシルエット値（silhouette_samples）と
@@ -32,8 +33,7 @@ from sklearn.neighbors import NearestNeighbors
 
 import harmonization
 from figs import subtype_structure
-from figs.common import (CONDITION_COLORS, FONT, SITE_DISPLAY, VARIANT_DISPLAY, config, fig_dir, out_root, paper_dir,
-                         src_markers)
+from figs.common import (CONDITION_COLORS, FONT, SITE_DISPLAY, VARIANT_DISPLAY, config, fig_dir, out_root, src_markers)
 from figs.umap_harmonization import _draw_umap
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 from utils.loader import load_data
@@ -224,10 +224,12 @@ def main() -> None:
         print(f"  saved: {path}")
         _save(lp_figure(cfg), "lp", cfg)
     test, null = subtype_test(cfg)
+    out_dir = out_root(cfg) / "combat"
+    out_dir.mkdir(parents=True, exist_ok=True)
     pd.concat([test.assign(kind="signflip"), null.assign(kind="null")]).to_csv(
-        paper_dir(cfg) / "_preview_combat_subtype_test.csv", index=False)
+        out_dir / "subtype_test.csv", index=False)
     md = table_md(cfg, test, null)
-    (paper_dir(cfg) / "_preview_combat_table.md").write_text(md)
+    (out_dir / "comparison.md").write_text(md)
     print(md)
 
 
