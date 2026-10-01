@@ -1,4 +1,4 @@
-"""figs.tissue — 組織パッチの一覧（a）。施設による色調の違いと GAN 変換を見せる。
+"""figs.tissue — 組織パッチの一覧（a）と色の定量（b）。施設による色調の違いと GAN 変換を見せる。
 
 列 = サブタイプ（COLUMNS の順）、行 = patho2（元画像）/ patho2 → GAN（同じパッチの変換後）/ EBRAINS（元画像）。
 各セルのパッチは paper_patches.py が出した候補（施設 × サブタイプごとに中心に近い順の上位 5 枚）から、
@@ -8,6 +8,7 @@ PICK の順位番号で選ぶ。組み替えは PICK の番号を書き換える
     patch_candidates/candidates.csv、patch_candidates/{site}/{abbr}/rank{k}_{case}_x{X}_y{Y}.png
     patho2 の original h5 の cache/{gan.patch_size}/gan/patches（GAN 変換後。座標は cache/{size}/coordinates と共有。読んだものは
     patch_candidates/patho2_gan_single/ にキャッシュ）
+    color/slide_color.csv（paper_color.py の出力。スライドごとの組織画素の平均色）
 
 Usage:
     uv run python -m figs.tissue
@@ -23,7 +24,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 from PIL import Image
 
-from figs.common import FONT, SITE_DISPLAY, config, panel_fig, paper_dir, save
+from figs.common import CONDITION_COLORS, FONT, SITE_DISPLAY, config, panel_fig, paper_dir, save
 from utils.display import make_abbrev, subtype_color_map
 
 NAME = "tissue"
@@ -32,8 +33,8 @@ NAME = "tissue"
 COLUMNS = ["Meni", "Fibr", "Tran", "Atyp", "Angi", "Anap", "SFT"]
 # 候補の順位（1〜5）を列順に。組み替えはここを書き換えるだけ（GAN 行は patho2 と同じパッチ）
 PICK = {
-    "patho2":  [1, 1, 1, 1, 1, 1, 1],
-    "ebrains": [1, 1, 1, 1, 1, 1, 1],
+    "patho2":  [1, 1, 1, 1, 3, 3, 1],
+    "ebrains": [1, 1, 1, 1, 1, 1, 3],
 }
 
 GAN_SITE = "patho2"
@@ -121,16 +122,49 @@ def draw_patch_grid(fig: plt.Figure, gs, cfg: dict) -> None:
                 _scale_bar(ax, _mpp(cfg, site, r.case_id), img.shape[0])
 
 
+COLOR_METRICS = [("L", "L* (lightness)"), ("a", "a* (green–red)"), ("b", "b* (blue–yellow)"),
+                 ("H", "Hematoxylin"), ("E", "Eosin")]
+
+
+def draw_color(fig: plt.Figure, gs, cfg: dict) -> None:
+    """gs（行 1 × 列 len(COLOR_METRICS)）に、スライドごとの平均色の分布を群別に描く。"""
+    df = pd.read_csv(paper_dir(cfg) / "color" / "slide_color.csv")
+    ref = cfg["reference"]
+    groups = [ref, GAN_SITE, f"{GAN_SITE} (GAN)"]
+    labels = [SITE_DISPLAY[ref], SITE_DISPLAY[GAN_SITE], f"{SITE_DISPLAY[GAN_SITE]}\n→ GAN"]
+    src_colors = cfg["display"]["colors"]["sources"]
+    colors = [src_colors[ref], src_colors[GAN_SITE], CONDITION_COLORS["gan"]]
+    rng = np.random.default_rng(42)
+    for j, (m, title) in enumerate(COLOR_METRICS):
+        ax = fig.add_subplot(gs[0, j])
+        for k, (g, col) in enumerate(zip(groups, colors)):
+            v = df.loc[df.group == g, m].to_numpy()
+            ax.scatter(k + rng.uniform(-0.18, 0.18, len(v)), v, s=2, color=col, alpha=0.4, linewidths=0)
+            ax.hlines(np.median(v), k - 0.3, k + 0.3, color="black", lw=1.2)
+        ax.set_xticks(range(len(groups)))
+        ax.set_xticklabels(labels, fontsize=6)
+        ax.tick_params(axis="y", labelsize=6)
+        ax.set_title(title, fontsize=7)
+        ax.spines[["top", "right"]].set_visible(False)
+
+
 def main() -> None:
     cfg = config()
     n_cols = len(COLUMNS)
     cell = 1.05  # inch
-    fig = plt.figure(figsize=(cell * n_cols + 0.4, cell * 3 + 0.5))
-    # b（色の定量）を下に足すときは、ここの行を増やして別の GridSpec を割り当てる
-    gs = GridSpec(3, n_cols, figure=fig, left=0.06, right=0.995, top=0.90, bottom=0.01,
+    color_h = 1.7  # inch（b）
+    height = cell * 3 + 0.5 + color_h
+    fig = plt.figure(figsize=(cell * n_cols + 0.4, height))
+    top_a = 1 - 0.35 / height
+    bottom_a = (color_h + 0.15) / height
+    gs = GridSpec(3, n_cols, figure=fig, left=0.06, right=0.995, top=top_a, bottom=bottom_a,
                   wspace=0.03, hspace=0.03)
     draw_patch_grid(fig, gs, cfg)
-    panel_fig(fig, 0.0, 0.93, "a")
+    gs_b = GridSpec(1, len(COLOR_METRICS), figure=fig, left=0.06, right=0.995,
+                    top=(color_h - 0.25) / height, bottom=0.42 / height, wspace=0.45)
+    draw_color(fig, gs_b, cfg)
+    panel_fig(fig, 0.0, 1 - 0.1 / height, "a")
+    panel_fig(fig, 0.0, (color_h - 0.05) / height, "b")
     save(fig, cfg, NAME)
 
 
