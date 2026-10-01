@@ -4,7 +4,8 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 
 # 補正条件の色（全図で共通。施設色の青・赤と被らない Tol bright の灰・紫・水色）
-CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE"}
+CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE",
+                    "combat": "#CCBB44"}  # combat は比較検討用（CONDITION_ORDER には入れない）
 # 補正条件の並び（全図表で共通。比較対象の GAN を先に、提案の centroid を最後に置く）
 CONDITION_ORDER = ["original", "gan", "centroid"]
 

@@ -59,7 +59,8 @@ def _null_for(null_table: pd.DataFrame | None, key: str) -> dict | None:
     """施設指標の偶然のレベル（状態間でほぼ同じなので平均を取って 1 本にする）。"""
     if null_table is None or key not in SITE_KEYS:
         return None
-    t = null_table[(null_table["null"] == NULL_KIND) & (null_table["metric"] == key)]
+    t = null_table[(null_table["null"] == NULL_KIND) & (null_table["metric"] == key)
+                   & null_table["state"].isin(CONDITION_ORDER)]
     return {"mean": t["null_mean"].mean(), "q025": t["null_q025"].mean(), "q975": t["null_q975"].mean()}
 
 

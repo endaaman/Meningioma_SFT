@@ -17,7 +17,7 @@ plt.rcParams.update({
 })
 
 SITE_DISPLAY = {"ebrains": "EBRAINS", "patho2": "patho2"}
-VARIANT_DISPLAY = {"original": "No correction", "gan": "GAN", "centroid": "Centroid"}
+VARIANT_DISPLAY = {"original": "No correction", "gan": "GAN", "centroid": "Centroid", "combat": "ComBat"}
 VARIANT_COLOR = CONDITION_COLORS
 
 

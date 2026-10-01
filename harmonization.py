@@ -41,10 +41,10 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.neighbors import NearestNeighbors
 
-from utils.display import CONDITION_COLORS, order_conditions
+from utils.display import CONDITION_COLORS, CONDITION_ORDER, order_conditions
 from utils.loader import load_config, load_data
 
-STATE_LABELS = {"original": "None", "gan": "GAN", "centroid": "Centroid"}  # 補正の種類
+STATE_LABELS = {"original": "None", "gan": "GAN", "centroid": "Centroid", "combat": "ComBat"}  # 補正の種類
 STATE_COLORS = CONDITION_COLORS
 METRIC_INFO = {
     # key: (表示名, 良い向きの注記)
@@ -172,14 +172,17 @@ def compute_all(cfg: dict) -> pd.DataFrame:
 
 
 def draw_metric(ax: plt.Axes, table: pd.DataFrame, key: str, show_note: bool = True,
-                null: dict | None = None, null_style: str = "band") -> None:
+                null: dict | None = None, null_style: str = "band", states: list[str] | None = None) -> None:
     """1 指標の棒グラフ（状態ごと）を ax に描く。
+
+    states: 描く状態（既定は本番の CONDITION_ORDER にあるものだけ。combat 等の検討用の状態は明示したときだけ描く）。
 
     null: {"mean", "q025", "q975"}（施設ラベルの並べ替えによる偶然のレベル）。null_style は
     "band"（95% 範囲の灰色の横帯）/ "line"（平均の破線）。
     """
-    table = table.set_index("state").loc[order_conditions(table["state"].tolist())].reset_index()
-    states = table["state"].tolist()
+    if states is None:
+        states = [s for s in CONDITION_ORDER if s in set(table["state"])]
+    table = table.set_index("state").loc[states].reset_index()
     vals = table[key].values
     x = np.arange(len(states))
     ax.bar(x, vals, color=[STATE_COLORS.get(s, "#888888") for s in states], width=0.62)
@@ -218,7 +221,7 @@ def plot(table: pd.DataFrame, out_path: Path) -> None:
     keys = list(METRIC_INFO)
     fig, axes = plt.subplots(1, len(keys), figsize=(2.6 * len(keys), 3.2))
     for ax, key in zip(axes, keys):
-        draw_metric(ax, table, key)
+        draw_metric(ax, table, key, states=order_conditions(table["state"].tolist()))
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()

@@ -17,10 +17,13 @@ centroid.py で生成した補正済み HDF5 を使い、補正前後を比較�
     comparison.csv            — 4条件の横断比較
 
 Usage:
-    uv run python lp.py
+    uv run python lp.py                      # config の lp.variants をすべて
+    uv run python lp.py --variants combat    # 指定 variant だけ学習・評価し、comparison.csv の該当行だけ差し替える
+                                             # （既存の split.csv を使い、他の variant の ckpt / 予測には触れない）
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 from pathlib import Path
@@ -398,6 +401,23 @@ def _save_cm_colorbar(path: Path) -> None:
 
 # ── comparison ────────────────────────────────────────────────────────────────
 
+def merge_comparison(all_metrics: list[dict], out_dir: Path) -> list[dict]:
+    """既存の comparison.csv に、今回の variant の行を差し替えて合わせる（他の行は保持）。"""
+    path = out_dir / "comparison.csv"
+    if not path.exists():
+        return all_metrics
+    done = {r["variant"] for r in all_metrics}
+    kept = []
+    with open(path) as f:
+        for r in csv.DictReader(f):
+            if r["variant"] in done:
+                continue
+            kept.append({"variant": r["variant"], "train_source": r["train_source"], "test_source": r["test_source"],
+                         "accuracy": float(r["accuracy"]), "balanced_accuracy": float(r["balanced_accuracy"]),
+                         "f1_macro": float(r["f1_macro"]), "n": int(r["n"])})
+    return kept + all_metrics
+
+
 def save_comparison(all_metrics: list[dict], out_dir: Path) -> None:
     path = out_dir / "comparison.csv"
     with open(path, "w", newline="") as f:
@@ -422,12 +442,18 @@ def _effective_key(src: str, variant: str, reference: str | None) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--variants", nargs="+", default=None,
+                        help="この variant だけ学習・評価する（既存の split.csv を使い、comparison.csv は該当行だけ差し替え）")
+    args = parser.parse_args()
+
     cfg = load_config()
     lp_cfg    = cfg["lp"]
     slide_key = cfg["keys"]["slide_feature"]
     reference = cfg.get("reference")
     sources   = list(cfg["embedding"].keys())
-    variants  = lp_cfg.get("variants", ["original"])
+    variants  = args.variants or lp_cfg.get("variants", ["original"])
+    partial   = args.variants is not None
     out_root  = Path(cfg["output_dir"]) / "lp"
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -446,7 +472,12 @@ def main() -> None:
             cfg["label"][train_src]["label"],
         )
         src_out_dir = out_root / f"trained_by_{train_src}"
-        if not evaluate_only:
+        if partial and not evaluate_only:
+            # 部分実行: split は既存のものをそのまま使う（他 variant と同じ train/val にする）
+            if not (src_out_dir / "split.csv").exists():
+                raise FileNotFoundError(f"{src_out_dir / 'split.csv'} がない。先に全 variant で lp.py を実行すること")
+            print(f"\n[trained_by_{train_src}]  reuse split: {src_out_dir / 'split.csv'}")
+        elif not evaluate_only:
             patients = _load_patients(base_ds, cfg["label"][train_src].get("patient"))
             train_idx, val_idx = _make_split(base_ds, patients, lp_cfg.get("val_fraction", 0.2))
             _save_split(base_ds, patients, train_idx, val_idx, src_out_dir / "split.csv")
@@ -516,6 +547,8 @@ def main() -> None:
             })
 
     if all_metrics:
+        if partial:
+            all_metrics = merge_comparison(all_metrics, out_root)
         save_comparison(all_metrics, out_root)
 
 

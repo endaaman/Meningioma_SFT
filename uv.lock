@@ -1370,6 +1370,7 @@ dependencies = [
     { name = "h5py" },
     { name = "lightning" },
     { name = "matplotlib" },
+    { name = "neurocombat" },
     { name = "numpy" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "pandas", version = "3.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
@@ -1387,6 +1388,7 @@ requires-dist = [
     { name = "h5py" },
     { name = "lightning" },
     { name = "matplotlib" },
+    { name = "neurocombat", specifier = ">=0.2.12" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pyyaml" },
@@ -1570,6 +1572,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/dc/76/3af777226b63a5e64
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/cd/fe58041e9011f307c490e3e17dd48cc516448f7c698a3f2d9d9d65d7e6a8/networkx-3.7-py3-none-any.whl", hash = "sha256:e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0", size = 2142205, upload-time = "2026-09-21T16:45:14.609Z" },
 ]
+
+[[package]]
+name = "neurocombat"
+version = "0.2.12"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/e4/ca7af7aaf09b34702ef1f2a5e6afd5105b89c01a09f323ac60af429ef8b4/neuroCombat-0.2.12.tar.gz", hash = "sha256:dfba419ec1a251f4142a3705a1567e5a3b9589dc39ca93a57669cda09c954caa", size = 6191, upload-time = "2021-05-18T16:25:17.511Z" }
 
 [[package]]
 name = "numba"

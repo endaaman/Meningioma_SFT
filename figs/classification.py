@@ -17,7 +17,8 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 
 from figs import label
-from figs.common import SITE_DISPLAY, VARIANT_COLOR, VARIANT_DISPLAY, config, order_conditions, out_root, save
+from figs.common import (CONDITION_ORDER, SITE_DISPLAY, VARIANT_COLOR, VARIANT_DISPLAY, config, order_conditions,
+                         out_root, save)
 
 NAME = "classification"
 CLASS_NAMES = ["Meningioma", "SFT"]
@@ -52,7 +53,7 @@ def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = config()
     lp_root = out_root(cfg) / "lp"
-    variants = order_conditions(cfg["lp"].get("variants", ["original"]))
+    variants = [v for v in order_conditions(cfg["lp"].get("variants", ["original"])) if v in CONDITION_ORDER]
     sources = list(cfg["embedding"].keys())
     directions = [(s, next(t for t in sources if t != s)) for s in sources]
     bs = pd.read_csv(lp_root / "bootstrap.csv")

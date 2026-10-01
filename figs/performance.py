@@ -13,7 +13,7 @@ import csv
 import pandas as pd
 
 from figs import label
-from figs.common import SITE_DISPLAY, config, order_conditions, out_root, table_path
+from figs.common import CONDITION_ORDER, SITE_DISPLAY, config, order_conditions, out_root, table_path
 
 NAME = "performance"
 METRIC_JA = {
@@ -27,6 +27,7 @@ def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = config()
     bs = pd.read_csv(out_root(cfg) / "lp" / "bootstrap.csv")
+    bs = bs[bs["variant"].isin(CONDITION_ORDER)]  # 本番の条件だけ（combat 等の検討用は載せない）
     src_rank = {s: i for i, s in enumerate(dict.fromkeys(bs["train_source"]))}
     var_rank = {v: i for i, v in enumerate(order_conditions(bs["variant"].unique()))}
     bs = bs.assign(_s=bs["train_source"].map(src_rank), _v=bs["variant"].map(var_rank)).sort_values(

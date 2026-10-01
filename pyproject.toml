@@ -17,6 +17,7 @@ dependencies = [
     "lightning",
     "wsi-toolbox",
     "einops-exts>=0.0.4",
+    "neurocombat>=0.2.12",
 ]
 
 [tool.uv.sources]
