@@ -13,21 +13,21 @@ import csv
 import pandas as pd
 
 from figs import label
-from figs.common import CONDITION_ORDER, SITE_DISPLAY, config, order_conditions, out_root, table_path
+from figs.common import CONDITIONS_FULL, SITE_DISPLAY, config, order_conditions, out_root, table_path
 
 NAME = "performance"
 METRIC_JA = {
     "accuracy": "Accuracy", "balanced_accuracy": "Balanced acc.",
     "sensitivity": "感度（SFT）", "specificity": "特異度", "f1_macro": "F1 macro",
 }
-VARIANT_JA = {"original": "なし", "gan": "GAN", "centroid": "centroid"}
+VARIANT_JA = {"original": "なし", "gan": "GAN", "combat": "ComBat", "centroid": "centroid"}
 
 
 def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = config()
     bs = pd.read_csv(out_root(cfg) / "lp" / "bootstrap.csv")
-    bs = bs[bs["variant"].isin(CONDITION_ORDER)]  # 本番の条件だけ（combat 等の検討用は載せない）
+    bs = bs[bs["variant"].isin(CONDITIONS_FULL)]  # ComBat を含む 4 条件
     src_rank = {s: i for i, s in enumerate(dict.fromkeys(bs["train_source"]))}
     var_rank = {v: i for i, v in enumerate(order_conditions(bs["variant"].unique()))}
     bs = bs.assign(_s=bs["train_source"].map(src_rank), _v=bs["variant"].map(var_rank)).sort_values(

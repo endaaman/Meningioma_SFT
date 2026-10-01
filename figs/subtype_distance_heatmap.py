@@ -19,11 +19,11 @@ import pandas as pd
 
 import dendrogram
 from figs import label
-from figs.common import CONDITION_ORDER, FONT, VARIANT_DISPLAY, config, out_root, panel, save, src_markers
+from figs.common import CONDITIONS_CORE, FONT, VARIANT_DISPLAY, config, out_root, panel, save, src_markers
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 
 NAME = "subtype_distance_heatmap"
-VARIANTS = CONDITION_ORDER
+VARIANTS = CONDITIONS_CORE
 CMAP = "viridis_r"            # 近い = 明るい（本文の旧ヒートマップと同じ向き）
 
 

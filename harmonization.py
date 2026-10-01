@@ -41,7 +41,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.neighbors import NearestNeighbors
 
-from utils.display import CONDITION_COLORS, CONDITION_ORDER, order_conditions
+from utils.display import CONDITION_COLORS, CONDITIONS_CORE, order_conditions
 from utils.loader import load_config, load_data
 
 STATE_LABELS = {"original": "None", "gan": "GAN", "centroid": "Centroid", "combat": "ComBat"}  # 補正の種類
@@ -172,32 +172,37 @@ def compute_all(cfg: dict) -> pd.DataFrame:
 
 
 def draw_metric(ax: plt.Axes, table: pd.DataFrame, key: str, show_note: bool = True,
-                null: dict | None = None, null_style: str = "band", states: list[str] | None = None) -> None:
+                null: dict | None = None, null_style: str = "band", states: list[str] | None = None,
+                value_fontsize: float = 8, tick_fontsize: float = 8, title_fontsize: float = 9,
+                title: str | None = None, null_label: str = "outside", value_rotation: float = 0) -> None:
     """1 指標の棒グラフ（状態ごと）を ax に描く。
 
-    states: 描く状態（既定は本番の CONDITION_ORDER にあるものだけ。combat 等の検討用の状態は明示したときだけ描く）。
+    states: 描く状態（既定は CONDITIONS_CORE にあるもの。ComBat を含めるときは CONDITIONS_FULL を明示して渡す）。
 
     null: {"mean", "q025", "q975"}（施設ラベルの並べ替えによる偶然のレベル）。null_style は
     "band"（95% 範囲の灰色の横帯）/ "line"（平均の破線）。
     """
     if states is None:
-        states = [s for s in CONDITION_ORDER if s in set(table["state"])]
+        states = [s for s in CONDITIONS_CORE if s in set(table["state"])]
     table = table.set_index("state").loc[states].reset_index()
     vals = table[key].values
     x = np.arange(len(states))
     ax.bar(x, vals, color=[STATE_COLORS.get(s, "#888888") for s in states], width=0.62)
     span = max(abs(vals).max(), 1e-9)
     for xi, v in zip(x, vals):
-        ax.text(xi, v + span * 0.03 * (1 if v >= 0 else -1), f"{v:.3f}",
-                ha="center", va="bottom" if v >= 0 else "top", fontsize=8)
+        ax.text(xi, v + span * 0.03 * (1 if v >= 0 else -1), f"{v:.3f}", rotation=value_rotation,
+                ha="center", va="bottom" if v >= 0 else "top", fontsize=value_fontsize)
     ax.set_xticks(x)
-    ax.set_xticklabels([STATE_LABELS.get(s, s) for s in states], fontsize=8)
+    ax.set_xticklabels([STATE_LABELS.get(s, s) for s in states], fontsize=tick_fontsize)
     name, note = METRIC_INFO[key]
-    ax.set_title(f"{name}\n{note}" if show_note else name, fontsize=9)
+    if title is None:
+        title = f"{name}\n{note}" if show_note else name
+    ax.set_title(title, fontsize=title_fontsize)
+    ax.set_xlim(-0.6, len(states) - 0.4)
     if key.startswith("asw"):
         ax.axhline(0, color="#555555", lw=0.6)
-    lo = min(0.0, vals.min() * 1.25)
-    hi = vals.max() * 1.22 if vals.max() > 0 else 0.01
+    lo = min(0.0, vals.min() * (1.25 if value_rotation == 0 else 2.4))
+    hi = vals.max() * (1.22 if value_rotation == 0 else 1.4) if vals.max() > 0 else 0.01
     if key in ("ilisi", "clisi"):
         lo = 1.0  # LISI の下限は 1
         hi = max(hi, 1.0 + (vals.max() - 1.0) * 1.25)
@@ -208,8 +213,11 @@ def draw_metric(ax: plt.Axes, table: pd.DataFrame, key: str, show_note: bool = T
                     fontsize=6.5, color="#666666", ha="left", va="center", clip_on=False)
         else:
             ax.axhline(null["mean"], color="#555555", lw=0.9, ls="--", zorder=0)
-            ax.text(1.01, null["mean"], "chance", transform=ax.get_yaxis_transform(),
-                    fontsize=6.5, color="#555555", ha="left", va="center", clip_on=False)
+            if null_label == "none":
+                pass  # 凡例側で説明する
+            else:
+                ax.text(1.01, null["mean"], "chance", transform=ax.get_yaxis_transform(),
+                        fontsize=6.5, color="#555555", ha="left", va="center", clip_on=False)
         if key in ("ilisi", "clisi"):
             hi = max(hi, null["q975"] + (null["q975"] - 1.0) * 0.08)
     ax.set_ylim(lo, hi)

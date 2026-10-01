@@ -1,7 +1,7 @@
-"""施設差と補正: UMAP（補正なし / GAN / centroid）と施設差・クラス分離の指標。
+"""施設差と補正: UMAP（補正なし / GAN / ComBat / centroid）と、施設差・診断クラス分離・組織型分離の指標。
 
 入力:
-    output_dir/umap/{original,centroid,gan}/coords.csv  （umap_plot.py）
+    output_dir/umap/{original,gan,combat,centroid}/coords.csv  （umap_plot.py）
     output_dir/harmonization/metrics.csv               （harmonization.py）
     output_dir/harmonization/site_null.csv / residual_fraction.csv（同、施設ラベルの並べ替え検定）
 出力: fig/{fig n}_umap_harmonization.{png,pdf}（番号は figs/__init__.py）
@@ -30,13 +30,21 @@ from matplotlib.patches import Patch
 
 import harmonization
 from figs import label
-from figs.common import CONDITION_COLORS, CONDITION_ORDER, FONT, config, fig_dir, out_root, panel, save, src_markers
+from figs.common import CONDITION_COLORS, CONDITIONS_FULL, FONT, config, fig_dir, out_root, panel, save, src_markers
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 
 NAME = "umap_harmonization"
-VARIANTS = CONDITION_ORDER
-TITLES = {"original": "Uncorrected", "gan": "GAN-corrected", "centroid": "Centroid-corrected"}
-METRIC_KEYS = ["asw_batch", "ilisi", "asw_class"]
+VARIANTS = CONDITIONS_FULL  # a–d すべて ComBat を含む 4 条件
+TITLES = {"original": "Uncorrected", "gan": "GAN", "combat": "ComBat", "centroid": "Centroid"}
+METRIC_KEYS = ["asw_batch", "ilisi", "asw_class", "asw_bio", "clisi"]
+# e の見出し（指標名と、良い向き）
+METRIC_TITLES = {
+    "asw_batch": "ASW (site)\n↓ 0: sites mixed",
+    "ilisi":     "iLISI (site)\n↑ sites mixed",
+    "asw_class": "ASW (SFT vs Men.)\n↑ separated",
+    "asw_bio":   "ASW (subtype)\n↑ separated",
+    "clisi":     "cLISI (subtype)\n↓ separated",
+}
 SITE_KEYS = ("asw_batch", "ilisi")
 D_STYLE = "line"             # 本番の d の見せ方（"plain" / "band" / "line" / "residual"）
 NULL_KIND = "within_subtype"  # 偶然のレベルの基準（サブタイプ内で施設ラベルを並べ替え）
@@ -60,13 +68,13 @@ def _null_for(null_table: pd.DataFrame | None, key: str) -> dict | None:
     if null_table is None or key not in SITE_KEYS:
         return None
     t = null_table[(null_table["null"] == NULL_KIND) & (null_table["metric"] == key)
-                   & null_table["state"].isin(CONDITION_ORDER)]
+                   & null_table["state"].isin(VARIANTS)]
     return {"mean": t["null_mean"].mean(), "q025": t["null_q025"].mean(), "q975": t["null_q975"].mean()}
 
 
 def _draw_residual(ax: plt.Axes, resid: pd.DataFrame, key: str) -> None:
     """補正ありの状態の「残った施設差の割合」（%）の棒。"""
-    states = [s for s in CONDITION_ORDER if s != "original"]
+    states = [s for s in VARIANTS if s != "original"]
     t = resid[(resid["null"] == NULL_KIND) & (resid["metric"] == key)].set_index("state")
     vals = np.array([t.loc[s, "residual"] * 100 for s in states])
     x = np.arange(len(states))
@@ -97,7 +105,7 @@ def build(cfg: dict, style: str) -> plt.Figure:
     sub_map = subtype_color_map(subs, cfg)
     src_mkr = src_markers(cfg, sorted(coords["original"]["source"].unique()))
 
-    fig = plt.figure(figsize=(7.2, 5.9))
+    fig = plt.figure(figsize=(7.2, 5.6))
     gs = GridSpec(3, 1, figure=fig, height_ratios=[1.15, 0.2, 1], hspace=0.3)
     top = gs[0].subgridspec(1, len(VARIANTS), wspace=0.12)
     for i, v in enumerate(VARIANTS):
@@ -106,28 +114,35 @@ def build(cfg: dict, style: str) -> plt.Figure:
         ax.set_title(TITLES[v])
         if i:
             ax.set_ylabel("")
-        panel(ax, "abc"[i], x=-0.04)
+        panel(ax, "abcd"[i], x=-0.04)
 
-    # 凡例は UMAP の下に横並び（a–c 共通）
+    # 凡例は UMAP の下に横並び（a–d 共通）
     ax_leg = fig.add_subplot(gs[1]); ax_leg.axis("off")
     handles = [Patch(facecolor=sub_map[s], label=shorten(s, cfg)) for s in subs]
     handles += [Line2D([0], [0], marker=m, color="#666666", ls="none", markersize=5, label=s)
                 for s, m in src_mkr.items()]
+    if style in ("line", "band"):
+        handles.append(Line2D([0], [0], color="#555555", lw=0.9, ls="--", label="chance (e)"))
     ax_leg.legend(handles=handles, loc="center", ncol=10, frameon=False, handlelength=1.0,
                   handleheight=0.9, columnspacing=0.9, handletextpad=0.4, borderaxespad=0,
                   fontsize=FONT - 1)
 
-    bottom = gs[2].subgridspec(1, len(METRIC_KEYS), wspace=0.45)
+    bottom = gs[2].subgridspec(1, len(METRIC_KEYS), wspace=0.6)
     for i, key in enumerate(METRIC_KEYS):
         ax = fig.add_subplot(bottom[0, i])
         if style == "residual" and key in SITE_KEYS:
             _draw_residual(ax, resid, key)
         else:
             harmonization.draw_metric(ax, metrics, key, null=_null_for(null_table, key),
-                                      null_style="band" if style == "band" else "line")
-        ax.tick_params(axis="x", labelsize=FONT - 1)
+                                      null_style="band" if style == "band" else "line", states=VARIANTS,
+                                      value_fontsize=6, tick_fontsize=6, title_fontsize=7,
+                                      title=METRIC_TITLES[key], null_label="none", value_rotation=90)
+        ax.tick_params(axis="x", labelsize=6, rotation=40)
+        ax.tick_params(axis="y", labelsize=6)
+        for t in ax.get_xticklabels():
+            t.set_ha("right")
         if i == 0:
-            panel(ax, "d", x=-0.22, y=1.22)
+            panel(ax, "e", x=-0.3, y=1.25)
     return fig
 
 

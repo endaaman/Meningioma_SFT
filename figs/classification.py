@@ -1,6 +1,6 @@
 """施設間の分類性能: 混同行列（a）と balanced accuracy・SFT 感度の点推定＋95% CI（b）。
 
-    a: 混同行列（2 方向 × 補正なし / GAN / centroid）。セルは件数、色は行（真のクラス）ごとの割合。
+    a: 混同行列（2 方向 × 補正なし / GAN / ComBat / centroid）。セルは件数、色は行（真のクラス）ごとの割合。
     b: balanced accuracy と SFT 感度の点推定 + 95% CI（患者単位 bootstrap）。
 
 入力: output_dir/lp/trained_by_*/{variant}/predictions.csv（lp.py）, output_dir/lp/bootstrap.csv（lp_bootstrap.py）
@@ -17,7 +17,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 
 from figs import label
-from figs.common import (CONDITION_ORDER, SITE_DISPLAY, VARIANT_COLOR, VARIANT_DISPLAY, config, order_conditions,
+from figs.common import (CONDITIONS_FULL, SITE_DISPLAY, VARIANT_COLOR, VARIANT_DISPLAY, config, order_conditions,
                          out_root, save)
 
 NAME = "classification"
@@ -53,7 +53,7 @@ def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = config()
     lp_root = out_root(cfg) / "lp"
-    variants = [v for v in order_conditions(cfg["lp"].get("variants", ["original"])) if v in CONDITION_ORDER]
+    variants = [v for v in order_conditions(cfg["lp"].get("variants", ["original"])) if v in CONDITIONS_FULL]  # ComBat を含む 4 条件
     sources = list(cfg["embedding"].keys())
     directions = [(s, next(t for t in sources if t != s)) for s in sources]
     bs = pd.read_csv(lp_root / "bootstrap.csv")

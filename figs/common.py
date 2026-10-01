@@ -6,7 +6,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from figs import stem
-from utils.display import CONDITION_COLORS, CONDITION_ORDER, order_conditions  # noqa: F401
+from utils.display import (CONDITION_COLORS, CONDITION_ORDER, CONDITIONS_CORE, CONDITIONS_FULL,  # noqa: F401
+                           order_conditions)
 from utils.loader import load_config
 
 FONT = 8

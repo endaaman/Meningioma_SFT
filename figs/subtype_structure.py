@@ -30,7 +30,7 @@ from matplotlib.patches import Patch, Rectangle
 
 import dendrogram
 from figs import label, stem
-from figs.common import CONDITION_ORDER, VARIANT_DISPLAY, config, fig_dir, fig_path, out_root, src_markers
+from figs.common import CONDITIONS_CORE, VARIANT_DISPLAY, config, fig_dir, fig_path, out_root, src_markers
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 
 NAME = "subtype_structure"
@@ -128,7 +128,7 @@ def sft_table(cfg: dict, variant: str) -> pd.DataFrame:
 
 
 def variants_for(include_gan: bool) -> list[str]:
-    return [v for v in CONDITION_ORDER if include_gan or v != "gan"]
+    return [v for v in CONDITIONS_CORE if include_gan or v != "gan"]
 
 
 def main() -> None:
@@ -138,7 +138,7 @@ def main() -> None:
     save_tree_figure(tree_figure(variants_for(INCLUDE_GAN), cfg), fig_dir(cfg) / stem(NAME))
     root = out_root(cfg)
     pairs = pd.read_csv(root / "dendrogram" / "pairs.csv")
-    pairs = pairs.set_index("variant").loc[[v for v in CONDITION_ORDER if v in set(pairs["variant"])]].reset_index()
+    pairs = pairs.set_index("variant").loc[[v for v in CONDITIONS_CORE if v in set(pairs["variant"])]].reset_index()
     pairs.to_csv(fig_path(cfg, NAME, "_pairs.csv"), index=False)
     print(pairs.to_string(index=False))
 

@@ -13,10 +13,10 @@
 # 本文の図（順 = Fig 番号）。design は手描き（スクリプトが無いものは all で飛ばす）
 MAIN = [
     "design",               # Fig 1 研究デザイン（手描き）
-    "tissue",               # Fig 2 組織パッチ（patho2 / patho2→GAN / EBRAINS × サブタイプ）。色の定量は未追加
-    "umap_harmonization",   # Fig 3 UMAP（補正なし / centroid / GAN）と施設差指標
+    "tissue",               # Fig 2 組織パッチ（patho2 / patho2→GAN / EBRAINS × サブタイプ）と色の定量
+    "umap_harmonization",   # Fig 3 UMAP と指標（補正なし / GAN / ComBat / centroid の 4 条件）
     "shift_geometry",       # Fig 4 施設差の幾何
-    "classification",       # Fig 5 施設間の分類性能
+    "classification",       # Fig 5 施設間の分類性能（4 条件）
     "subtype_structure",    # Fig 6 サブタイプ構造（樹形図 補正なし / centroid / GAN の 3 段、euc_mean）
 ]
 # 表（順 = Table 番号）
@@ -28,6 +28,7 @@ TABLES = [
 SUPP = [
     "subtype_distance_heatmap",       # サブタイプ間距離のヒートマップ 3 枚（補正なし / centroid / GAN、euc_mean、固定順）
     "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
+    "subtype_structure_combat",       # ComBat 補正後の樹形図（Fig 6 と同じ描き方。ComBat は Fig 6 の手前で退けるがここに示す）
 ]
 
 

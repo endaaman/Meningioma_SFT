@@ -1,4 +1,4 @@
-"""combat_preview.py — ComBat を含めた 4 条件の比較プレビュー（本番の図表には入れない、ken 判断待ち）。
+"""combat_preview.py — ComBat の比較表と組織型の分離の検定（図は本番 Fig 3 / Fig 5 / Fig S3 に反映済み。--figures で旧プレビュー図も出す）。
 
 出力（番号体系の外。figs.all では作らない）:
     fig/_preview_combat_umap.png        — UMAP 4 列（補正なし / GAN / centroid / ComBat）
@@ -18,6 +18,8 @@ Usage:
     uv run python -m figs.combat_preview
 """
 from __future__ import annotations
+
+import sys
 
 import numpy as np
 import pandas as pd
@@ -212,12 +214,15 @@ def main() -> None:
     print("[preview] combat")
     cfg = config()
     fig_dir(cfg).mkdir(parents=True, exist_ok=True)
-    _save(umap_figure(cfg), "umap", cfg)
-    fig = subtype_structure.tree_figure(VARIANTS, cfg)
-    path = fig_dir(cfg) / "_preview_combat_dendrogram.png"
-    fig.savefig(path, dpi=subtype_structure.DPI, bbox_inches="tight"); plt.close(fig)
-    print(f"  saved: {path}")
-    _save(lp_figure(cfg), "lp", cfg)
+    # UMAP 4 列・LP の CI・樹形図は本番（Fig 3 / Fig 5 / Fig S3）に入ったので、
+    # ここでは比較表と組織型の分離の検定だけを出す（umap_figure / lp_figure は残すが既定では作らない）
+    if "--figures" in sys.argv[1:]:
+        _save(umap_figure(cfg), "umap", cfg)
+        fig = subtype_structure.tree_figure(VARIANTS, cfg)
+        path = fig_dir(cfg) / "_preview_combat_dendrogram.png"
+        fig.savefig(path, dpi=subtype_structure.DPI, bbox_inches="tight"); plt.close(fig)
+        print(f"  saved: {path}")
+        _save(lp_figure(cfg), "lp", cfg)
     test, null = subtype_test(cfg)
     pd.concat([test.assign(kind="signflip"), null.assign(kind="null")]).to_csv(
         paper_dir(cfg) / "_preview_combat_subtype_test.csv", index=False)
