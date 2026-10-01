@@ -10,10 +10,10 @@
 入力は解析スクリプトが out/ に書いた CSV / npz、出力は output_dir/paper/{paper.version}/{fig,tables}/。
 """
 
-# 本文の図（順 = Fig 番号）。design は手描き、tissue は未作成（スクリプトが無いものは all で飛ばす）
+# 本文の図（順 = Fig 番号）。design は手描き（スクリプトが無いものは all で飛ばす）
 MAIN = [
     "design",               # Fig 1 研究デザイン（手描き）
-    "tissue",               # Fig 2 組織画像・GAN 変換・色
+    "tissue",               # Fig 2 組織パッチ（patho2 / patho2→GAN / EBRAINS × サブタイプ）。色の定量は未追加
     "umap_harmonization",   # Fig 3 UMAP（補正なし / centroid / GAN）と施設差指標
     "shift_geometry",       # Fig 4 施設差の幾何
     "classification",       # Fig 5 施設間の分類性能
