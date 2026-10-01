@@ -38,7 +38,7 @@ VARIANTS = CONDITION_ORDER
 TITLES = {"original": "Uncorrected", "gan": "GAN-corrected", "centroid": "Centroid-corrected"}
 METRIC_KEYS = ["asw_batch", "ilisi", "asw_class"]
 SITE_KEYS = ("asw_batch", "ilisi")
-D_STYLE = "plain"            # 本番の d の見せ方（"plain" / "band" / "line" / "residual"）
+D_STYLE = "line"             # 本番の d の見せ方（"plain" / "band" / "line" / "residual"）
 NULL_KIND = "within_subtype"  # 偶然のレベルの基準（サブタイプ内で施設ラベルを並べ替え）
 PREVIEW_STYLES = ("band", "line", "residual")
 
