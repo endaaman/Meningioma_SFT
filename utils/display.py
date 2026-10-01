@@ -5,6 +5,15 @@ import matplotlib.pyplot as plt
 
 # 補正条件の色（全図で共通。施設色の青・赤と被らない Tol bright の灰・紫・水色）
 CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE"}
+# 補正条件の並び（全図表で共通。比較対象の GAN を先に、提案の centroid を最後に置く）
+CONDITION_ORDER = ["original", "gan", "centroid"]
+
+
+def order_conditions(variants) -> list[str]:
+    """variant のリストを CONDITION_ORDER の順に並べる（未知の variant は後ろに元の順で）。"""
+    variants = list(variants)
+    known = [v for v in CONDITION_ORDER if v in variants]
+    return known + [v for v in variants if v not in CONDITION_ORDER]
 
 
 def ordered_subtypes(present: set, cfg: dict) -> list[str]:

@@ -1,4 +1,4 @@
-"""サブタイプ間距離のヒートマップ（補正なし / centroid / GAN の 3 枚、Supplementary）。
+"""サブタイプ間距離のヒートマップ（補正なし / GAN / centroid の 3 枚、Supplementary）。
 
 距離は本文 Fig 6（subtype_structure）と同じ euc_mean: 施設 × サブタイプの平均ベクトル間ユークリッド距離を
 行列ごとに最大値で割った値（対角 0 なので min-max 正規化と同じ）。カラースケールは 3 枚共通（0〜1）、色バーは 1 本。
@@ -19,11 +19,11 @@ import pandas as pd
 
 import dendrogram
 from figs import label
-from figs.common import FONT, VARIANT_DISPLAY, config, out_root, panel, save, src_markers
+from figs.common import CONDITION_ORDER, FONT, VARIANT_DISPLAY, config, out_root, panel, save, src_markers
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 
 NAME = "subtype_distance_heatmap"
-VARIANTS = ["original", "centroid", "gan"]
+VARIANTS = CONDITION_ORDER
 CMAP = "viridis_r"            # 近い = 明るい（本文の旧ヒートマップと同じ向き）
 
 

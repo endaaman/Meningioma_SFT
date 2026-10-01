@@ -1,4 +1,4 @@
-"""施設差と補正: UMAP（補正なし / centroid / GAN）と施設差・クラス分離の指標。
+"""施設差と補正: UMAP（補正なし / GAN / centroid）と施設差・クラス分離の指標。
 
 入力:
     output_dir/umap/{original,centroid,gan}/coords.csv  （umap_plot.py）
@@ -18,12 +18,12 @@ from matplotlib.patches import Patch
 
 import harmonization
 from figs import label
-from figs.common import FONT, config, out_root, panel, save, src_markers
+from figs.common import CONDITION_ORDER, FONT, config, out_root, panel, save, src_markers
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 
 NAME = "umap_harmonization"
-VARIANTS = ["original", "centroid", "gan"]
-TITLES = {"original": "Uncorrected", "centroid": "Centroid-corrected", "gan": "GAN-corrected"}
+VARIANTS = CONDITION_ORDER
+TITLES = {"original": "Uncorrected", "gan": "GAN-corrected", "centroid": "Centroid-corrected"}
 METRIC_KEYS = ["asw_batch", "ilisi", "asw_class"]
 
 

@@ -1,4 +1,4 @@
-"""サブタイプ構造: 施設 × サブタイプ平均ベクトルの樹形図（a 補正前 / b centroid 補正後 / c GAN 補正後、縦に積む・同じ縦軸）。
+"""サブタイプ構造: 施設 × サブタイプ平均ベクトルの樹形図（a 補正前 / b GAN 補正後 / c centroid 補正後、縦に積む・同じ縦軸）。
 GAN 段の有無は INCLUDE_GAN で切り替える（本文は 3 段、ken 決定 2026-10-01）。
 
 樹形図は既存の `out/dendrogram/{variant}/euc_mean_dendrogram_cross.png` と同じもの:
@@ -21,7 +21,6 @@ Usage:
 """
 from __future__ import annotations
 
-import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,7 +30,7 @@ from matplotlib.patches import Patch, Rectangle
 
 import dendrogram
 from figs import label, stem
-from figs.common import VARIANT_DISPLAY, config, fig_dir, fig_path, out_root, src_markers
+from figs.common import CONDITION_ORDER, VARIANT_DISPLAY, config, fig_dir, fig_path, out_root, src_markers
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 
 NAME = "subtype_structure"
@@ -129,7 +128,7 @@ def sft_table(cfg: dict, variant: str) -> pd.DataFrame:
 
 
 def variants_for(include_gan: bool) -> list[str]:
-    return ["original", "centroid"] + (["gan"] if include_gan else [])
+    return [v for v in CONDITION_ORDER if include_gan or v != "gan"]
 
 
 def main() -> None:
@@ -138,8 +137,10 @@ def main() -> None:
     fig_dir(cfg).mkdir(parents=True, exist_ok=True)
     save_tree_figure(tree_figure(variants_for(INCLUDE_GAN), cfg), fig_dir(cfg) / stem(NAME))
     root = out_root(cfg)
-    shutil.copy2(root / "dendrogram" / "pairs.csv", fig_path(cfg, NAME, "_pairs.csv"))
-    print(pd.read_csv(root / "dendrogram" / "pairs.csv").to_string(index=False))
+    pairs = pd.read_csv(root / "dendrogram" / "pairs.csv")
+    pairs = pairs.set_index("variant").loc[[v for v in CONDITION_ORDER if v in set(pairs["variant"])]].reset_index()
+    pairs.to_csv(fig_path(cfg, NAME, "_pairs.csv"), index=False)
+    print(pairs.to_string(index=False))
 
 
 if __name__ == "__main__":

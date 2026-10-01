@@ -22,6 +22,7 @@ import pandas as pd
 from scipy.stats import binomtest
 from sklearn.metrics import balanced_accuracy_score, f1_score
 
+from utils.display import order_conditions
 from utils.loader import load_config
 
 METRICS = ["accuracy", "balanced_accuracy", "sensitivity", "specificity", "f1_macro"]
@@ -68,7 +69,7 @@ def main() -> None:
     bs_cfg = cfg.get("lp_bootstrap", {})
     n_boot = bs_cfg.get("n_boot", 2000)
     seed = bs_cfg.get("seed", 42)
-    variants = cfg["lp"].get("variants", ["original"])
+    variants = order_conditions(cfg["lp"].get("variants", ["original"]))
     sources = list(cfg["embedding"].keys())
     lp_root = Path(cfg["output_dir"]) / "lp"
 

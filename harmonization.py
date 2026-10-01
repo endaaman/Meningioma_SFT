@@ -31,10 +31,10 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.neighbors import NearestNeighbors
 
-from utils.display import CONDITION_COLORS
+from utils.display import CONDITION_COLORS, order_conditions
 from utils.loader import load_config, load_data
 
-STATE_LABELS = {"original": "None", "centroid": "Centroid", "gan": "GAN"}  # 補正の種類
+STATE_LABELS = {"original": "None", "gan": "GAN", "centroid": "Centroid"}  # 補正の種類
 STATE_COLORS = CONDITION_COLORS
 METRIC_INFO = {
     # key: (表示名, 良い向きの注記)
@@ -84,7 +84,7 @@ def compute_metrics(merged: pd.DataFrame, cfg: dict) -> dict[str, float]:
 
 
 def compute_all(cfg: dict) -> pd.DataFrame:
-    variants: list[str] = cfg.get("harmonization", {}).get("variants", ["original", "centroid", "gan"])
+    variants: list[str] = order_conditions(cfg.get("harmonization", {}).get("variants", ["original", "gan", "centroid"]))
     rows = []
     for variant in variants:
         dir_key = cfg.get("variants", {}).get(variant, variant)
@@ -101,6 +101,7 @@ def compute_all(cfg: dict) -> pd.DataFrame:
 
 def draw_metric(ax: plt.Axes, table: pd.DataFrame, key: str, show_note: bool = True) -> None:
     """1 指標の棒グラフ（状態ごと）を ax に描く。"""
+    table = table.set_index("state").loc[order_conditions(table["state"].tolist())].reset_index()
     states = table["state"].tolist()
     vals = table[key].values
     x = np.arange(len(states))

@@ -13,20 +13,24 @@ import csv
 import pandas as pd
 
 from figs import label
-from figs.common import SITE_DISPLAY, config, out_root, table_path
+from figs.common import SITE_DISPLAY, config, order_conditions, out_root, table_path
 
 NAME = "performance"
 METRIC_JA = {
     "accuracy": "Accuracy", "balanced_accuracy": "Balanced acc.",
     "sensitivity": "感度（SFT）", "specificity": "特異度", "f1_macro": "F1 macro",
 }
-VARIANT_JA = {"original": "なし", "centroid": "centroid", "gan": "GAN"}
+VARIANT_JA = {"original": "なし", "gan": "GAN", "centroid": "centroid"}
 
 
 def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = config()
     bs = pd.read_csv(out_root(cfg) / "lp" / "bootstrap.csv")
+    src_rank = {s: i for i, s in enumerate(dict.fromkeys(bs["train_source"]))}
+    var_rank = {v: i for i, v in enumerate(order_conditions(bs["variant"].unique()))}
+    bs = bs.assign(_s=bs["train_source"].map(src_rank), _v=bs["variant"].map(var_rank)).sort_values(
+        ["_s", "_v"], kind="stable").drop(columns=["_s", "_v"])
     n_boot = cfg.get("lp_bootstrap", {}).get("n_boot", 2000)
     records = []
     for (train_src, test_src, variant), g in bs.groupby(["train_source", "test_source", "variant"], sort=False):
