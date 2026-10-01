@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import os
 from pathlib import Path
@@ -287,13 +288,15 @@ def evaluate(ckpt_path: str, dataset: TitanDataset, cfg: dict, out_dir: Path) ->
     num_workers = lp_cfg.get("num_workers", 0)
     loader = DataLoader(dataset, batch_size=lp_cfg.get("batch_size", 64),
                         shuffle=False, num_workers=num_workers, collate_fn=_collate)
-    all_labels, all_preds, all_probs = [], [], []
+    all_labels, all_preds, all_probs, all_prob_mat = [], [], [], []
     with torch.no_grad():
         for embs, labels in loader:
             logits = model(embs.to(device))["logits"]
+            probs = torch.softmax(logits, -1).cpu()
             all_labels.extend(labels.tolist())
             all_preds.extend(logits.argmax(-1).cpu().tolist())
-            all_probs.extend(torch.softmax(logits, -1)[:, -1].cpu().tolist())
+            all_probs.extend(probs[:, -1].tolist())
+            all_prob_mat.extend(probs.tolist())
 
     all_labels = np.array(all_labels)
     all_preds  = np.array(all_preds)
@@ -304,7 +307,8 @@ def evaluate(ckpt_path: str, dataset: TitanDataset, cfg: dict, out_dir: Path) ->
 
     _save_misclassified(dataset.case_ids, all_labels, all_preds, class_names,
                         out_dir / "misclassified.txt")
-    _save_predictions(dataset.case_ids, all_labels, all_preds, all_probs, out_dir / "predictions.csv")
+    _save_predictions(dataset.case_ids, all_labels, all_preds, all_probs, out_dir / "predictions.csv",
+                      prob_mat=np.array(all_prob_mat) if num_classes > 2 else None)
 
     cm = np.zeros((num_classes, num_classes), dtype=int)
     for t, p in zip(all_labels, all_preds):
@@ -327,13 +331,18 @@ def evaluate(ckpt_path: str, dataset: TitanDataset, cfg: dict, out_dir: Path) ->
 
 
 def _save_predictions(case_ids: list[str], labels: np.ndarray, preds: np.ndarray,
-                      probs: list[float], path: Path) -> None:
-    """症例ごとの予測（prob は最後のクラス = SFT の確率）。lp_bootstrap.py が読む。"""
+                      probs: list[float], path: Path, prob_mat: np.ndarray | None = None) -> None:
+    """症例ごとの予測（prob は最後のクラス = SFT の確率）。lp_bootstrap.py が読む。
+
+    多クラス（prob_mat あり）のときは prob_0..prob_{k-1} にクラスごとの確率も書く（AUC 用）。
+    """
+    k = 0 if prob_mat is None else prob_mat.shape[1]
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["case_id", "true", "pred", "prob"])
-        for cid, t, p, pr in zip(case_ids, labels, preds, probs):
-            w.writerow([cid, int(t), int(p), f"{pr:.6f}"])
+        w.writerow(["case_id", "true", "pred", "prob"] + [f"prob_{i}" for i in range(k)])
+        for i, (cid, t, p, pr) in enumerate(zip(case_ids, labels, preds, probs)):
+            extra = [f"{v:.6f}" for v in prob_mat[i]] if k else []
+            w.writerow([cid, int(t), int(p), f"{pr:.6f}"] + extra)
     print(f"  saved: {path}")
 
 
@@ -437,6 +446,29 @@ def save_comparison(all_metrics: list[dict], out_dir: Path) -> None:
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+def task_config(cfg: dict, task: str) -> dict:
+    """タスクに応じて cfg を差し替える。sft はそのまま、histotype は組織型の多クラス分類。
+
+    histotype: ラベルを lp_histotype.label_dir/<site>/case_histotype_n*.csv（histotype_labels.py が作る）に、
+    クラス名・variants・出力先（output_dir/lp_histotype）を lp_histotype の値に置き換える。
+    学習の設定（lr, patience 等）と患者 ID は lp / label.<site>.patient をそのまま使う。
+    """
+    if task == "sft":
+        return cfg
+    h_cfg = cfg["lp_histotype"]
+    new = copy.deepcopy(cfg)
+    new["lp"] = {**cfg["lp"],
+                 "class_names": {i: c.replace(" meningioma", "") for i, c in enumerate(h_cfg["classes"])},
+                 "variants": h_cfg.get("variants", cfg["lp"].get("variants")),
+                 "output_subdir": h_cfg.get("output_subdir", "lp_histotype")}
+    for site in new["label"]:
+        found = sorted((Path(h_cfg["label_dir"]) / site).glob("case_histotype_n*.csv"))
+        if len(found) != 1:
+            raise FileNotFoundError(f"[{site}] case_histotype_n*.csv が 1 つに定まらない: {found}。histotype_labels.py を実行すること")
+        new["label"][site]["label"] = str(found[0])
+    return new
+
+
 def _effective_key(src: str, variant: str, reference: str | None) -> str:
     return "original" if (reference and src == reference) else variant
 
@@ -445,16 +477,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--variants", nargs="+", default=None,
                         help="この variant だけ学習・評価する（既存の split.csv を使い、comparison.csv は該当行だけ差し替え）")
+    parser.add_argument("--task", choices=["sft", "histotype"], default="sft",
+                        help="sft: 髄膜腫 vs SFT（既定）/ histotype: 組織型の多クラス分類（出力は output_dir/lp_histotype）")
     args = parser.parse_args()
 
-    cfg = load_config()
+    cfg = task_config(load_config(), args.task)
     lp_cfg    = cfg["lp"]
     slide_key = cfg["keys"]["slide_feature"]
     reference = cfg.get("reference")
     sources   = list(cfg["embedding"].keys())
     variants  = args.variants or lp_cfg.get("variants", ["original"])
     partial   = args.variants is not None
-    out_root  = Path(cfg["output_dir"]) / "lp"
+    out_root  = Path(cfg["output_dir"]) / lp_cfg.get("output_subdir", "lp")
     out_root.mkdir(parents=True, exist_ok=True)
 
     L.seed_everything(42, workers=True)
