@@ -1,6 +1,6 @@
-"""施設間の分類性能の表（点推定 [95% CI]、患者単位 bootstrap）。
+"""施設間の分類性能の表（訓練不要の最近傍重心法、点推定 [95% CI]、患者単位 bootstrap）。
 
-入力: output_dir/lp/bootstrap.csv  （lp_bootstrap.py）
+入力: output_dir/nc/binary/bootstrap.csv  （nc.py）
 出力: tables/{table n}_performance.{csv,md}（番号は figs/__init__.py）
 
 Usage:
@@ -19,6 +19,7 @@ NAME = "performance"
 METRIC_JA = {
     "accuracy": "Accuracy", "balanced_accuracy": "Balanced acc.",
     "sensitivity": "感度（SFT）", "specificity": "特異度", "f1_macro": "F1 macro",
+    "roc_auc": "ROC AUC", "pr_auc": "PR AUC",
 }
 VARIANT_JA = {"original": "なし", "gan": "GAN", "combat": "ComBat", "centroid": "centroid"}
 
@@ -26,7 +27,7 @@ VARIANT_JA = {"original": "なし", "gan": "GAN", "combat": "ComBat", "centroid"
 def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = config()
-    bs = pd.read_csv(out_root(cfg) / "lp" / "bootstrap.csv")
+    bs = pd.read_csv(out_root(cfg) / "nc" / "binary" / "bootstrap.csv")
     bs = bs[bs["variant"].isin(CONDITIONS_FULL)]  # ComBat を含む 4 条件
     src_rank = {s: i for i, s in enumerate(dict.fromkeys(bs["train_source"]))}
     var_rank = {v: i for i, v in enumerate(order_conditions(bs["variant"].unique()))}
@@ -53,8 +54,9 @@ def main() -> None:
         else:
             prev = cells[0]
         lines.append("| " + " | ".join(cells) + " |")
-    lines += ["", f": 施設間の分類性能。各値は点推定 [95% CI]（テスト側施設の患者単位 bootstrap、{n_boot} 回）。"
-              "感度は SFT を陽性とした値。 {#tbl:performance}"]
+    lines += ["", f": 施設間の分類性能（最近傍重心法: 学習施設の SFT・髄膜腫の平均ベクトルのうち近い方に割り当てる。訓練・閾値なし）。"
+              f"各値は点推定 [95% CI]（テスト側施設の患者単位 bootstrap、{n_boot} 回）。"
+              "感度は SFT を陽性とした値。AUC のスコアは d(髄膜腫平均) − d(SFT 平均)。 {#tbl:performance}"]
     path = table_path(cfg, NAME, ".md")
     path.write_text("\n".join(lines) + "\n")
     print(f"  saved: {table_path(cfg, NAME, '.csv')} / {path.name}")

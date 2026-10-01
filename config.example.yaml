@@ -178,6 +178,12 @@ lp_histotype:
   variants:      [original, gan, centroid, combat]
 
 # クラス集合の変種（--set <name> で lp_histotype を上書き。histotype_labels.py / lp.py / lp_bootstrap.py / figs.histotype_preview）
+
+# ---- nc.py（訓練不要の施設間分類＝最近傍重心法。Fig 5・Table S1・Fig S3・Table S2 の元）----
+nc:
+  variants:      [original, gan, combat, centroid, affine_free, affine_oracle]   # 本番図表は CONDITIONS_FULL の 4 条件のみ
+  histotype_set: main                   # 組織型分類のクラス集合（lp_histotype_sets の名前）
+
 lp_histotype_sets:
   main:                    # 主の版（暫定、6 クラス版と比べて ken 判断）: Transitional と Secretory を除く 5 クラス
     classes:               # Transitional: meningothelial と fibrous の混合型で、施設間の診断基準の不一致を距離解析で独立に確認

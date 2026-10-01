@@ -592,6 +592,8 @@ def main() -> None:
                     continue
                 train_ds = TitanDataset(train_emb_dir, train_h5_key, cfg["label"][train_src]["label"])
                 tr_idx, vl_idx = _remap_split(train_ds, src_out_dir / "split.csv")
+                # 条件・方向ごとに学習の直前で種を設定し直す（一度に回す条件の数・順番に結果が依存しないように）
+                L.seed_everything(lp_cfg.get("seed", 42), workers=True)
                 ckpt = train_all(train_ds, tr_idx, vl_idx, cfg, out_dir)
 
             test_ds = TitanDataset(test_emb_dir, test_h5_key, cfg["label"][test_src]["label"])

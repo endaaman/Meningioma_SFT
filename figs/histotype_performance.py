@@ -1,8 +1,9 @@
 """組織型（主要 5 クラス）の施設間分類の指標表（Supplementary）。
 
-balanced accuracy と macro F1 の点推定 [95% CI]（テスト側施設の患者単位 bootstrap）。2 方向 × 4 条件。
+訓練不要の最近傍重心法。balanced accuracy・macro F1・AUC（OvR、クラスの確率 = softmax(−距離)）の点推定 [95% CI]
+（テスト側施設の患者単位 bootstrap）。2 方向 × 4 条件。
 
-入力: output_dir/lp_histotype_main/bootstrap.csv（lp_bootstrap.py --task histotype --set main）
+入力: output_dir/nc/histotype/bootstrap.csv（nc.py）
 出力: tables/{table S n}_histotype_performance.{csv,md}（番号は figs/__init__.py）
 
 Usage:
@@ -18,13 +19,13 @@ from histotype_labels import apply_set
 
 NAME = "histotype_performance"
 CLASS_SET = "main"
-METRICS = [("balanced_accuracy", "Balanced acc."), ("f1_macro", "Macro F1")]
+METRICS = [("balanced_accuracy", "Balanced acc."), ("f1_macro", "Macro F1"), ("auc_ovr_macro", "AUC (OvR)")]
 
 
 def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = apply_set(config(), CLASS_SET)
-    root = out_root(cfg) / cfg["lp_histotype"].get("output_subdir", "lp_histotype")
+    root = out_root(cfg) / "nc" / "histotype"
     bs = pd.read_csv(root / "bootstrap.csv")
     classes = [c.replace(" meningioma", "") for c in cfg["lp_histotype"]["classes"]]
     n_boot = cfg.get("lp_bootstrap", {}).get("n_boot", 2000)
@@ -54,7 +55,8 @@ def main() -> None:
         else:
             prev = cells[0]
         lines.append("| " + " | ".join(cells) + " |")
-    lines += ["", f": 組織型（{len(classes)} クラス: {', '.join(classes)}）の施設間分類。各値は点推定 [95% CI]"
+    lines += ["", f": 組織型（{len(classes)} クラス: {', '.join(classes)}）の施設間分類（最近傍重心法: 学習施設の組織型平均のうち最も近いものに割り当てる。訓練なし）。"
+              f"AUC は one-vs-rest のクラス平均で、各クラスの確率を softmax(−距離) とした。各値は点推定 [95% CI]"
               f"（テスト側施設の患者単位 bootstrap、{n_boot} 回）。偶然の balanced accuracy は 1/{len(classes)} = "
               f"{1 / len(classes):.2f}。 {{#tbl:histotype_performance}}"]
     path = table_path(cfg, NAME, ".md")

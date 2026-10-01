@@ -9,7 +9,8 @@ config.yaml          # 全設定（パス・色・パラメータ）
 gan.py               # Cycle-GAN による補正後のバッチをエンコードして HDF5 書き込みするラッパー
 titan.py             # TITAN による WSI-level aggregate
 centroid.py          # 重心補正（centroid shift）の可視化・評価
-lp.py                # TITAN 埋め込みの Linear Probe 訓練・評価（テスト予測 predictions.csv も出す）
+nc.py                # 訓練不要の施設間分類（最近傍重心法）: SFT vs 髄膜腫と組織型。Fig 5・Table S1・Fig S3・Table S2 の元
+lp.py                # TITAN 埋め込みの Linear Probe 訓練・評価（参考。論文の評価は nc.py）
 lp_bootstrap.py      # lp の予測の患者単位 bootstrap（95% CI）と条件間 McNemar
 umap_plot.py         # 補正前後の UMAP プロット（座標 coords.csv も保存）
 subtype.py           # サブタイプ別平均ベクトルの UMAP
@@ -51,7 +52,8 @@ uv run python titan.py     # patch-level を slide-level に集約（original / 
 uv run python centroid.py  # slide-level を施設間で重心補正し centroid variant HDF5 を生成
 
 # 以下は順不同（可視化・評価）
-uv run python lp.py
+uv run python nc.py             # 施設間分類（最近傍重心法、訓練不要）。combat.py / affine.py の後
+uv run python lp.py             # 参考（線形プローブ）
 uv run python lp_bootstrap.py   # lp.py の後
 uv run python umap_plot.py
 uv run python subtype.py

@@ -1,9 +1,9 @@
-"""施設間の分類性能: 混同行列（a）と balanced accuracy・SFT 感度の点推定＋95% CI（b）。
+"""施設間の分類性能（訓練不要の最近傍重心法、nc.py）: 混同行列（a）と balanced accuracy・SFT 感度の点推定＋95% CI（b）。
 
     a: 混同行列（2 方向 × 補正なし / GAN / ComBat / centroid）。セルは件数、色は行（真のクラス）ごとの割合。
     b: balanced accuracy と SFT 感度の点推定 + 95% CI（患者単位 bootstrap）。
 
-入力: output_dir/lp/trained_by_*/{variant}/predictions.csv（lp.py）, output_dir/lp/bootstrap.csv（lp_bootstrap.py）
+入力: output_dir/nc/binary/trained_by_*/{variant}/predictions.csv, output_dir/nc/binary/bootstrap.csv（nc.py）
 出力: fig/{fig n}_classification.{png,pdf}（番号は figs/__init__.py）
 
 Usage:
@@ -52,8 +52,8 @@ def _draw_cm(ax: plt.Axes, cm: np.ndarray, title: str, show_ylabel: bool, show_x
 def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = config()
-    lp_root = out_root(cfg) / "lp"
-    variants = [v for v in order_conditions(cfg["lp"].get("variants", ["original"])) if v in CONDITIONS_FULL]  # ComBat を含む 4 条件
+    lp_root = out_root(cfg) / "nc" / "binary"
+    variants = order_conditions(CONDITIONS_FULL)  # ComBat を含む 4 条件
     sources = list(cfg["embedding"].keys())
     directions = [(s, next(t for t in sources if t != s)) for s in sources]
     bs = pd.read_csv(lp_root / "bootstrap.csv")
