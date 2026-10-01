@@ -22,7 +22,11 @@ Usage:
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
+
+# deterministic=True の GPU 実行に必要（torch の import より前に設定する）
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 import h5py
 import lightning as L
@@ -228,6 +232,7 @@ def train_all(dataset: TitanDataset, train_idx: list[int], val_idx: list[int],
         logger=CSVLogger(save_dir=str(out_dir), name="logs", version=""),
         callbacks=[ckpt_cb, early_stop_cb],
         enable_progress_bar=True,
+        deterministic=True,
     )
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     ckpt_path = str(ckpt_cb.best_model_path)
@@ -279,12 +284,13 @@ def evaluate(ckpt_path: str, dataset: TitanDataset, cfg: dict, out_dir: Path) ->
     num_workers = lp_cfg.get("num_workers", 0)
     loader = DataLoader(dataset, batch_size=lp_cfg.get("batch_size", 64),
                         shuffle=False, num_workers=num_workers, collate_fn=_collate)
-    all_labels, all_preds = [], []
+    all_labels, all_preds, all_probs = [], [], []
     with torch.no_grad():
         for embs, labels in loader:
-            preds = model(embs.to(device))["logits"].argmax(-1).cpu().tolist()
+            logits = model(embs.to(device))["logits"]
             all_labels.extend(labels.tolist())
-            all_preds.extend(preds)
+            all_preds.extend(logits.argmax(-1).cpu().tolist())
+            all_probs.extend(torch.softmax(logits, -1)[:, -1].cpu().tolist())
 
     all_labels = np.array(all_labels)
     all_preds  = np.array(all_preds)
@@ -295,6 +301,7 @@ def evaluate(ckpt_path: str, dataset: TitanDataset, cfg: dict, out_dir: Path) ->
 
     _save_misclassified(dataset.case_ids, all_labels, all_preds, class_names,
                         out_dir / "misclassified.txt")
+    _save_predictions(dataset.case_ids, all_labels, all_preds, all_probs, out_dir / "predictions.csv")
 
     cm = np.zeros((num_classes, num_classes), dtype=int)
     for t, p in zip(all_labels, all_preds):
@@ -314,6 +321,17 @@ def evaluate(ckpt_path: str, dataset: TitanDataset, cfg: dict, out_dir: Path) ->
             w.writerow([k, v])
     print(f"  saved: {out_dir / 'metrics.csv'}")
     return metrics
+
+
+def _save_predictions(case_ids: list[str], labels: np.ndarray, preds: np.ndarray,
+                      probs: list[float], path: Path) -> None:
+    """症例ごとの予測（prob は最後のクラス = SFT の確率）。lp_bootstrap.py が読む。"""
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["case_id", "true", "pred", "prob"])
+        for cid, t, p, pr in zip(case_ids, labels, preds, probs):
+            w.writerow([cid, int(t), int(p), f"{pr:.6f}"])
+    print(f"  saved: {path}")
 
 
 def _save_misclassified(

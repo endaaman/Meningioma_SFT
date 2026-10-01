@@ -14,9 +14,11 @@ umap_plot.py         # 補正前後の UMAP プロット
 subtype.py           # サブタイプ別平均ベクトルの UMAP
 confusion_mtx.py     # 施設間距離行列（補正前後）
 dendrogram.py        # 施設間距離の樹形図（補正前後）
-dataset.py           # データセット構成の円グラフ
+dataset.py           # データセット構成の円グラフと Table 1
 sft_distance_bar.py  # SFT と各サブタイプ間の距離棒グラフ
 shift_direction.py   # 群ごとの施設間シフトの向きの一致度（centroid 補正の前提の検証）
+harmonization.py     # 補正の効き具合の指標（ASW・LISI、補正なし / centroid / GAN）
+paper_figs.py        # 論文用の図（Fig 2 / 3 / 5）と Table 1 を out/paper/{version}/ に組み立てる
 utils/
   loader.py          # load_config / load_data（各スクリプトが共通利用）
   display.py         # 色・順序・略称ヘルパー（ordered_subtypes / subtype_color_map / make_abbrev 等）
@@ -49,7 +51,11 @@ uv run python confusion_mtx.py
 uv run python dendrogram.py
 uv run python sft_distance_bar.py
 uv run python shift_direction.py
+uv run python harmonization.py
 uv run python dataset.py   # 他スクリプトと独立。任意のタイミングで実行可
+
+# 論文用の図表（上の出力を使う）
+uv run python paper_figs.py
 ```
 
 
@@ -165,4 +171,5 @@ HDF5: cache/{size}/gan/patches
   dendrogram.py         施設間距離の樹形図（補正前後）
   sft_distance_bar.py   SFT と各サブタイプ間の距離棒グラフ
   shift_direction.py    群ごとの施設間シフトの向き（全体シフトとの cos、例数を揃えた帰無と比較）
+  harmonization.py      施設差の補正の効き具合（ASW・iLISI / cLISI）
 ```

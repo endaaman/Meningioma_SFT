@@ -15,7 +15,8 @@
     shift_direction_{variant}.csv        — 群ごとの |shift|・cos・帰無2 の分位点
     bio_direction_{variant}.csv          — 施設内 SFT − 髄膜腫 方向との cos（対照）
     null_shuffle_{variant}.csv           — 帰無1 の要約
-    shift_direction_{variant}.png
+    shift_direction_{variant}.png        — a: 群ごとの cos と帰無2 / b: |shift|
+    shift_vs_bio_{variant}.png           — c: 全体シフトと施設内 SFT − 髄膜腫 方向（角度と長さを保った 2 次元図）
 
 Usage:
     uv run python shift_direction.py
@@ -135,45 +136,97 @@ def compute(merged: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame
 
 # ── plot ──────────────────────────────────────────────────────────────────────
 
-def plot(table: pd.DataFrame, cfg: dict, reference: str, other: str, out_path: Path) -> None:
+def _labels_colors(table: pd.DataFrame, cfg: dict) -> tuple[list[str], list]:
     subs = [g for g in table["group"] if g not in (ALL, MENI)]
     cmap = subtype_color_map(subs, cfg)
     colors = ["#555555", "#555555"] + [cmap[g] for g in subs]
     labels = [ALL, MENI] + [shorten(g, cfg) for g in subs]
     n_cols = [c for c in table.columns if c.startswith("n_")]
     labels = [f"{lb}  ({r[n_cols[0]]}/{r[n_cols[1]]})" for lb, (_, r) in zip(labels, table.iterrows())]
-    y = np.arange(len(table))
+    return labels, colors
 
+
+def _style_rows(ax: plt.Axes) -> None:
+    ax.axhline(1.5, color="#dddddd", lw=0.8)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="x", color="#eeeeee", lw=0.8)
+    ax.set_axisbelow(True)
+
+
+def draw_cos(ax: plt.Axes, table: pd.DataFrame, cfg: dict, fontsize: float = 10) -> None:
+    """a: 群ごとの全体シフトとの cos と、例数を揃えた帰無の 95% 区間。"""
+    labels, colors = _labels_colors(table, cfg)
+    y = np.arange(len(table))
+    has_null = table["null_matched_q025"].notna().values
+    ax.hlines(y[has_null], table["null_matched_q025"][has_null], table["null_matched_q975"][has_null],
+              color="#c8c8c8", lw=7, zorder=1, label="matched-n null (95%)")
+    ax.scatter(table["null_matched_q50"][has_null], y[has_null], marker="|", s=90, color="#909090", zorder=2)
+    ax.scatter(table["cos_vs_all"], y, c=colors, s=55, zorder=3, edgecolors="white", linewidths=0.8)
+    ax.set_xlim(0.5, 1.02)
+    ax.set_xlabel("cos(group shift, overall shift)", fontsize=fontsize)
+    ax.legend(loc="lower left", frameon=False, fontsize=fontsize - 1)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=fontsize)
+    ax.set_ylim(len(table) - 0.5, -0.5)
+    _style_rows(ax)
+
+
+def draw_norm(ax: plt.Axes, table: pd.DataFrame, cfg: dict, fontsize: float = 10) -> None:
+    """b: 群ごとのシフトの大きさ（破線 = 全体）。y は draw_cos と共有する前提。"""
+    _, colors = _labels_colors(table, cfg)
+    y = np.arange(len(table))
+    ax.scatter(table["shift_norm"], y, c=colors, s=55, edgecolors="white", linewidths=0.8, zorder=3)
+    ax.axvline(table.loc[table["group"] == ALL, "shift_norm"].iloc[0], color="#bbbbbb", lw=1, ls="--", zorder=1)
+    ax.set_xlim(0, max(table["shift_norm"]) * 1.15)
+    ax.set_xlabel("|shift|", fontsize=fontsize)
+    ax.set_ylim(len(table) - 0.5, -0.5)
+    _style_rows(ax)
+
+
+def draw_bio(ax: plt.Axes, bio_table: pd.DataFrame, cfg: dict, fontsize: float = 10) -> None:
+    """c: 全体シフト（x 軸方向）と各施設内の SFT − 髄膜腫 方向を、角度と長さを保って描く。
+
+    768 次元の 2 本のベクトルが張る平面に射影した図なので、角度（arccos）と長さは実測どおり。
+    """
+    src_colors: dict = cfg.get("display", {}).get("colors", {}).get("sources", {})
+    shift_len = float(bio_table["norm_shift_all"].iloc[0])
+    arrow = dict(length_includes_head=True, head_width=0.45, head_length=0.6, lw=2)
+    ax.arrow(0, 0, shift_len, 0, color="#777777", **arrow)
+    ax.text(shift_len / 2, -0.55, f"site shift\n|{shift_len:.1f}|", ha="center", va="top",
+            fontsize=fontsize - 1, color="#555555")
+    max_len = shift_len
+    for i, (_, r) in enumerate(bio_table.iterrows()):
+        c, L = float(r["cos_shift_vs_sft_minus_meningioma"]), float(r["norm_sft_minus_meningioma"])
+        th = np.arccos(np.clip(c, -1, 1))
+        dx, dy = L * np.cos(th), L * np.sin(th)
+        color = src_colors.get(r["site"], "#333333")
+        ax.arrow(0, 0, dx, dy, color=color, **arrow)
+        # 1 本目は先端の右、2 本目は中ほどの左にラベルを置いて重なりを避ける
+        tx, ty, ha = (dx + 0.4, dy, "left") if i == 0 else (dx * 0.55 - 0.9, dy * 0.55, "right")
+        ax.text(tx, ty, f"SFT − meningioma\n({r['site']}) |{L:.1f}|\n{np.degrees(th):.0f}°, cos {c:.2f}",
+                ha=ha, va="center", fontsize=fontsize - 1, color=color)
+        max_len = max(max_len, L)
+    ax.set_aspect("equal")
+    ax.set_xlim(-max_len * 0.75, max_len * 1.0)
+    ax.set_ylim(-max_len * 0.25, max_len * 1.35)
+    ax.axis("off")
+
+
+def plot(table: pd.DataFrame, cfg: dict, reference: str, other: str, out_path: Path) -> None:
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 0.42 * len(table) + 1.6), sharey=True,
                                    gridspec_kw={"width_ratios": [3, 2], "wspace": 0.08})
-
-    # 左: 全体シフトとの cos と、例数を揃えた帰無の 95% 区間
-    has_null = table["null_matched_q025"].notna().values
-    ax1.hlines(y[has_null], table["null_matched_q025"][has_null], table["null_matched_q975"][has_null],
-               color="#c8c8c8", lw=7, zorder=1, label="matched-n null (95%)")
-    ax1.scatter(table["null_matched_q50"][has_null], y[has_null], marker="|", s=90, color="#909090", zorder=2)
-    ax1.scatter(table["cos_vs_all"], y, c=colors, s=55, zorder=3, edgecolors="white", linewidths=0.8)
-    ax1.set_xlim(0.5, 1.02)
-    ax1.set_xlabel("cos(group shift, overall shift)")
-    ax1.axhline(1.5, color="#dddddd", lw=0.8)
-    ax1.legend(loc="lower left", frameon=False, fontsize=9)
-
-    # 右: シフトの大きさ
-    ax2.scatter(table["shift_norm"], y, c=colors, s=55, edgecolors="white", linewidths=0.8, zorder=3)
-    ax2.axvline(table.loc[table["group"] == ALL, "shift_norm"].iloc[0], color="#bbbbbb", lw=1, ls="--", zorder=1)
-    ax2.set_xlim(0, max(table["shift_norm"]) * 1.15)
-    ax2.set_xlabel("|shift|")
-    ax2.axhline(1.5, color="#dddddd", lw=0.8)
-
-    ax1.set_yticks(y)
-    ax1.set_yticklabels(labels, fontsize=10)
-    ax1.invert_yaxis()
-    for ax in (ax1, ax2):
-        ax.spines[["top", "right"]].set_visible(False)
-        ax.grid(axis="x", color="#eeeeee", lw=0.8)
-        ax.set_axisbelow(True)
+    draw_cos(ax1, table, cfg)
+    draw_norm(ax2, table, cfg)
     fig.suptitle(f"Site shift direction ({other} → {reference}); n = {reference}/{other}", fontsize=11)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  saved: {out_path}")
+
+
+def plot_bio(bio_table: pd.DataFrame, cfg: dict, out_path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(4.5, 4.5))
+    draw_bio(ax, bio_table, cfg)
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  saved: {out_path}")
@@ -209,6 +262,7 @@ def main() -> None:
     reference = cfg["reference"]
     other = next(s for s in merged["source"].unique() if s != reference)
     plot(table, cfg, reference, other, out_dir / f"shift_direction_{variant}.png")
+    plot_bio(bio_table, cfg, out_dir / f"shift_vs_bio_{variant}.png")
 
 
 if __name__ == "__main__":

@@ -156,5 +156,19 @@ shift_direction:
   n_perm:  1000       # 帰無（シャッフル / 例数を揃えた抽出）の回数
   seed:    42
 
+# ---- dataset.py（Table 1）----
+dataset:
+  demographics:            # 年齢・性別の CSV（EBRAINS annotation.csv 形式: uuid, pat_id, age, sex）。無い施設は書かない
+    site_a: path/to/site_a/annotation.csv
+
+# ---- harmonization.py ----
+harmonization:
+  variants: [original, centroid, gan]   # 比較する状態（reference 施設は常に original）
+  lisi_k:   30                          # LISI の近傍数
+
+# ---- paper_figs.py ----
+paper:
+  version: v1   # 図表の出力先 output_dir/paper/{version}/
+
 # ---- 出力 ----
 output_dir: ./output

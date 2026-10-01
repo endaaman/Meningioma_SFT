@@ -1,4 +1,7 @@
-"""sft_distance_bar.py — SFT からの距離横棒グラフ（補正後・0〜1正規化）。
+"""sft_distance_bar.py — SFT との近さの横棒グラフ（補正後・0〜1正規化）。
+
+値は距離そのものではなく「1 − 正規化した距離」（大きいほど SFT に近い）。ファイル名は互換のため
+sft_distance_bar_* のまま。
 
 confusion_mtx.py の cross 行列と同一ロジックで (共通サブタイプ数 × 施設数) の行列を構築し、
 confusion_mtx と同じ正規化（_normalize + flip）を全体に適用してから
@@ -151,6 +154,7 @@ def plot_bar(
 
     ax.set_xlim(0, 1.18)
     ax.set_xticks([])
+    ax.set_xlabel("Similarity to SFT (1 − normalized distance)", fontsize=12)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["bottom"].set_visible(False)

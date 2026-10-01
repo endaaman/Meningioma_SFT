@@ -99,18 +99,31 @@ def build_matrix(groups: dict, compute_fn, is_similarity: bool) -> pd.DataFrame:
 # ── plot ──────────────────────────────────────────────────────────────────────
 
 def _add_axis_markers(ax: plt.Axes, labels: list[str],
-                       marker_specs: dict, n: int) -> None:
+                       marker_specs: dict, n: int, group_size: int | None = None,
+                       fontsize: float = 22, markersize: float = 10) -> None:
+    """軸に施設マーカー（色 = サブタイプ）を置き、group_size があれば群（サブタイプ）名を添える。
+
+    labels は make_abbrev の cross ラベル（"E-Meni" のように 施設コード-略称）。
+    """
     ax.set_xticklabels([""] * n)
     ax.set_yticklabels([""] * n)
+    if group_size:
+        for g in range(0, n, group_size):
+            name = labels[g].split("-", 1)[-1]
+            frac = (g + group_size / 2) / n
+            ax.text(frac, -0.035, name, transform=ax.transAxes, rotation=90,
+                    ha="center", va="top", fontsize=fontsize, clip_on=False)
+            ax.text(-0.03, 1.0 - frac, name, transform=ax.transAxes,
+                    ha="right", va="center", fontsize=fontsize, clip_on=False)
     for i, lbl in enumerate(labels):
         spec = marker_specs.get(lbl, {})
         color = spec.get("color", "dimgray")
         mkr = spec.get("marker", "o")
         x_frac = (i + 0.5) / n
         y_frac = 1.0 - (i + 0.5) / n
-        ax.plot([x_frac], [-0.01], marker=mkr, color=color, markersize=10,
+        ax.plot([x_frac], [-0.01], marker=mkr, color=color, markersize=markersize,
                 transform=ax.transAxes, clip_on=False, linestyle="none")
-        ax.plot([-0.01], [y_frac], marker=mkr, color=color, markersize=10,
+        ax.plot([-0.01], [y_frac], marker=mkr, color=color, markersize=markersize,
                 transform=ax.transAxes, clip_on=False, linestyle="none")
 
 
@@ -153,7 +166,7 @@ def save_heatmap(mat: pd.DataFrame, title: str, path: Path,
         #     ax.add_patch(plt.Rectangle((i, -sw - 0.1), 1, sw, color=c, clip_on=False))
         
         # source-marker glyphs embedded in tick labels
-        _add_axis_markers(ax, mat.index.tolist(), marker_specs, n)
+        _add_axis_markers(ax, mat.index.tolist(), marker_specs, n, group_size)
         
     if group_size:
         for k in range(group_size, n, group_size):
