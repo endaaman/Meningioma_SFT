@@ -19,12 +19,12 @@ import numpy as np
 import pandas as pd
 from matplotlib.gridspec import GridSpec
 
+from utils.display import CONDITION_COLORS
 from utils.loader import load_config
 
 SITE_DISPLAY = {"ebrains": "EBRAINS", "patho2": "patho2"}
 VARIANT_DISPLAY = {"original": "No correction", "centroid": "Centroid", "gan": "GAN"}
-# 条件色（施設色の青・赤と被らない Tol bright の灰・紫・水色）
-VARIANT_COLOR = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE"}
+VARIANT_COLOR = CONDITION_COLORS
 CLASS_NAMES = ["Meningioma", "SFT"]
 
 

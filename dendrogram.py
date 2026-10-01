@@ -1,5 +1,16 @@
 """dendrogram.py — TITAN スライド埋め込みの群間比較樹形図（補正前後）。
 
+論文 Fig 5 と同じ形式として、施設 × サブタイプ平均ベクトル間の **生の** ユークリッド距離
+（正規化しない）で Ward 法クラスタリングした clustered heatmap と、施設間で同じサブタイプが
+対になるかの定量（pairs.csv）も出す。生の距離にするのは:
+  - centroid は施設ごとの平行移動なので、施設内の群間ユークリッド距離は補正で変わらない
+  - 単位が Fig 3 の |shift|・SFT − 髄膜腫 の大きさと揃う
+
+出力 (output_dir/dendrogram/):
+    {variant}/*_dendrogram_*.png            — 既存（正規化した各 metric）
+    {variant}/euc_mean_raw_clustered_cross.png — 生のユークリッド距離の clustered heatmap
+    pairs.csv                               — variant ごとのペアの定量
+
 Usage:
     uv run python dendrogram.py
 """
@@ -13,11 +24,12 @@ import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, Rectangle
+from matplotlib.gridspec import GridSpec, SubplotSpec
 from scipy.cluster.hierarchy import dendrogram, linkage
-from scipy.spatial.distance import squareform
+from scipy.spatial.distance import pdist, squareform
 from sklearn.metrics.pairwise import cosine_similarity as cos_sim, euclidean_distances
 
-from utils.display import make_abbrev, ordered_subtypes
+from utils.display import make_abbrev, ordered_subtypes, shorten, subtype_color_map
 from utils.loader import load_config, load_data
 
 
@@ -74,6 +86,149 @@ def build_matrix(groups: dict, compute_fn, is_similarity: bool) -> pd.DataFrame:
         val = float(compute_fn(groups[l1], groups[l2]))
         mat.loc[l1, l2] = val; mat.loc[l2, l1] = val
     return mat
+
+
+# ── 生のユークリッド距離（論文 Fig 5） ────────────────────────────────────────
+
+def group_means(merged: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """両施設にあるサブタイプについて、施設 × サブタイプの平均ベクトルと例数を返す。
+
+    行の並びはサブタイプ順（config の表示順）× 施設。例数の少ない群も除外しない。
+    """
+    sources = sorted(merged["source"].unique())
+    common = ordered_subtypes(
+        set.intersection(*[set(merged.loc[merged["source"] == s, "subtype"]) for s in sources]),
+        cfg)
+    rows = []
+    for sub in common:
+        for src in sources:
+            X = np.stack(merged.loc[(merged["source"] == src) & (merged["subtype"] == sub),
+                                    "embedding"].values).astype(np.float64)
+            rows.append({"label": f"{src}__{sub}", "source": src, "subtype": sub,
+                         "n": len(X), "mean": X.mean(axis=0)})
+    return pd.DataFrame(rows)
+
+
+def raw_distance(groups: pd.DataFrame) -> np.ndarray:
+    """平均ベクトル間の生のユークリッド距離行列。"""
+    return squareform(pdist(np.stack(groups["mean"].values), metric="euclidean"))
+
+
+def ward_linkage(D: np.ndarray) -> np.ndarray:
+    """既存の樹形図と同じ Ward 法（距離は生のユークリッド距離なので Ward の前提を満たす）。"""
+    return linkage(squareform(D, checks=False), method="ward")
+
+
+def sister_pairs(Z: np.ndarray, groups: pd.DataFrame) -> list[tuple[int, int]]:
+    """樹形図で互いに最初に併合される葉の組のうち、同じサブタイプ・別施設のもの。"""
+    n = len(groups)
+    subs, srcs = groups["subtype"].values, groups["source"].values
+    pairs = []
+    for a, b, _, _ in Z:
+        a, b = int(a), int(b)
+        if a < n and b < n and subs[a] == subs[b] and srcs[a] != srcs[b]:
+            pairs.append((a, b))
+    return pairs
+
+
+def pair_stats(D: np.ndarray, Z: np.ndarray, groups: pd.DataFrame) -> dict:
+    """施設間で同じサブタイプが対になるかの定量。
+
+    sister_pairs        : 樹形図で姉妹（最初に併合）になった同サブタイプの施設ペア数
+    nn_other_site_same  : 各群について、もう一方の施設で最も近い群が同じサブタイプである数
+    nn_any_same_other   : 各群について、全群（自分以外）で最も近い群が「同じサブタイプ・別施設」である数
+    """
+    n = len(groups)
+    subs, srcs = groups["subtype"].values, groups["source"].values
+    nn_other = nn_any = 0
+    for i in range(n):
+        other = [j for j in range(n) if srcs[j] != srcs[i]]
+        j = min(other, key=lambda j: D[i, j])
+        nn_other += int(subs[j] == subs[i])
+        k = min((j for j in range(n) if j != i), key=lambda j: D[i, j])
+        nn_any += int(subs[k] == subs[i] and srcs[k] != srcs[i])
+    return {"n_subtypes": groups["subtype"].nunique(), "n_groups": n,
+            "sister_pairs": len(sister_pairs(Z, groups)),
+            "nn_other_site_same": nn_other, "nn_any_same_other": nn_any}
+
+
+def draw_clustered(fig: plt.Figure, spec: SubplotSpec, groups: pd.DataFrame, D: np.ndarray,
+                   Z: np.ndarray, cfg: dict, fontsize: float = 8) -> plt.Axes:
+    """樹形図（上）＋ 葉順に並べた距離ヒートマップ（下）を spec に描き、ヒートマップの ax を返す。
+
+    行ラベルは「略称 (n)」＋ 施設マーカー（色 = サブタイプ）。姉妹になった同サブタイプのペアは
+    樹形図の葉の下に同色の帯で示す。
+    """
+    sub_map = subtype_color_map(ordered_subtypes(set(groups["subtype"]), cfg), cfg)
+    src_mkr = cfg.get("display", {}).get("markers", {}).get("sources", {})
+    gs = spec.subgridspec(2, 2, height_ratios=[0.2, 1], width_ratios=[1, 0.035],
+                          hspace=0.015, wspace=0.03)
+    ax_d, ax_h, ax_c = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])
+    n = len(groups)
+
+    dn = dendrogram(Z, ax=ax_d, no_labels=True, color_threshold=0,
+                    above_threshold_color="#555555")
+    order = dn["leaves"]
+    ax_d.set_xlim(0, 10 * n)
+    ax_d.axis("off")
+    pos = {leaf: i for i, leaf in enumerate(order)}
+    for a, b in sister_pairs(Z, groups):
+        i0, i1 = sorted((pos[a], pos[b]))
+        ax_d.plot([10 * i0 + 2, 10 * i1 + 8], [0, 0], color=sub_map[groups["subtype"].iloc[a]],
+                  lw=3, solid_capstyle="butt", clip_on=False)
+
+    M = D[np.ix_(order, order)]
+    im = ax_h.imshow(M, cmap="viridis_r", aspect="auto", extent=(0, n, n, 0),
+                     interpolation="nearest")
+    ax_h.set_xlim(0, n); ax_h.set_ylim(n, 0)
+    ticks = np.arange(n) + 0.5
+    names = [f"{shorten(groups['subtype'].iloc[i], cfg)} ({groups['n'].iloc[i]})" for i in order]
+    ax_h.set_yticks(ticks); ax_h.set_yticklabels(names, fontsize=fontsize - 1)
+    ax_h.set_xticks(ticks); ax_h.set_xticklabels(names, fontsize=fontsize - 1, rotation=90)
+    ax_h.tick_params(length=0, pad=9)
+    # 施設マーカー（ラベルと軸の間）
+    for k, i in enumerate(order):
+        mk = src_mkr.get(groups["source"].iloc[i], "o")
+        c = sub_map[groups["subtype"].iloc[i]]
+        ax_h.plot([-0.012], [1 - (k + 0.5) / n], marker=mk, color=c, markersize=3.6,
+                  transform=ax_h.transAxes, clip_on=False, ls="none")
+        ax_h.plot([(k + 0.5) / n], [-0.012], marker=mk, color=c, markersize=3.6,
+                  transform=ax_h.transAxes, clip_on=False, ls="none")
+    for sp in ax_h.spines.values():
+        sp.set_visible(False)
+    cb = fig.colorbar(im, cax=ax_c)
+    cb.set_label("Euclidean distance between mean embeddings", fontsize=fontsize - 1)
+    cb.ax.tick_params(labelsize=fontsize - 1)
+    return ax_h
+
+
+def save_clustered(groups: pd.DataFrame, D: np.ndarray, Z: np.ndarray, cfg: dict,
+                   path: Path, title: str | None = None) -> None:
+    fig = plt.figure(figsize=(6.4, 6.6))
+    gs = GridSpec(1, 1, figure=fig)
+    ax_h = draw_clustered(fig, gs[0, 0], groups, D, Z, cfg)
+    if title:
+        fig.suptitle(title, fontsize=10, y=0.995)
+    src_mkr = cfg.get("display", {}).get("markers", {}).get("sources", {})
+    handles = [Line2D([0], [0], marker=m, color="#666666", ls="none", markersize=5, label=s)
+               for s, m in src_mkr.items()]
+    ax_h.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.12, 1.24), frameon=False,
+                fontsize=7, title="(n) = slides", title_fontsize=7)
+    fig.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved: {path}")
+
+
+def run_raw(merged: pd.DataFrame, out_dir: Path, cfg: dict, variant: str) -> dict:
+    """生のユークリッド距離の clustered heatmap を保存し、ペアの定量を返す。"""
+    groups = group_means(merged, cfg)
+    D = raw_distance(groups)
+    Z = ward_linkage(D)
+    save_clustered(groups, D, Z, cfg, out_dir / "euc_mean_raw_clustered_cross.png",
+                   title=f"{variant}: Euclidean distance between mean embeddings (Ward)")
+    stats = {"variant": variant, **pair_stats(D, Z, groups)}
+    print("  pairs: " + "  ".join(f"{k}={v}" for k, v in stats.items() if k != "variant"))
+    return stats
 
 
 # ── plot ──────────────────────────────────────────────────────────────────────
@@ -265,6 +420,7 @@ def main() -> None:
     out_root = Path(cfg["output_dir"]) / "dendrogram"
     variants: dict[str, str] = cfg.get("variants", {"original": "original"})
 
+    pair_rows = []
     for variant, dir_key in variants.items():
         print(f"\n[{variant}]")
         merged = load_data(cfg, dir_key)
@@ -273,6 +429,11 @@ def main() -> None:
             continue
         print(f"  {len(merged)} cases")
         run(merged, out_root / variant, cfg)
+        pair_rows.append(run_raw(merged, out_root / variant, cfg, variant))
+    if pair_rows:
+        path = out_root / "pairs.csv"
+        pd.DataFrame(pair_rows).to_csv(path, index=False)
+        print(f"\n  saved: {path}")
 
 
 if __name__ == "__main__":

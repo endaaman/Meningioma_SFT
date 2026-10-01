@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 
+# 補正条件の色（全図で共通。施設色の青・赤と被らない Tol bright の灰・紫・水色）
+CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE"}
+
 
 def ordered_subtypes(present: set, cfg: dict) -> list[str]:
     config_order = list(cfg.get("display", {}).get("colors", {}).get("subtypes", {}).keys())

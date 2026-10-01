@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd 
 from sklearn.metrics.pairwise import cosine_similarity as cos_sim, euclidean_distances
 
-from utils.display import make_abbrev, ordered_subtypes, subtype_color_map
+from utils.display import make_abbrev, ordered_subtypes, shorten, subtype_color_map
 from utils.loader import load_config, load_data
 
 
@@ -122,6 +122,54 @@ def compute_sft_bar_values(
     return {sub: bar_values[sub] for sub in other_subtypes}, color_map
 
 
+def compute_sft_raw_distances(merged: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """施設内で、SFT の平均ベクトルと各サブタイプの平均ベクトルの生のユークリッド距離。
+
+    施設内の距離なので、施設ごとの平行移動である重心補正の影響を受けない（補正前後で同値）。
+    両施設にあるサブタイプのみ。例数の少ない群も除外しない。
+
+    Returns: columns = subtype, source, n, n_sft, distance
+    """
+    sources = sorted(merged["source"].unique())
+    common = ordered_subtypes(
+        set.intersection(*[set(merged.loc[merged["source"] == s, "subtype"]) for s in sources]), cfg)
+    sft_sub = next((s for s in common if "sft" in s.lower()), None)
+    if sft_sub is None:
+        raise ValueError("SFT not found in common subtypes")
+    rows = []
+    for src in sources:
+        site = merged[merged["source"] == src]
+        sft = np.stack(site.loc[site["subtype"] == sft_sub, "embedding"].values).astype(np.float64)
+        for sub in common:
+            if sub == sft_sub:
+                continue
+            X = np.stack(site.loc[site["subtype"] == sub, "embedding"].values).astype(np.float64)
+            rows.append({"subtype": sub, "source": src, "n": len(X), "n_sft": len(sft),
+                         "distance": float(np.linalg.norm(X.mean(axis=0) - sft.mean(axis=0)))})
+    return pd.DataFrame(rows)
+
+
+def draw_raw(ax: plt.Axes, table: pd.DataFrame, cfg: dict, fontsize: float = 8) -> None:
+    """SFT からの距離（施設平均の棒 ＋ 施設ごとの点）。近い順に上から並べる。"""
+    src_mkr = cfg.get("display", {}).get("markers", {}).get("sources", {})
+    mean = table.groupby("subtype")["distance"].mean().sort_values()
+    color_map = subtype_color_map(list(mean.index), cfg)
+    y = np.arange(len(mean))
+    ax.barh(y, mean.values, color=[color_map[s] for s in mean.index], height=0.62, alpha=0.85)
+    for src, grp in table.groupby("source"):
+        g = grp.set_index("subtype").loc[mean.index]
+        ax.scatter(g["distance"].values, y, marker=src_mkr.get(src, "o"), s=12,
+                   facecolor="white", edgecolor="black", linewidths=0.7, zorder=3, label=src)
+    ns = table.pivot(index="subtype", columns="source", values="n").loc[mean.index]
+    labels = [f"{shorten(s, cfg)} ({'/'.join(str(int(v)) for v in ns.loc[s].values)})" for s in mean.index]
+    ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=fontsize - 1)
+    ax.set_ylim(len(mean) - 0.5, -0.5)
+    ax.set_xlim(0, table["distance"].max() * 1.08)
+    ax.set_xlabel("Euclidean distance to SFT\n(mean embeddings, within site)", fontsize=fontsize)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(loc="lower right", frameon=False, fontsize=fontsize - 1, handletextpad=0.2)
+
+
 # ── plot ──────────────────────────────────────────────────────────────────────
 
 def plot_bar(
@@ -187,6 +235,15 @@ def main() -> None:
 
     out_path = out_dir / f"sft_distance_bar_{variant}_{metric_slug}.png"
     plot_bar(bar_values, color_map, cfg, out_path)
+
+    # 論文 Fig 5b と同じ: 施設内の生のユークリッド距離（補正の影響を受けない）
+    raw = compute_sft_raw_distances(merged, cfg)
+    raw.to_csv(out_dir / "sft_distance_raw.csv", index=False)
+    fig, ax = plt.subplots(figsize=(4.2, 0.32 * raw["subtype"].nunique() + 1.0))
+    draw_raw(ax, raw, cfg)
+    raw_path = out_dir / "sft_distance_bar_euc_mean_raw.png"
+    fig.savefig(raw_path, dpi=200, bbox_inches="tight"); plt.close(fig)
+    print(f"  saved: {raw_path}")
 
 
 if __name__ == "__main__":

@@ -31,10 +31,11 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.neighbors import NearestNeighbors
 
+from utils.display import CONDITION_COLORS
 from utils.loader import load_config, load_data
 
 STATE_LABELS = {"original": "None", "centroid": "Centroid", "gan": "GAN"}  # 補正の種類
-STATE_COLORS = {"original": "#9a9a9a", "centroid": "#4477AA", "gan": "#CCBB44"}
+STATE_COLORS = CONDITION_COLORS
 METRIC_INFO = {
     # key: (表示名, 良い向きの注記)
     "asw_batch": ("ASW (site)", "→ 0: sites mixed"),

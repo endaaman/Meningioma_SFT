@@ -132,22 +132,26 @@ def save_heatmap(mat: pd.DataFrame, title: str, path: Path,
                  flip: bool = False,
                  marker_specs: dict | None = None,
                  group_size: int | None = None,
-                 label_order: list | None = None) -> None:
+                 label_order: list | None = None,
+                 normalize: bool = True) -> None:
     """
     marker_specs: {label: {"color": hex, "marker": "o"/"s"}}
     When provided, draws matplotlib markers on tick positions and group lines.
+    normalize=False: 距離を生値のまま描く（小さいほど明るい viridis_r）。論文 Fig 5 と同じ尺度。
     """
     if label_order:
         mat = mat.loc[label_order, label_order]
-    norm_v = _normalize(mat.values.astype(float))
-    display_v = (1 - norm_v) if flip else norm_v
-    cmap = "viridis"
-    cbar_label = "1 − normalized" if flip else "normalized"
-    norm_mat = pd.DataFrame(display_v, index=mat.index, columns=mat.columns)
     n = len(mat)
     fig, ax = plt.subplots(figsize=(max(8, n * 1.5), max(7, n * 1.3)))
-    sns.heatmap(norm_mat, ax=ax, annot=True, fmt=".2f", annot_kws={"size": 20},
-                cmap=cmap, square=True, vmin=0, vmax=1, cbar=False)
+    if normalize:
+        norm_v = _normalize(mat.values.astype(float))
+        display_v = (1 - norm_v) if flip else norm_v
+        norm_mat = pd.DataFrame(display_v, index=mat.index, columns=mat.columns)
+        sns.heatmap(norm_mat, ax=ax, annot=True, fmt=".2f", annot_kws={"size": 20},
+                    cmap="viridis", square=True, vmin=0, vmax=1, cbar=False)
+    else:
+        sns.heatmap(mat.astype(float), ax=ax, annot=True, fmt=".1f", annot_kws={"size": 20},
+                    cmap="viridis_r", square=True, vmin=0, cbar=False)
     # ax.set_xlabel("subtype", fontsize=11)
     # ax.set_ylabel("subtype", fontsize=11)
     # ax.tick_params(axis="x", labelsize=9, rotation=45)
@@ -188,6 +192,10 @@ def _run_metrics(vecs: dict, scope: str, out_dir: Path, cfg: dict,
         save_heatmap(mat, f"{title} [{scope}]",
                      out_dir / f"{slug}_heatmap_{scope}.png",
                      is_sim, flip, marker_specs, group_size, label_order)
+        if slug == "euc_mean":  # 論文 Fig 5 と同じ生のユークリッド距離
+            save_heatmap(mat, f"{title} (raw) [{scope}]",
+                         out_dir / f"euc_mean_raw_heatmap_{scope}.png",
+                         is_sim, False, marker_specs, group_size, label_order, normalize=False)
     if cfg.get("comparison", {}).get("mmd", False):
         from hyppo.ksample import MMD
         mmd_kernels = cfg.get("comparison", {}).get("mmd_kernels", [])

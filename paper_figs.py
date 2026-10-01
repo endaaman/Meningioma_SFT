@@ -11,7 +11,10 @@ Fig 4 / Table 2（分類性能）は lp 側で作る。
 出力 (output_dir/paper/{paper.version}/):
     fig/fig2.{png,pdf}  — a/b: UMAP（補正前 / centroid 後）, c: 施設差・生物学的分離の指標
     fig/fig3.{png,pdf}  — a: 群ごとのシフトの向き, b: 大きさ, c: シフトと SFT − 髄膜腫 方向
-    fig/fig5.{png,pdf}  — a: 施設 × サブタイプ平均の類似度（centroid 後）, b: SFT との近さ
+    fig/fig5.{png,pdf}  — a: 施設 × サブタイプ平均の生のユークリッド距離の clustered heatmap（Ward, centroid 後）,
+                          b: SFT からの距離（施設内、生値）
+    fig/figS_dendrogram_original.{png,pdf} — 補正前の a（Supplementary）
+    fig/fig5_pairs.csv, fig/fig5b_sft_distance.csv
     tables/table1.{csv,md}
 
 Usage:
@@ -28,13 +31,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import umap as umap_lib
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
-import confusion_mtx
+import dendrogram
 import harmonization
 import sft_distance_bar
 import shift_direction
@@ -159,62 +161,63 @@ def fig3(cfg: dict, out_dir: Path) -> None:
 
 # ── Fig 5 ─────────────────────────────────────────────────────────────────────
 
-def _cross_matrix(merged: pd.DataFrame, cfg: dict, slug: str) -> tuple[pd.DataFrame, dict, int, list[str]]:
-    """confusion_mtx の cross 行列（施設 × 共通サブタイプ）と表示用の正規化値。"""
-    sources = sorted(merged["source"].unique())
-    common = ordered_subtypes(
-        set.intersection(*[set(merged.loc[merged["source"] == s, "subtype"]) for s in sources]), cfg)
-    sub_map = subtype_color_map(common, cfg)
-    raw = [f"{src}__{sub}" for sub in common for src in sources]
-    abbrev = make_abbrev(raw, cfg)
-    vecs = {abbrev[f"{src}__{sub}"]: np.stack(
-        merged.loc[(merged["source"] == src) & (merged["subtype"] == sub), "embedding"].values)
-        for sub in common for src in sources}
-    _, _, is_sim, flip, fn = next(m for m in confusion_mtx.METRICS if m[0] == slug)
-    mat = confusion_mtx.build_matrix(vecs, fn, is_sim)
-    norm = confusion_mtx._normalize(mat.values.astype(float))
-    disp = pd.DataFrame((1 - norm) if flip else norm, index=mat.index, columns=mat.columns)
-    src_mkr = _src_markers(cfg, sources)
-    specs = {abbrev[f"{src}__{sub}"]: {"color": sub_map[sub], "marker": src_mkr[src]}
-             for sub in common for src in sources}
-    return disp, specs, len(sources), list(mat.index)
+def _fig5_like(cfg: dict, merged: pd.DataFrame, with_b: bool) -> tuple[plt.Figure, dict]:
+    """a: 施設 × サブタイプ平均の生のユークリッド距離の clustered heatmap（Ward）, b: SFT からの距離。"""
+    groups = dendrogram.group_means(merged, cfg)
+    D = dendrogram.raw_distance(groups)
+    Z = dendrogram.ward_linkage(D)
+    stats = dendrogram.pair_stats(D, Z, groups)
+
+    if with_b:
+        fig = plt.figure(figsize=(7.2, 5.4))
+        gs = GridSpec(1, 2, figure=fig, width_ratios=[2.3, 1], wspace=0.95)
+    else:
+        fig = plt.figure(figsize=(5.2, 5.4))
+        gs = GridSpec(1, 1, figure=fig)
+    ax_a = dendrogram.draw_clustered(fig, gs[0, 0], groups, D, Z, cfg, fontsize=FONT)
+    src_mkr = _src_markers(cfg, sorted(groups["source"].unique()))
+    handles = [Line2D([0], [0], marker=m, color="#666666", ls="none", markersize=4, label=s)
+               for s, m in src_mkr.items()]
+    ax_a.legend(handles=handles, loc="lower left", bbox_to_anchor=(-0.02, 1.2), ncol=2,
+                frameon=False, fontsize=FONT - 1, handletextpad=0.2, columnspacing=0.8,
+                title="(n) = slides", title_fontsize=FONT - 1, alignment="left")
+    if with_b:
+        fig.canvas.draw()
+        top = ax_a.get_position().y1
+        ax_b = fig.add_subplot(gs[0, 1])
+        raw = sft_distance_bar.compute_sft_raw_distances(merged, cfg)
+        sft_distance_bar.draw_raw(ax_b, raw, cfg, fontsize=FONT)
+        ax_b.get_legend().remove()  # 施設マーカーは a の凡例と共通
+        # b の縦範囲をヒートマップに揃える
+        pb = ax_b.get_position()
+        pa = ax_a.get_position()
+        ax_b.set_position([pb.x0, pa.y0, pb.width, pa.height])
+        fig.text(pa.x0 - 0.13, fig.axes[0].get_position().y1 + 0.005, "a",
+                 fontsize=FONT + 4, fontweight="bold", va="bottom")
+        fig.text(pb.x0 - 0.12, top + 0.005, "b", fontsize=FONT + 4, fontweight="bold", va="bottom")
+        stats["sft_distance"] = raw
+    return fig, stats
 
 
 def fig5(cfg: dict, out_dir: Path) -> None:
+    """Fig 5（centroid 補正後）と、同形式の補正前（Supplementary）。ペアの定量も保存する。"""
     print("[fig5]")
-    sft_cfg = cfg.get("sft_distance", {})
-    variant = sft_cfg.get("variant", "centroid")
-    merged = load_data(cfg, cfg["variants"].get(variant, variant))
-    disp, specs, gsize, labels = _cross_matrix(merged, cfg, "cos_mean")
-    bar_vals, bar_colors = sft_distance_bar.compute_sft_bar_values(merged, cfg, sft_cfg.get("metric", "euc_mean"))
-
-    fig = plt.figure(figsize=(7.2, 4.9))
-    gs = GridSpec(1, 2, figure=fig, width_ratios=[2.35, 1], wspace=0.32)
-    ax_a = fig.add_subplot(gs[0, 0])
-    n = len(disp)
-    sns.heatmap(disp, ax=ax_a, cmap="viridis", vmin=0, vmax=1, square=True, annot=False,
-                cbar_kws={"shrink": 0.6, "label": "Normalized cosine similarity of mean embeddings",
-                          "pad": 0.02})
-    confusion_mtx._add_axis_markers(ax_a, labels, specs, n, gsize, fontsize=FONT - 1, markersize=3.5)
-    ax_a.tick_params(bottom=False, left=False)
-    for k in range(gsize, n, gsize):
-        ax_a.axvline(k, color="white", lw=0.8); ax_a.axhline(k, color="white", lw=0.8)
-    _panel(ax_a, "a", x=-0.12, y=1.0)
-
-    ax_b = fig.add_subplot(gs[0, 1])
-    items = sorted(bar_vals.items(), key=lambda kv: kv[1], reverse=True)
-    y = np.arange(len(items))
-    ax_b.barh(y, [v for _, v in items], color=[bar_colors[k] for k, _ in items], height=0.62)
-    for yi, (_, v) in zip(y, items):
-        ax_b.text(v + 0.01, yi, f"{v:.2f}", va="center", fontsize=FONT - 1)
-    ax_b.set_yticks(y)
-    ax_b.set_yticklabels([shorten(k, cfg) for k, _ in items])
-    ax_b.set_ylim(len(items) - 0.5, -0.5)
-    ax_b.set_xlim(0, max(v for _, v in items) * 1.25)
-    ax_b.set_xlabel("Similarity to SFT\n(1 − normalized distance)")
-    ax_b.spines[["top", "right"]].set_visible(False)
-    _panel(ax_b, "b", x=-0.25, y=1.0)
-    _save(fig, out_dir, "fig5")
+    rows = []
+    for variant, with_b, name in (("centroid", True, "fig5"),
+                                  ("original", False, "figS_dendrogram_original")):
+        merged = load_data(cfg, cfg["variants"].get(variant, variant))
+        fig, stats = _fig5_like(cfg, merged, with_b)
+        _save(fig, out_dir, name)
+        raw = stats.pop("sft_distance", None)
+        if raw is not None:
+            raw.to_csv(out_dir / "fig5b_sft_distance.csv", index=False)
+            order = raw.groupby("subtype")["distance"].mean().sort_values()
+            print("  SFT に近い順: " + ", ".join(f"{shorten(k, cfg)} {v:.2f}" for k, v in order.items()))
+        rows.append({"variant": variant, **stats})
+        print(f"  [{variant}] " + "  ".join(f"{k}={v}" for k, v in stats.items()))
+    path = out_dir / "fig5_pairs.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+    print(f"  saved: {path}")
 
 
 # ── Table 1 ───────────────────────────────────────────────────────────────────
