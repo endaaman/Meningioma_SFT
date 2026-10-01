@@ -95,16 +95,19 @@ def _bootstrap(df: pd.DataFrame, n_boot: int, rng: np.random.Generator,
     return {m: (float(np.nanpercentile(v, 2.5)), float(np.nanpercentile(v, 97.5))) for m, v in samples.items()}
 
 
-def main_histotype(cfg: dict) -> None:
-    """組織型の多クラス分類（lp.py --task histotype の出力）の bootstrap と McNemar。"""
+def main_histotype(cfg: dict, subdir: str | None = None, variants: list[str] | None = None) -> None:
+    """組織型の多クラス分類（lp.py --task histotype の出力）の bootstrap と McNemar。
+
+    subdir / variants を渡すと、入出力先 output_dir/<subdir> と対象の variant を差し替える（既定は lp_histotype の値）。
+    """
     bs_cfg = cfg.get("lp_bootstrap", {})
     n_boot, seed = bs_cfg.get("n_boot", 2000), bs_cfg.get("seed", 42)
     h_cfg = cfg["lp_histotype"]
     classes = [c.replace(" meningioma", "") for c in h_cfg["classes"]]
     k = len(classes)
-    variants = order_conditions(h_cfg.get("variants", ["original"]))
+    variants = order_conditions(variants or h_cfg.get("variants", ["original"]))
     sources = list(cfg["embedding"].keys())
-    lp_root = Path(cfg["output_dir"]) / h_cfg.get("output_subdir", "lp_histotype")
+    lp_root = Path(cfg["output_dir"]) / (subdir or h_cfg.get("output_subdir", "lp_histotype"))
 
     rows, pc_rows, mc_rows = [], [], []
     for train_src in sources:
@@ -158,11 +161,15 @@ def main() -> None:
     parser.add_argument("--task", choices=["sft", "histotype"], default="sft")
     parser.add_argument("--lp-subdir", default="lp",
                         help="sft の入出力先 output_dir/<この名前>（既定 lp。重み付きの結果は lp_weighted など）")
+    parser.add_argument("--histotype-subdir", default=None,
+                        help="histotype の入出力先 output_dir/<この名前>（既定は lp_histotype.output_subdir）")
+    parser.add_argument("--variants", nargs="+", default=None,
+                        help="histotype で対象にする variant（既定は lp_histotype.variants）")
     add_set_arg(parser)
     args = parser.parse_args()
     cfg = apply_set(load_config(), args.set)
     if args.task == "histotype":
-        main_histotype(cfg)
+        main_histotype(cfg, args.histotype_subdir, args.variants)
         return
     bs_cfg = cfg.get("lp_bootstrap", {})
     n_boot = bs_cfg.get("n_boot", 2000)
