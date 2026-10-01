@@ -1,6 +1,6 @@
 """figs — 論文の図表を out/ の解析結果から組み立てる（重い計算はしない）。
 
-スクリプト名は内容名（番号を持たない）。図表番号は下の MAIN / TABLES / SUPP の順序だけで決まり、
+スクリプト名は内容名（番号を持たない）。図表番号は下の MAIN / TABLES / SUPP / SUPP_TABLES の順序だけで決まり、
 並べ替えはこの定義を変えるだけで済む。出力ファイル名は原稿で参照しやすいよう番号付き
 （例 fig/fig3_umap_harmonization.png）。
 
@@ -22,26 +22,31 @@ MAIN = [
 # 表（順 = Table 番号）
 TABLES = [
     "cohort",               # Table 1 データセット
-    "performance",          # Table 2 分類性能
 ]
 # Supplementary（順 = Fig S 番号）
 SUPP = [
     "subtype_distance_heatmap",       # サブタイプ間距離のヒートマップ 4 枚（補正なし / GAN / ComBat / centroid、euc_mean、固定順）
     "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
+    "histotype",                      # 組織型（主要 5 クラス）の施設間分類の混同行列（2 方向 × 4 条件）
+]
+# Supplementary の表（順 = Table S 番号）
+SUPP_TABLES = [
+    "performance",                    # 施設間の分類性能（SFT vs 髄膜腫、旧 Table 2。主な数値は Results 本文と Fig 5b）
+    "histotype_performance",          # 組織型分類の balanced accuracy・macro F1（95% CI）
 ]
 
 
 def stem(name: str) -> str:
-    """出力ファイル名の幹（例: fig3_umap_harmonization / table1_cohort / figS1_subtype_structure_gan）。"""
-    for prefix, names in (("fig", MAIN), ("table", TABLES), ("figS", SUPP)):
+    """出力ファイル名の幹（例: fig3_umap_harmonization / table1_cohort / figS1_subtype_distance_heatmap / tableS1_performance）。"""
+    for prefix, names in (("fig", MAIN), ("table", TABLES), ("figS", SUPP), ("tableS", SUPP_TABLES)):
         if name in names:
             return f"{prefix}{names.index(name) + 1}_{name}"
-    raise KeyError(f"figs: '{name}' is not registered in MAIN / TABLES / SUPP")
+    raise KeyError(f"figs: '{name}' is not registered in MAIN / TABLES / SUPP / SUPP_TABLES")
 
 
 def label(name: str) -> str:
     """原稿での呼び名（例: Fig 3 / Table 1 / Fig S1）。"""
-    for prefix, names in (("Fig ", MAIN), ("Table ", TABLES), ("Fig S", SUPP)):
+    for prefix, names in (("Fig ", MAIN), ("Table ", TABLES), ("Fig S", SUPP), ("Table S", SUPP_TABLES)):
         if name in names:
             return f"{prefix}{names.index(name) + 1}"
     raise KeyError(name)

@@ -69,7 +69,7 @@ def cm_figure(cfg: dict) -> plt.Figure:
             ax.set_xticks(range(k)); ax.set_yticks(range(k))
             ax.set_xticklabels([s[:4] for s in classes], rotation=90, fontsize=FONT - 2)
             ax.set_yticklabels([s[:4] for s in classes] if c == 0 else [], fontsize=FONT - 2)
-            title = VARIANT_DISPLAY[v] + (" (ref.)" if v == "combat" else "")
+            title = VARIANT_DISPLAY[v]
             ax.set_title(title if r == 0 else "", fontsize=FONT, color=CONDITION_COLORS[v] if v != "original" else "black")
             if c == 0:
                 ax.set_ylabel(f"{SITE_DISPLAY[tr]}→{SITE_DISPLAY[te]}\nTrue", fontsize=FONT - 1)
