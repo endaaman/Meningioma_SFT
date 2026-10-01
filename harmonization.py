@@ -13,9 +13,19 @@ CSV には中央値（*_median）も残す。
 ASW・LISI はともに centroid.py と同じく PCA（centroid.pca_n_components 次元）に落としてから計算する。
 LISI は Korsunsky et al. (Harmony) の perplexity 重み付きではなく、k 近傍の一様重みによる簡易版。
 
+施設差の帰無分布（施設ラベルの並べ替え検定）:
+    各状態で施設ラベルを n_perm 回並べ替え、ASW-batch / iLISI の帰無分布を作る。
+      free           … 全体でシャッフル
+      within_subtype … サブタイプ内でシャッフル（施設ごとのサブタイプ構成差は保つ。本文の基準）
+    p は「帰無が観測以上に施設が分かれている（ASW は ≥、iLISI は ≤）」割合（+1 補正）。
+    残った施設差の割合 = (観測 − 帰無平均) / (補正なしの観測 − 補正なしの帰無平均)。
+    補正なしを 100%、偶然のレベルを 0% とする。
+
 出力 (output_dir/harmonization/):
     metrics.csv
     metrics.png
+    site_null.csv          … state, null, metric, obs, null_mean, null_q025, null_q975, p
+    residual_fraction.csv  … state, null, metric, residual（0〜1）
 
 Usage:
     uv run python harmonization.py
@@ -83,6 +93,68 @@ def compute_metrics(merged: pd.DataFrame, cfg: dict) -> dict[str, float]:
     }
 
 
+def _site_values(X: np.ndarray, src: np.ndarray, k: int) -> tuple[float, float]:
+    return float(silhouette_score(X, src)), float(_lisi(X, src, k).mean())
+
+
+def site_null(merged: pd.DataFrame, cfg: dict, rng: np.random.Generator) -> list[dict]:
+    """1 状態について施設ラベルを並べ替えた ASW-batch / iLISI の帰無分布を作り、観測と比べる。"""
+    h_cfg = cfg.get("harmonization", {})
+    n_cfg = h_cfg.get("site_null", {})
+    pre_n = cfg.get("centroid", {}).get("pca_n_components", 50)
+    k = h_cfg.get("lisi_k", 30)
+    n_perm = n_cfg.get("n_perm", 1000)
+    X = _reduce(np.stack(merged["embedding"].values).astype(np.float64), pre_n)
+    src = merged["source"].values
+    sub = merged["subtype"].values
+    groups = [np.where(sub == s)[0] for s in np.unique(sub)]
+    obs = dict(zip(("asw_batch", "ilisi"), _site_values(X, src, k)))
+    rows = []
+    for null in n_cfg.get("nulls", ["within_subtype", "free"]):
+        draws = []
+        for _ in range(n_perm):
+            perm = src.copy()
+            if null == "free":
+                rng.shuffle(perm)
+            else:
+                for g in groups:
+                    perm[g] = rng.permutation(perm[g])
+            draws.append(_site_values(X, perm, k))
+        draws = np.array(draws)
+        for j, metric in enumerate(("asw_batch", "ilisi")):
+            d = draws[:, j]
+            # 施設が分かれている向き: ASW は大きいほど、iLISI は小さいほど
+            extreme = (d >= obs[metric]) if metric == "asw_batch" else (d <= obs[metric])
+            rows.append({"null": null, "metric": metric, "obs": obs[metric], "null_mean": float(d.mean()),
+                         "null_q025": float(np.quantile(d, 0.025)), "null_q975": float(np.quantile(d, 0.975)),
+                         "p": float((1 + extreme.sum()) / (n_perm + 1))})
+    return rows
+
+
+def residual_fraction(null_table: pd.DataFrame) -> pd.DataFrame:
+    """補正なしを 1、帰無平均を 0 とした「残った施設差の割合」。"""
+    t = null_table.assign(excess=null_table["obs"] - null_table["null_mean"])
+    base = t[t["state"] == "original"].set_index(["null", "metric"])["excess"]
+    t["residual"] = [r.excess / base[(r.null, r.metric)] for r in t.itertuples()]
+    return t[["state", "null", "metric", "residual"]]
+
+
+def compute_null_all(cfg: dict) -> pd.DataFrame:
+    n_cfg = cfg.get("harmonization", {}).get("site_null", {})
+    rng = np.random.default_rng(n_cfg.get("seed", 42))
+    variants: list[str] = order_conditions(cfg.get("harmonization", {}).get("variants", ["original", "gan", "centroid"]))
+    rows = []
+    for variant in variants:
+        merged = load_data(cfg, cfg.get("variants", {}).get(variant, variant))
+        if merged.empty:
+            continue
+        for r in site_null(merged, cfg, rng):
+            rows.append({"state": variant, **r})
+            print(f"  [{variant}/{r['null']}] {r['metric']}: obs={r['obs']:.4f} "
+                  f"null={r['null_mean']:.4f} [{r['null_q025']:.4f}, {r['null_q975']:.4f}] p={r['p']:.4f}")
+    return pd.DataFrame(rows)
+
+
 def compute_all(cfg: dict) -> pd.DataFrame:
     variants: list[str] = order_conditions(cfg.get("harmonization", {}).get("variants", ["original", "gan", "centroid"]))
     rows = []
@@ -99,8 +171,13 @@ def compute_all(cfg: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def draw_metric(ax: plt.Axes, table: pd.DataFrame, key: str, show_note: bool = True) -> None:
-    """1 指標の棒グラフ（状態ごと）を ax に描く。"""
+def draw_metric(ax: plt.Axes, table: pd.DataFrame, key: str, show_note: bool = True,
+                null: dict | None = None, null_style: str = "band") -> None:
+    """1 指標の棒グラフ（状態ごと）を ax に描く。
+
+    null: {"mean", "q025", "q975"}（施設ラベルの並べ替えによる偶然のレベル）。null_style は
+    "band"（95% 範囲の灰色の横帯）/ "line"（平均の破線）。
+    """
     table = table.set_index("state").loc[order_conditions(table["state"].tolist())].reset_index()
     states = table["state"].tolist()
     vals = table[key].values
@@ -121,6 +198,17 @@ def draw_metric(ax: plt.Axes, table: pd.DataFrame, key: str, show_note: bool = T
     if key in ("ilisi", "clisi"):
         lo = 1.0  # LISI の下限は 1
         hi = max(hi, 1.0 + (vals.max() - 1.0) * 1.25)
+    if null is not None:
+        if null_style == "band":
+            ax.axhspan(null["q025"], null["q975"], color="#BBBBBB", alpha=0.45, lw=0, zorder=0)
+            ax.text(1.01, null["mean"], "chance\n(95%)", transform=ax.get_yaxis_transform(),
+                    fontsize=6.5, color="#666666", ha="left", va="center", clip_on=False)
+        else:
+            ax.axhline(null["mean"], color="#555555", lw=0.9, ls="--", zorder=0)
+            ax.text(1.01, null["mean"], "chance", transform=ax.get_yaxis_transform(),
+                    fontsize=6.5, color="#555555", ha="left", va="center", clip_on=False)
+        if key in ("ilisi", "clisi"):
+            hi = max(hi, null["q975"] + (null["q975"] - 1.0) * 0.08)
     ax.set_ylim(lo, hi)
     ax.spines[["top", "right"]].set_visible(False)
     ax.tick_params(axis="y", labelsize=8)
@@ -148,6 +236,14 @@ def main() -> None:
     print(f"  saved: {path}")
     print(table.round(4).to_string(index=False))
     plot(table, out_dir / "metrics.png")
+
+    print("[harmonization] site-label permutation null")
+    nt = compute_null_all(cfg)
+    nt.to_csv(out_dir / "site_null.csv", index=False)
+    rf = residual_fraction(nt)
+    rf.to_csv(out_dir / "residual_fraction.csv", index=False)
+    print(f"  saved: {out_dir / 'site_null.csv'} / residual_fraction.csv")
+    print(rf.round(3).to_string(index=False))
 
 
 if __name__ == "__main__":
