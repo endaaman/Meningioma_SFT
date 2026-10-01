@@ -63,14 +63,13 @@ def _encode_patches(
 
 
 def _load_model(tile_model: str, device: str):
-    from wsi_toolbox.common import create_default_model, get_config, set_default_preset
+    from wsi_toolbox.common import resolve_preset
 
-    set_default_preset(tile_model)
-    wt_cfg = get_config()
-    model = create_default_model().to(device, memory_format=torch.channels_last).eval()
-    mean = torch.tensor(wt_cfg.norm_mean).view(1, 3, 1, 1).to(device)
-    std = torch.tensor(wt_cfg.norm_std).view(1, 3, 1, 1).to(device)
-    return model, wt_cfg.extract_fn, mean, std
+    preset = resolve_preset(tile_model)
+    model = preset.create_model().to(device, memory_format=torch.channels_last).eval()
+    mean = torch.tensor(preset.norm_mean).view(1, 3, 1, 1).to(device)
+    std = torch.tensor(preset.norm_std).view(1, 3, 1, 1).to(device)
+    return model, preset.extract_fn, mean, std
 
 
 def run(cfg: dict) -> None:

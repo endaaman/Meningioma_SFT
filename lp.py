@@ -274,6 +274,7 @@ def evaluate(ckpt_path: str, dataset: TitanDataset, cfg: dict, out_dir: Path) ->
 
     model = LinearProbeModel.load_from_checkpoint(ckpt_path, map_location=device)
     model.eval()
+    num_classes: int = model.hparams.num_classes
 
     num_workers = lp_cfg.get("num_workers", 0)
     loader = DataLoader(dataset, batch_size=lp_cfg.get("batch_size", 64),
