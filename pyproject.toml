@@ -16,6 +16,7 @@ dependencies = [
     "scipy",
     "lightning",
     "wsi-toolbox",
+    "einops-exts>=0.0.4",
 ]
 
 [tool.uv.sources]
