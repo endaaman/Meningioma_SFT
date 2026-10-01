@@ -7,10 +7,9 @@ import matplotlib.pyplot as plt
 CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE",
                     "combat": "#CCBB44"}
 # 補正条件の集合（図表ごとにどちらを使うかを各 figs/*.py で明示する）。
-# 並びは全図表で共通: 補正なし → 比較対象（GAN → ComBat）→ 提案の centroid を最後に。
-#   CORE: 3 本柱。UMAP（Fig 3 a–c）・施設差の幾何・サブタイプ構造（Fig 6）・Supplementary の大半
-#   FULL: ComBat を含む 4 条件。指標（Fig 3d）・分類（Fig 5 / Table 2）・Supplementary の UMAP 4 列
-#         ComBat は Fig 6（樹形図）の手前で退ける（過補正で組織型のまとまりを崩すため）
+# 並びは全図表で共通: 補正なし → GAN → ComBat → centroid（提案の centroid を最後に）。
+#   FULL: 4 条件。Fig 3・Fig 5・Table 2・Fig 6・Fig S1（本番図表はすべてこれ）
+#   CORE: ComBat を除く 3 条件（harmonization.draw_metric の既定など、本番図表では未使用）
 CONDITIONS_FULL = ["original", "gan", "combat", "centroid"]
 CONDITIONS_CORE = [v for v in CONDITIONS_FULL if v != "combat"]
 CONDITION_ORDER = CONDITIONS_FULL  # 並び順の基準（order_conditions が使う）

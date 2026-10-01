@@ -270,7 +270,8 @@ def normalized_distance(mat: pd.DataFrame, is_similarity: bool = False) -> np.nd
 def draw_dendrogram(ax: plt.Axes, mat: pd.DataFrame, is_similarity: bool = False,
                     marker_specs: dict | None = None, ymax: float | None = None,
                     marker_size: float = 250, frame_lw: float = 2.0, line_lw: float | None = None,
-                    ytick_size: float = 16, frame_ls="--", frame_pad: float = 2.0) -> int:
+                    ytick_size: float = 16, frame_ls="--", frame_pad: float = 2.0,
+                    band_frac: float = 0.12, bottom_frac: float = 0.05) -> int:
     """
     ax に樹形図を描き、点線の四角で囲んだ（葉の並びで隣り合う同サブタイプの）ペア数を返す。
     marker_specs: {label: {"color": hex, "marker": "o"/"s",
@@ -279,6 +280,8 @@ def draw_dendrogram(ax: plt.Axes, mat: pd.DataFrame, is_similarity: bool = False
     and Rectangle frames around adjacent same-subtype pairs.
     ymax を渡すと縦軸の上限をそれに固定する（複数段で縦軸を揃えるとき）。
     frame_ls / frame_pad: 四角の線種と、葉の区画（幅 10）の端から四角までの余白（x 単位）。
+    band_frac / bottom_frac: マーカー帯の高さと下の余白（樹形図の高さ ymax に対する比）。樹形図を縦に詰めて描くとき、
+    帯の物理的な高さを保つためにこれを大きくする（既定値は元の単体 png と同じ）。
     """
     dist_v = normalized_distance(mat, is_similarity)
     Z = linkage(squareform(dist_v, checks=False), method="ward")
@@ -309,7 +312,7 @@ def draw_dendrogram(ax: plt.Axes, mat: pd.DataFrame, is_similarity: bool = False
     leaf_xs = [5 + 10 * i for i in range(n_leaves)]
 
     _, ymax = ax.get_ylim()
-    band     = ymax * 0.12        # マーカー帯の高さ（y単位）
+    band     = ymax * band_frac   # マーカー帯の高さ（y単位）
     marker_y = -band * 0.55       # 帯の中央
     pad_x    = frame_pad          # x単位（葉間隔 = 10）
     pad_y    = band * 0.12        # y単位
@@ -342,7 +345,7 @@ def draw_dendrogram(ax: plt.Axes, mat: pd.DataFrame, is_similarity: bool = False
                    marker=spec.get("marker", "o"),
                    s=marker_size, zorder=6, clip_on=False)
 
-    ax.set_ylim(marker_y - ymax * 0.05, ymax)
+    ax.set_ylim(marker_y - ymax * bottom_frac, ymax)
     return n_frames
 
 
