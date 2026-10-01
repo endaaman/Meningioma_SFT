@@ -22,7 +22,7 @@ from figs.common import CONDITION_COLORS, FONT, SITE_DISPLAY, VARIANT_DISPLAY, c
 from histotype_labels import add_set_arg, apply_set
 from utils.display import order_conditions
 
-VARIANTS = ["original", "gan", "centroid", "combat"]
+VARIANTS = ["original", "gan", "centroid", "combat", "affine_free"]
 
 
 def _root(cfg: dict):

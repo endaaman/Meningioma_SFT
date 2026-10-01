@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 
 from figs import stem
 from utils.display import (CONDITION_COLORS, CONDITION_LABELS, CONDITION_LABELS_JA, CONDITION_LABELS_SHORT,  # noqa: F401
-                           CONDITION_ORDER, CONDITIONS_CORE, CONDITIONS_FULL, order_conditions)
+                           CONDITION_ORDER, CONDITIONS_CORE, CONDITIONS_FULL, CONDITIONS_SUPP,
+                           CONDITIONS_SUPP_REF, order_conditions)
 from utils.loader import load_config
 
 FONT = 8

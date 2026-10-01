@@ -17,12 +17,15 @@
     null_shuffle_{variant}.csv           — 帰無1 の要約
     shift_direction_{variant}.png        — a: 群ごとの cos と帰無2 / b: |shift|
     shift_vs_bio_{variant}.png           — c: 全体シフトと施設内 SFT − 髄膜腫 方向（角度と長さを保った 2 次元図）
+    subtype_distance_pairs_{variant}.csv — d: 施設内の組織型平均どうしの距離（両施設、組ごと）
+    subtype_distance_scaling_{variant}.csv — d の要約（原点を通る傾き・相関・組織型内のばらつきの比）
 
 Usage:
     uv run python shift_direction.py
 """
 from __future__ import annotations
 
+from itertools import combinations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -32,6 +35,7 @@ import pandas as pd
 from utils.display import ordered_subtypes, shorten, subtype_color_map
 from utils.loader import load_config, load_data
 
+SITE_LABEL = {"ebrains": "EBRAINS", "patho2": "patho2"}
 ALL = "All"
 MENI = "Meningioma (all)"
 
@@ -232,6 +236,79 @@ def plot_bio(bio_table: pd.DataFrame, cfg: dict, out_path: Path) -> None:
     print(f"  saved: {out_path}")
 
 
+# ── 組織型の平均どうしの距離の施設間の比（一様な縮み） ──────────────────────────
+
+def compute_scaling(merged: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """施設内の組織型平均どうしの距離を両施設で比べる（両施設で min_n 例以上の組織型）。
+
+    施設差がノイズの上乗せだけなら平均どうしの距離の比は 1、形を保った一様な縮みなら
+    組織型内のばらつきの比と同じ値になる。平行移動の影響を受けない（施設内の距離）。
+    返り値: (組の表, 要約の 1 行表)
+    """
+    min_n: int = cfg.get("shift_direction", {}).get("min_n", 5)
+    reference: str = cfg["reference"]
+    other = next(s for s in merged["source"].unique() if s != reference)
+    X = np.stack(merged["embedding"].values).astype(np.float64)
+    src, sub = merged["source"].values, merged["subtype"].values
+    subs = [t for t in ordered_subtypes(set(sub), cfg)
+            if ((sub == t) & (src == reference)).sum() >= min_n and ((sub == t) & (src == other)).sum() >= min_n]
+    mu = {(t, s): X[(sub == t) & (src == s)].mean(axis=0) for t in subs for s in (reference, other)}
+    n = {(t, s): int(((sub == t) & (src == s)).sum()) for t in subs for s in (reference, other)}
+
+    def within_rms(s: str) -> float:
+        return float(np.sqrt(np.mean([((X[(sub == t) & (src == s)] - mu[(t, s)]) ** 2).sum(axis=1).mean()
+                                      for t in subs])))
+
+    w_ref, w_oth = within_rms(reference), within_rms(other)
+    rows = []
+    for a, b in combinations(subs, 2):
+        d_ref = float(np.linalg.norm(mu[(a, reference)] - mu[(b, reference)]))
+        d_oth = float(np.linalg.norm(mu[(a, other)] - mu[(b, other)]))
+        # 例数が少ないと平均の推定誤差で距離が上振れする分を差し引いた距離
+        b_ref = w_ref ** 2 / n[(a, reference)] + w_ref ** 2 / n[(b, reference)]
+        b_oth = w_oth ** 2 / n[(a, other)] + w_oth ** 2 / n[(b, other)]
+        rows.append({"subtype_a": a, "subtype_b": b, f"d_{reference}": d_ref, f"d_{other}": d_oth,
+                     f"d_{reference}_corrected": float(np.sqrt(max(d_ref ** 2 - b_ref, 0.0))),
+                     f"d_{other}_corrected": float(np.sqrt(max(d_oth ** 2 - b_oth, 0.0)))})
+    pairs = pd.DataFrame(rows)
+    x, y = pairs[f"d_{reference}"].to_numpy(), pairs[f"d_{other}"].to_numpy()
+    slope0 = float((x @ y) / (x @ x))                       # 原点を通る回帰
+    slope, intercept = (float(v) for v in np.polyfit(x, y, 1))  # 通常の回帰
+    ratio = y / x
+    ratio_c = pairs[f"d_{other}_corrected"].to_numpy() / pairs[f"d_{reference}_corrected"].to_numpy()
+    summary = pd.DataFrame([{
+        "reference": reference, "other": other, "n_subtypes": len(subs), "n_pairs": len(pairs),
+        "slope_origin": slope0, "slope_ols": slope, "intercept_ols": intercept,
+        "pearson_r": float(np.corrcoef(x, y)[0, 1]),
+        "ratio_median": float(np.median(ratio)), "ratio_q25": float(np.quantile(ratio, 0.25)),
+        "ratio_q75": float(np.quantile(ratio, 0.75)),
+        "ratio_corrected_median": float(np.median(ratio_c)),
+        f"within_rms_{reference}": w_ref, f"within_rms_{other}": w_oth, "within_ratio": w_oth / w_ref,
+    }])
+    return pairs, summary
+
+
+def draw_scaling(ax: plt.Axes, pairs: pd.DataFrame, summary: pd.DataFrame, fontsize: float = 10) -> None:
+    """d: 組織型の平均どうしの距離（横 = reference、縦 = 対象施設）。原点を通る傾きの線と y = x。"""
+    s = summary.iloc[0]
+    ref, oth = s["reference"], s["other"]
+    x, y = pairs[f"d_{ref}"].to_numpy(), pairs[f"d_{oth}"].to_numpy()
+    lim = float(max(x.max(), y.max())) * 1.08
+    ax.plot([0, lim], [0, lim], ls="--", lw=0.8, color="#999999", zorder=1)
+    ax.plot([0, lim], [0, lim * s["slope_origin"]], lw=1.2, color="#333333", zorder=2)
+    ax.scatter(x, y, s=12, color="#666666", edgecolors="white", linewidths=0.4, zorder=3)
+    ax.set_xlim(0, lim); ax.set_ylim(0, lim); ax.set_aspect("equal")
+    ax.set_xlabel(f"Distance between subtype means ({SITE_LABEL.get(ref, ref)})", fontsize=fontsize - 1)
+    ax.set_ylabel(f"Distance between subtype means ({SITE_LABEL.get(oth, oth)})", fontsize=fontsize - 1)
+    ax.tick_params(labelsize=fontsize - 2)
+    ax.text(0.04, 0.96,
+            f"slope {s['slope_origin']:.2f} (through origin)\nr = {s['pearson_r']:.2f}, {int(s['n_pairs'])} pairs\n"
+            f"within-subtype SD ratio {s['within_ratio']:.2f}",
+            transform=ax.transAxes, ha="left", va="top", fontsize=fontsize - 1.5)
+    ax.text(lim * 0.97, lim * 0.97, "y = x", ha="right", va="top", fontsize=fontsize - 2, color="#999999")
+    ax.spines[["top", "right"]].set_visible(False)
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -249,7 +326,9 @@ def main() -> None:
 
     table, bio_table, null_table = compute(merged, cfg)
     out_dir.mkdir(parents=True, exist_ok=True)
-    for name, df in (("shift_direction", table), ("bio_direction", bio_table), ("null_shuffle", null_table)):
+    pairs, scaling = compute_scaling(merged, cfg)
+    for name, df in (("shift_direction", table), ("bio_direction", bio_table), ("null_shuffle", null_table),
+                     ("subtype_distance_pairs", pairs), ("subtype_distance_scaling", scaling)):
         path = out_dir / f"{name}_{variant}.csv"
         df.to_csv(path, index=False)
         print(f"  saved: {path}")

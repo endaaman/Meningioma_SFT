@@ -27,12 +27,13 @@ TABLES = [
 SUPP = [
     "subtype_distance_heatmap",       # サブタイプ間距離のヒートマップ 4 枚（補正なし / GAN / ComBat / centroid、euc_mean、固定順）
     "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
-    "histotype",                      # 組織型（主要 5 クラス）の施設間分類の混同行列（2 方向 × 4 条件）
+    "histotype",                      # 組織型（主要 5 クラス）の施設間分類の混同行列（2 方向 × 5 条件、相似変換を含む）
 ]
 # Supplementary の表（順 = Table S 番号）
 SUPP_TABLES = [
     "performance",                    # 施設間の分類性能（SFT vs 髄膜腫、旧 Table 2。主な数値は Results 本文と Fig 5b）
     "histotype_performance",          # 組織型分類の balanced accuracy・macro F1（95% CI）
+    "method_comparison",              # 補正法の比較（全指標、相似変換を含む 6 条件）
 ]
 
 

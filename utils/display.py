@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 # 補正条件の色（全図で共通。施設色の青・赤と被らない Tol bright の灰・紫・水色）
 CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE",
-                    "combat": "#CCBB44"}
+                    "combat": "#CCBB44", "affine_free": "#228833", "affine_oracle": "#88BB88"}
 # 補正条件の集合（図表ごとにどちらを使うかを各 figs/*.py で明示する）。
 # 並びは全図表で共通: 補正なし → GAN → ComBat → 平行移動（centroid。提案の平行移動を最後に）。
 #   FULL: 4 条件。Fig 3・Fig 5・Table 2・Fig 6・Fig S1（本番図表はすべてこれ）
@@ -13,6 +13,9 @@ CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCE
 CONDITIONS_FULL = ["original", "gan", "combat", "centroid"]
 CONDITIONS_CORE = [v for v in CONDITIONS_FULL if v != "combat"]
 CONDITION_ORDER = CONDITIONS_FULL  # 並び順の基準（order_conditions が使う）
+# Supplementary の表・Fig S3 用: FULL に相似変換を足したもの（本文の図には入れない）
+CONDITIONS_SUPP = CONDITIONS_FULL + ["affine_free"]
+CONDITIONS_SUPP_REF = CONDITIONS_SUPP + ["affine_oracle"]   # 表のみ。affine_oracle は組織型ラベルを使った参考値
 # 補正条件の表示名（図表・表の表示はすべてここから引く。コード内部のキーは変えない）。
 #   centroid      = 平行移動（各施設の平均を揃える位置のみの補正）
 #   affine_free   = 相似変換（一様なスケール＋平行移動、倍率はラベル不要の推定）
