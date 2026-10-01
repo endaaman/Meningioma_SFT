@@ -132,9 +132,17 @@ def sister_pairs(Z: np.ndarray, groups: pd.DataFrame) -> list[tuple[int, int]]:
     return pairs
 
 
+def adjacent_pairs(Z: np.ndarray, groups: pd.DataFrame) -> list[tuple[int, int]]:
+    """樹形図の葉の並びで隣り合う、同じサブタイプ・別施設の組（図で点線の四角で囲むもの）。"""
+    leaves = dendrogram(Z, no_plot=True)["leaves"]
+    subs, srcs = groups["subtype"].values, groups["source"].values
+    return [(a, b) for a, b in zip(leaves, leaves[1:]) if subs[a] == subs[b] and srcs[a] != srcs[b]]
+
+
 def pair_stats(D: np.ndarray, Z: np.ndarray, groups: pd.DataFrame) -> dict:
     """施設間で同じサブタイプが対になるかの定量。
 
+    adjacent_pairs      : 葉の並びで隣り合う同サブタイプの施設ペア数（図の点線の四角）
     sister_pairs        : 樹形図で姉妹（最初に併合）になった同サブタイプの施設ペア数
     nn_other_site_same  : 各群について、もう一方の施設で最も近い群が同じサブタイプである数
     nn_any_same_other   : 各群について、全群（自分以外）で最も近い群が「同じサブタイプ・別施設」である数
@@ -149,6 +157,7 @@ def pair_stats(D: np.ndarray, Z: np.ndarray, groups: pd.DataFrame) -> dict:
         k = min((j for j in range(n) if j != i), key=lambda j: D[i, j])
         nn_any += int(subs[k] == subs[i] and srcs[k] != srcs[i])
     return {"n_subtypes": groups["subtype"].nunique(), "n_groups": n,
+            "adjacent_pairs": len(adjacent_pairs(Z, groups)),
             "sister_pairs": len(sister_pairs(Z, groups)),
             "nn_other_site_same": nn_other, "nn_any_same_other": nn_any}
 
@@ -250,43 +259,48 @@ def run_raw(merged: pd.DataFrame, out_dir: Path, cfg: dict, variant: str) -> dic
 
 # ── plot ──────────────────────────────────────────────────────────────────────
 
-def save_dendrogram(mat: pd.DataFrame, title: str, path: Path,
-                    is_similarity: bool = False,
-                    marker_specs: dict | None = None) -> None:
+def normalized_distance(mat: pd.DataFrame, is_similarity: bool = False) -> np.ndarray:
+    """樹形図に使う距離（行列全体で min-max 正規化、類似度なら 1 − 正規化値、対角 0）。"""
+    norm_v = _normalize(mat.values.astype(float))
+    dist_v = (1 - norm_v) if is_similarity else norm_v
+    np.fill_diagonal(dist_v, 0)
+    return dist_v
+
+
+def draw_dendrogram(ax: plt.Axes, mat: pd.DataFrame, is_similarity: bool = False,
+                    marker_specs: dict | None = None, ymax: float | None = None,
+                    marker_size: float = 250, frame_lw: float = 2.0, line_lw: float | None = None,
+                    ytick_size: float = 16) -> int:
     """
+    ax に樹形図を描き、点線の四角で囲んだ（葉の並びで隣り合う同サブタイプの）ペア数を返す。
     marker_specs: {label: {"color": hex, "marker": "o"/"s",
                             "subtype": full_name, "source": src, "short": abbrev}}
     When provided, draws subtype-colored source-shaped markers below each leaf
     and Rectangle frames around adjacent same-subtype pairs.
+    ymax を渡すと縦軸の上限をそれに固定する（複数段で縦軸を揃えるとき）。
     """
-    norm_v = _normalize(mat.values.astype(float))
-    dist_v = (1 - norm_v) if is_similarity else norm_v
-    np.fill_diagonal(dist_v, 0)
+    dist_v = normalized_distance(mat, is_similarity)
     Z = linkage(squareform(dist_v, checks=False), method="ward")
-    n = len(mat)
-    fig, ax = plt.subplots(figsize=(24, 6))
     result = dendrogram(
         Z, labels=mat.index.tolist(), ax=ax,
-        no_labels=True, 
+        no_labels=True,
         leaf_rotation=0, leaf_font_size=15,
         color_threshold=0, above_threshold_color="gray",
     )
-    # ax.set_title(title, fontsize=30)
-    # ax.set_xlabel("subtype", fontsize=24)
-    # ax.set_ylabel("distance", fontsize=24)
+    if line_lw is not None:
+        for coll in ax.collections:
+            coll.set_linewidth(line_lw)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_visible(False)
 
-    ax.tick_params(axis="y", labelsize=16)
+    ax.tick_params(axis="y", labelsize=ytick_size)
+    if ymax is not None:
+        ax.set_ylim(0, ymax)
 
     if not marker_specs:
-        plt.tight_layout()
-        plt.savefig(path, dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"  saved: {path}")
-        return
+        return 0
 
     ivl = result["ivl"]
     n_leaves = len(ivl)
@@ -300,6 +314,7 @@ def save_dendrogram(mat: pd.DataFrame, title: str, path: Path,
     pad_y    = band * 0.12        # y単位
 
     # ── pair frames ───────────────────────────────────────────────────────────
+    n_frames = 0
     for i in range(n_leaves - 1):
         s1 = marker_specs.get(ivl[i], {}).get("subtype")
         s2 = marker_specs.get(ivl[i + 1], {}).get("subtype")
@@ -313,9 +328,10 @@ def save_dendrogram(mat: pd.DataFrame, title: str, path: Path,
             if w > 0 and h > 0:
                 ax.add_patch(Rectangle(
                     (x0, y0), w, h,
-                    linewidth=2.0, edgecolor=color, facecolor="none",
+                    linewidth=frame_lw, edgecolor=color, facecolor="none",
                     linestyle="--", clip_on=False, zorder=4,
                 ))
+                n_frames += 1
 
     # ── subtype-colored, source-shaped markers ─────────────────────────────────
     for i, lbl in enumerate(ivl):
@@ -323,41 +339,25 @@ def save_dendrogram(mat: pd.DataFrame, title: str, path: Path,
         ax.scatter([leaf_xs[i]], [marker_y],
                    color=spec.get("color", "gray"),
                    marker=spec.get("marker", "o"),
-                   s=250, zorder=6, clip_on=False)
+                   s=marker_size, zorder=6, clip_on=False)
 
     ax.set_ylim(marker_y - ymax * 0.05, ymax)
+    return n_frames
 
-    # ── legend ─────────────────────────────────────────────────────────────────
-    # seen_sources: dict[str, str] = {}
-    # for spec in marker_specs.values():
-    #     src = spec.get("source", "")
-    #     if src and src not in seen_sources:
-    #         seen_sources[src] = spec.get("marker", "o")
-    # handles: list = [
-    #     Line2D([0], [0], marker=mk, linestyle="none",
-    #            markerfacecolor="dimgray", markeredgecolor="dimgray",
-    #            markersize=18, label=src)
-    #     for src, mk in seen_sources.items()
-    # ]
-    # seen_subtypes: dict[str, tuple[str, str]] = {}
-    # for lbl in ivl:
-    #     spec = marker_specs.get(lbl, {})
-    #     sub = spec.get("subtype", "")
-    #     if sub and sub not in seen_subtypes:
-    #         seen_subtypes[sub] = (spec.get("color", "gray"), spec.get("short", sub[:4]))
-    # for _sub, (color, short) in seen_subtypes.items():
-    #     handles.append(Line2D([0], [0], marker="o", linestyle="none",
-    #                            markerfacecolor=color, markeredgecolor=color,
-    #                            markersize=18, label=short))
-    # handles.append(Patch(fill=False, linestyle="--", edgecolor="gray",
-    #                      linewidth=2.5, label="adj. pair"))
-    # ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.01, 1.0),
-    #           fontsize=17, title="Legend", title_fontsize=19,
-    #           framealpha=0.9, ncol=1,
-    #           handletextpad=1.2, labelspacing=1.0, borderpad=1.2)
 
-# ── save ───────────────────────────────────────────────────────────────────────
+def dendrogram_height(mat: pd.DataFrame, is_similarity: bool = False) -> float:
+    """draw_dendrogram が描く樹形図の最上部の高さ（縦軸を揃えるため）。"""
+    Z = linkage(squareform(normalized_distance(mat, is_similarity), checks=False), method="ward")
+    return float(Z[:, 2].max())
 
+
+def save_dendrogram(mat: pd.DataFrame, title: str, path: Path,
+                    is_similarity: bool = False,
+                    marker_specs: dict | None = None) -> None:
+    fig, ax = plt.subplots(figsize=(24, 6))
+    draw_dendrogram(ax, mat, is_similarity, marker_specs)
+    if not marker_specs:
+        plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  saved: {path}")

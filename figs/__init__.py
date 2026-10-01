@@ -17,7 +17,7 @@ MAIN = [
     "umap_harmonization",   # Fig 3 UMAP（補正なし / centroid / GAN）と施設差指標
     "shift_geometry",       # Fig 4 施設差の幾何
     "classification",       # Fig 5 施設間の分類性能
-    "subtype_structure",    # Fig 6 サブタイプ構造（clustered heatmap）と SFT からの距離
+    "subtype_structure",    # Fig 6 サブタイプ構造（樹形図 補正前 / centroid 後、euc_mean）と SFT からの距離
 ]
 # 表（順 = Table 番号）
 TABLES = [
@@ -26,12 +26,13 @@ TABLES = [
 ]
 # Supplementary（順 = Fig S 番号）
 SUPP = [
-    "subtype_structure_uncorrected",  # 補正前の clustered heatmap
+    "subtype_structure_gan",          # GAN 補正後の樹形図（Fig 6 と同形式）
+    "subtype_distance_heatmap",       # 生のユークリッド距離の clustered heatmap（補正前 / centroid 後）
 ]
 
 
 def stem(name: str) -> str:
-    """出力ファイル名の幹（例: fig3_umap_harmonization / table1_cohort / figS1_subtype_structure_uncorrected）。"""
+    """出力ファイル名の幹（例: fig3_umap_harmonization / table1_cohort / figS1_subtype_structure_gan）。"""
     for prefix, names in (("fig", MAIN), ("table", TABLES), ("figS", SUPP)):
         if name in names:
             return f"{prefix}{names.index(name) + 1}_{name}"

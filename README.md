@@ -24,7 +24,7 @@ figs/                # 論文の図表を out/ の解析結果から組み立て
   common.py          # 出力先・共通スタイル・保存
   umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py  # 図（内容名）
   cohort.py / performance.py  # 表
-  subtype_structure_uncorrected.py  # Supplementary
+  subtype_structure_gan.py / subtype_distance_heatmap.py  # Supplementary
   all.py             # 自分の出力を掃除してから全部作る
 utils/
   loader.py          # load_config / load_data（各スクリプトが共通利用）
