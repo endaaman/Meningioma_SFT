@@ -4,7 +4,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 
 # 補正条件の色（全図で共通。施設色の青・赤と被らない Tol bright の灰・紫・水色）
-CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE",
+CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE", "macenko": "#4477AA",
                     "combat": "#CCBB44", "affine_free": "#228833", "affine_oracle": "#88BB88"}
 # 補正条件の集合（図表ごとにどちらを使うかを各 figs/*.py で明示する）。
 # 並びは全図表で共通: 補正なし → GAN → ComBat → 平行移動（centroid。提案の平行移動を最後に）。
@@ -12,20 +12,22 @@ CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCE
 #   CORE: ComBat を除く 3 条件（harmonization.draw_metric の既定など、本番図表では未使用）
 CONDITIONS_FULL = ["original", "gan", "combat", "centroid"]
 CONDITIONS_CORE = [v for v in CONDITIONS_FULL if v != "combat"]
-CONDITION_ORDER = CONDITIONS_FULL  # 並び順の基準（order_conditions が使う）
-# Supplementary の表・Fig S3 用: FULL に相似変換を足したもの（本文の図には入れない）
-CONDITIONS_SUPP = CONDITIONS_FULL + ["affine_free"]
+# 並び順の基準（order_conditions が使う。全条件の順: 画像レベル（GAN・Macenko）→ 埋め込みレベル）
+CONDITION_ORDER = ["original", "gan", "macenko", "combat", "centroid", "affine_free", "affine_oracle"]
+# Supplementary の表・Fig S3 用: FULL に色正規化（Macenko）と相似変換を足したもの（本文の図には入れない）
+CONDITIONS_SUPP = [v for v in CONDITION_ORDER if v in CONDITIONS_FULL or v in ("macenko", "affine_free")]
 CONDITIONS_SUPP_REF = CONDITIONS_SUPP + ["affine_oracle"]   # 表のみ。affine_oracle は組織型ラベルを使った参考値
 # 補正条件の表示名（図表・表の表示はすべてここから引く。コード内部のキーは変えない）。
 #   centroid      = 平行移動（各施設の平均を揃える位置のみの補正）
 #   affine_free   = 相似変換（一様なスケール＋平行移動、倍率はラベル不要の推定）
 #   affine_oracle = 相似変換（倍率を組織型ラベルから推定した参考値）
 #   combat        = ComBat（次元ごとの位置・尺度の補正）
-CONDITION_LABELS = {"original": "No correction", "gan": "GAN", "combat": "ComBat", "centroid": "Translation",
-                    "affine_free": "Similarity", "affine_oracle": "Similarity (oracle)"}
+#   macenko       = 色正規化（Macenko。画像レベル、GAN と同じ向き patho2 → EBRAINS、目標は EBRAINS 全体から 1 つ）
+CONDITION_LABELS = {"original": "No correction", "gan": "GAN", "macenko": "Macenko", "combat": "ComBat",
+                    "centroid": "Translation", "affine_free": "Similarity", "affine_oracle": "Similarity (oracle)"}
 CONDITION_LABELS_SHORT = {**CONDITION_LABELS, "original": "None"}       # 軸の目盛りなど狭い所
-CONDITION_LABELS_JA = {"original": "なし", "gan": "GAN", "combat": "ComBat", "centroid": "平行移動",
-                       "affine_free": "相似変換", "affine_oracle": "相似変換（正しい倍率・参考）"}
+CONDITION_LABELS_JA = {"original": "なし", "gan": "GAN", "macenko": "色正規化（Macenko）", "combat": "ComBat",
+                       "centroid": "平行移動", "affine_free": "相似変換", "affine_oracle": "相似変換（正しい倍率・参考）"}
 
 
 def order_conditions(variants) -> list[str]:

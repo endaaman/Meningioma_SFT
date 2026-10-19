@@ -24,7 +24,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 from PIL import Image
 
-from figs.common import CONDITION_COLORS, FONT, SITE_DISPLAY, config, panel_fig, paper_dir, save
+from figs.common import CONDITION_COLORS, FONT, SITE_DISPLAY, config, out_root, panel_fig, paper_dir, save
 from utils.display import make_abbrev, subtype_color_map
 
 NAME = "tissue"
@@ -131,9 +131,16 @@ def draw_color(fig: plt.Figure, gs, cfg: dict) -> None:
     df = pd.read_csv(paper_dir(cfg) / "color" / "slide_color.csv")
     ref = cfg["reference"]
     groups = [ref, GAN_SITE, f"{GAN_SITE} (GAN)"]
-    labels = [SITE_DISPLAY[ref], SITE_DISPLAY[GAN_SITE], f"{SITE_DISPLAY[GAN_SITE]}\n→ GAN"]
+    labels = [SITE_DISPLAY[ref], SITE_DISPLAY[GAN_SITE], f"{SITE_DISPLAY[GAN_SITE]} → GAN"]
     src_colors = cfg["display"]["colors"]["sources"]
     colors = [src_colors[ref], src_colors[GAN_SITE], CONDITION_COLORS["gan"]]
+    # 色正規化（Macenko）後の patho2（macenko.py color の出力。標準手法との対比で GAN の色合わせを位置付ける）
+    macenko_csv = out_root(cfg) / "macenko" / "slide_color.csv"
+    if macenko_csv.exists():
+        df = pd.concat([df, pd.read_csv(macenko_csv)], ignore_index=True)
+        groups.append(f"{GAN_SITE} (Macenko)")
+        labels.append(f"{SITE_DISPLAY[GAN_SITE]} → Macenko")
+        colors.append(CONDITION_COLORS["macenko"])
     rng = np.random.default_rng(42)
     for j, (m, title) in enumerate(COLOR_METRICS):
         ax = fig.add_subplot(gs[0, j])
@@ -142,7 +149,7 @@ def draw_color(fig: plt.Figure, gs, cfg: dict) -> None:
             ax.scatter(k + rng.uniform(-0.18, 0.18, len(v)), v, s=2, color=col, alpha=0.4, linewidths=0)
             ax.hlines(np.median(v), k - 0.3, k + 0.3, color="black", lw=1.2)
         ax.set_xticks(range(len(groups)))
-        ax.set_xticklabels(labels, fontsize=6)
+        ax.set_xticklabels(labels, fontsize=6, rotation=35, ha="right", rotation_mode="anchor")
         ax.tick_params(axis="y", labelsize=6)
         ax.set_title(title, fontsize=7)
         ax.spines[["top", "right"]].set_visible(False)
@@ -152,7 +159,7 @@ def main() -> None:
     cfg = config()
     n_cols = len(COLUMNS)
     cell = 1.05  # inch
-    color_h = 1.7  # inch（b）
+    color_h = 1.9  # inch（b。斜めの群ラベルの分を含む）
     height = cell * 3 + 0.5 + color_h
     fig = plt.figure(figsize=(cell * n_cols + 0.4, height))
     top_a = 1 - 0.35 / height
@@ -161,7 +168,7 @@ def main() -> None:
                   wspace=0.03, hspace=0.03)
     draw_patch_grid(fig, gs, cfg)
     gs_b = GridSpec(1, len(COLOR_METRICS), figure=fig, left=0.06, right=0.995,
-                    top=(color_h - 0.25) / height, bottom=0.42 / height, wspace=0.45)
+                    top=(color_h - 0.25) / height, bottom=0.6 / height, wspace=0.45)
     draw_color(fig, gs_b, cfg)
     panel_fig(fig, 0.0, 1 - 0.1 / height, "a")
     panel_fig(fig, 0.0, (color_h - 0.05) / height, "b")

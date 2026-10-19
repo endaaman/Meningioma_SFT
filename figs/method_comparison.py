@@ -1,6 +1,6 @@
 """補正法の比較（全指標）の表（Supplementary）。
 
-行: 補正なし / GAN / ComBat / 平行移動 / 相似変換 / 相似変換（正しい倍率・参考）
+行: 補正なし / GAN / 色正規化（Macenko）/ ComBat / 平行移動 / 相似変換 / 相似変換（正しい倍率・参考）
 列: 施設の混ざり方（ASW・iLISI）、診断の分離（ASW SFT vs 髄膜腫）、組織型のまとまり（ASW・cLISI）、
     樹形図の隣接ペア数、対象施設内の SFT − 髄膜腫 距離、組織型の平均どうしの距離の施設間の相対ずれ
 
@@ -16,10 +16,10 @@ from __future__ import annotations
 import pandas as pd
 
 from figs import label
-from figs.common import CONDITION_LABELS_JA, SITE_DISPLAY, config, out_root, table_path
+from figs.common import CONDITION_LABELS_JA, CONDITIONS_SUPP_REF, SITE_DISPLAY, config, out_root, table_path
 
 NAME = "method_comparison"
-ROWS = ["original", "gan", "combat", "centroid", "affine_free", "affine_oracle"]
+ROWS = CONDITIONS_SUPP_REF
 
 
 def main() -> None:
@@ -58,6 +58,8 @@ def main() -> None:
     lines += ["| " + " | ".join(str(r[c]) for c in head) + " |" for _, r in table.iterrows()]
     lines += ["", ": 補正法の比較（全指標）。平行移動 = 各施設の平均を揃える位置のみの補正、相似変換 = 一様なスケール＋平行移動"
               "（倍率は施設平均まわりの広がりの比で、ラベル不要）、ComBat = 次元ごとの位置・尺度の補正。"
+              f"色正規化（Macenko）= {oth_d} のパッチを Macenko 法で {ref_d} の染色（{ref_d} 全スライドから推定した"
+              "染色ベクトルと濃度の上限）に合わせてから埋め込みを作り直したもの（GAN と同じ画像レベルの補正）。"
               "ASW・iLISI・cLISI は PCA 50 次元・k = 30。施設の指標の chance level（施設ラベルを組織型内で入れ替えた 1000 回の平均、"
               f"条件平均）は ASW {chance.get('asw_batch', float('nan')):.4f}、iLISI {chance.get('ilisi', float('nan')):.3f}。"
               "隣接ペアは施設 × 組織型の平均ベクトルの Ward 樹形図で同じ組織型の 2 施設が隣り合う数（Fig 6 と同じ）。"

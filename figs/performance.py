@@ -58,6 +58,8 @@ def main() -> None:
               f"各値は点推定 [95% CI]（テスト側施設の患者単位 bootstrap、{n_boot} 回）。"
               "感度は SFT を陽性とした値。AUC のスコアは d(髄膜腫平均) − d(SFT 平均)。"
               "相似変換 = 一様なスケール＋平行移動（倍率はラベル不要の推定）。"
+              "色正規化（Macenko）= patho2 のパッチを Macenko 法で EBRAINS の染色に合わせてから埋め込みを作り直したもの"
+              "（GAN と同じ画像レベルの補正）。"
               "†倍率を組織型ラベル（評価施設を含む）から推定した参考値（循環のため上限の参考）。 {#tbl:performance}"]
     path = table_path(cfg, NAME, ".md")
     path.write_text("\n".join(lines) + "\n")

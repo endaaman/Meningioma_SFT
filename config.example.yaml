@@ -28,6 +28,7 @@ embedding:
     affine_free:   path/to/affine/site_b_free     # affine.py が書き出す先
     affine_oracle: path/to/affine/site_b_oracle   # affine.py が書き出す先
     gan:        path/to/gan/site_b
+    macenko:    path/to/macenko/site_b      # macenko.py が書き出す先（色正規化、patho2 → EBRAINS の向き）
     tile_model: conch15_768
 
 # ---- gan.py ----
@@ -36,6 +37,21 @@ gan:
   batch_size: 512
   device:     auto  # cuda / cpu / auto
   overwrite:  false
+
+# ---- macenko.py（色正規化。GAN と同じ向き: 対象施設 → reference。target は reference の全スライドから 1 つ）----
+macenko:
+  patch_size:        512    # cache/{patch_size}/patches を参照
+  fit_patches:       16     # target 推定: reference のスライドごとに無作為に取るパッチ数
+  fit_stride:        8      # target 推定: 画素の間引き
+  seed:              42
+  stride:            2      # パッチごとの染色ベクトル・濃度上限の推定に使う画素の間引き（変換は全画素）
+  min_pixels:        1000   # 推定に使える画素（間引き後、OD >= beta）がこれ未満のパッチは元のまま
+  chunk_size:        256    # h5 から一度に読むパッチ数
+  norm_batch_size:   32
+  encode_batch_size: 256
+  num_workers:       6      # h5（gzip）の読み出し worker 数
+  device:            auto
+  overwrite:         false
 
 # ---- titan.py ----
 titan:
@@ -67,6 +83,7 @@ variants:
   affine_free:   affine_free
   affine_oracle: affine_oracle
   gan:      gan
+  macenko:  macenko
 
 # ---- 補正の基準データセット ----
 # このデータセットは補正 variant でも常に original を使用する（reference 側）
@@ -181,7 +198,7 @@ lp_histotype:
 
 # ---- nc.py（訓練不要の施設間分類＝最近傍重心法。Fig 5・Table S1・Fig S3・Table S2 の元）----
 nc:
-  variants:      [original, gan, combat, centroid, affine_free, affine_oracle]   # 本番図表は CONDITIONS_FULL の 4 条件のみ
+  variants:      [original, gan, macenko, combat, centroid, affine_free, affine_oracle]   # 本番図表は CONDITIONS_FULL の 4 条件のみ
   histotype_set: main                   # 組織型分類のクラス集合（lp_histotype_sets の名前）
 
 lp_histotype_sets:

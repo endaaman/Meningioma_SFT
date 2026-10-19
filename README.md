@@ -7,7 +7,8 @@ MeningiomaとSolitary Fibrous Tumor (SFT) を題材にした埋め込み解析�
 ```
 config.yaml          # 全設定（パス・色・パラメータ）
 gan.py               # Cycle-GAN による補正後のバッチをエンコードして HDF5 書き込みするラッパー
-titan.py             # TITAN による WSI-level aggregate
+macenko.py           # 色正規化（Macenko、patho2 → EBRAINS）: EBRAINS から目標を推定し、patho2 のパッチを正規化して CONCH でエンコード
+titan.py             # TITAN による WSI-level aggregate（--variants で対象 variant を指定できる）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 nc.py                # 訓練不要の施設間分類（最近傍重心法）: SFT vs 髄膜腫と組織型。Fig 5・Table S1・Fig S3・Table S2 の元
 lp.py                # TITAN 埋め込みの Linear Probe 訓練・評価（参考。論文の評価は nc.py）
@@ -48,7 +49,9 @@ cp config.example.yaml config.yaml
 
 ```bash
 uv run python gan.py       # GAN 補正パッチを patch-level embedding に変換して gan/ に書き出し
+uv run python macenko.py all             # 色正規化: EBRAINS から目標を推定（fit）→ 目視用 preview → patho2 を正規化してエンコード（run）
 uv run python titan.py     # patch-level を slide-level に集約（original / gan の 2 variant）
+uv run python titan.py --variants macenko  # macenko variant の slide-level 集約
 uv run python centroid.py  # slide-level を施設間で重心補正し centroid variant HDF5 を生成
 
 # 以下は順不同（可視化・評価）

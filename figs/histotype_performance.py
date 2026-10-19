@@ -60,6 +60,8 @@ def main() -> None:
               f"AUC は one-vs-rest のクラス平均で、各クラスの確率を softmax(−距離) とした。各値は点推定 [95% CI]"
               f"（テスト側施設の患者単位 bootstrap、{n_boot} 回）。偶然の balanced accuracy は 1/{len(classes)} = "
               f"{1 / len(classes):.2f}。相似変換 = 一様なスケール＋平行移動（倍率はラベル不要の推定）。"
+              "色正規化（Macenko）= patho2 のパッチを Macenko 法で EBRAINS の染色に合わせてから埋め込みを作り直したもの"
+              "（GAN と同じ画像レベルの補正）。"
               "†倍率を組織型ラベル（評価施設を含む）から推定した参考値（組織型分類の評価としては循環のため上限の参考）。"
               " {{#tbl:histotype_performance}}"]
     path = table_path(cfg, NAME, ".md")

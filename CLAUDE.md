@@ -23,8 +23,9 @@
 ## 解析の約束
 
 - **評価は最近傍重心法（`nc.py`、訓練不要）に統一。** 線形プローブ（`lp.py`）は参考扱い（数字は decisions.md）。
-- 補正の表示名とコード上の名前: 平行移動 = `centroid`、相似変換 = `affine_free`（正しい倍率・参考 = `affine_oracle`）、ComBat = `combat`、GAN = `gan`。**表示名は `utils/display.py` の 1 か所**、コード上の名前・出力パスは変えない。
-- 条件の集合と並び: `utils/display.py` の `CONDITIONS_FULL`（補正なし → GAN → ComBat → 平行移動）、`CONDITIONS_CORE`、Supplementary 用は `CONDITIONS_SUPP*`。
+- 補正の表示名とコード上の名前: 平行移動 = `centroid`、相似変換 = `affine_free`（正しい倍率・参考 = `affine_oracle`）、ComBat = `combat`、GAN = `gan`、色正規化（Macenko）= `macenko`。**表示名は `utils/display.py` の 1 か所**、コード上の名前・出力パスは変えない。
+- 条件の集合と並び: `utils/display.py` の `CONDITIONS_FULL`（補正なし → GAN → ComBat → 平行移動）、`CONDITIONS_CORE`、Supplementary 用は `CONDITIONS_SUPP*`（Macenko と相似変換を足す。Macenko は Fig 2b の色の分布にも 4 群目として出す）。
+- 画像レベルの補正は 2 つ（GAN・Macenko）とも patho2 → EBRAINS の向きだけ。Macenko の目標は EBRAINS 全スライドから推定した 1 組（`out/macenko/target.npz`）で、スライドごとには合わせない。
 - 施設 `ebrains` が基準（reference、補正しない側）。GAN は patho2 → EBRAINS の向きだけを使う（元コード: https://github.com/S-murakami1/wsi_gan、その設定のまま）。
 - 乱数は固定（seed 42）、学習は決定的。患者単位で分割（EBRAINS は `data/ebrains/patients.csv`、patho2 は 1 症例 = 1 患者）。
 

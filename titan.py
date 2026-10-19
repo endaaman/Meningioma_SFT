@@ -5,6 +5,7 @@
 
 Usage:
     uv run python titan.py
+    uv run python titan.py --variants macenko   # 対象 variant を指定（config の titan.variants を上書き）
 """
 from __future__ import annotations
 
@@ -23,10 +24,10 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def run(cfg: dict) -> None:
+def run(cfg: dict, variants: list[str] | None = None) -> None:
     titan_cfg = cfg["titan"]
     overwrite: bool = titan_cfg.get("overwrite", False)
-    variants: list[str] = titan_cfg.get("variants", ["original"])
+    variants = variants or titan_cfg.get("variants", ["original"])
 
     device_spec: str = titan_cfg.get("device", "auto")
     device = ("cuda" if torch.cuda.is_available() else "cpu") if device_spec == "auto" else device_spec
@@ -85,8 +86,12 @@ def run(cfg: dict) -> None:
 
 
 def main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--variants", nargs="+", default=None, help="config の titan.variants を上書き（例: macenko）")
+    args = ap.parse_args()
     cfg = load_config()
-    run(cfg)
+    run(cfg, args.variants)
 
 
 if __name__ == "__main__":
