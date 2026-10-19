@@ -10,6 +10,8 @@
     形の一致         対象施設内の SFT − 髄膜腫 の平均間距離（reference 施設の値と比べる）、
                      組織型の平均どうしの距離の施設間の相対ずれ（|d_対象 − d_reference| / d_reference の中央値、
                      両施設で min_n 例以上の組織型）
+    施設差の残り     施設の平均どうしの距離 site_shift_norm（平行移動の残り。centroid 系は 0）、
+                     施設の点群どうしのエネルギー距離 site_energy（位置と広がりの両方。生の 768 次元）
 
 出力: output_dir/method_compare/summary.csv
 
@@ -23,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.spatial.distance import cdist
 
 from dendrogram import group_means, pair_stats, raw_distance, ward_linkage
 from harmonization import compute_metrics
@@ -49,6 +52,16 @@ def shape_metrics(merged: pd.DataFrame, cfg: dict) -> dict[str, float]:
             "subtype_dist_mismatch": float(np.median(rel))}
 
 
+def site_metrics(merged: pd.DataFrame, cfg: dict) -> dict[str, float]:
+    """施設差の残り: 施設の平均どうしの距離と、施設の点群どうしのエネルギー距離（生の埋め込み）。"""
+    reference: str = cfg["reference"]
+    other = next(s for s in merged["source"].unique() if s != reference)
+    X = np.stack(merged["embedding"].values).astype(np.float64)
+    E, P = X[merged["source"].values == reference], X[merged["source"].values == other]
+    energy = np.sqrt(2 * cdist(E, P).mean() - cdist(E, E).mean() - cdist(P, P).mean())
+    return {"site_shift_norm": float(np.linalg.norm(P.mean(axis=0) - E.mean(axis=0))), "site_energy": float(energy)}
+
+
 def main() -> None:
     cfg = load_config()
     out_dir = Path(cfg["output_dir"]) / "method_compare"
@@ -65,7 +78,7 @@ def main() -> None:
         ps = pair_stats(D, ward_linkage(D), g)
         rows.append({"variant": v, **m, "adjacent_pairs": ps["adjacent_pairs"], "n_subtypes": ps["n_subtypes"],
                      "nn_any_same_other": ps["nn_any_same_other"], "n_groups": ps["n_groups"],
-                     **shape_metrics(merged, cfg)})
+                     **shape_metrics(merged, cfg), **site_metrics(merged, cfg)})
         print(f"  [{v}] " + "  ".join(f"{k}={val:.4f}" if isinstance(val, float) else f"{k}={val}"
                                       for k, val in rows[-1].items() if k != "variant"))
     path = out_dir / "summary.csv"
