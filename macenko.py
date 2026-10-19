@@ -15,6 +15,9 @@ GAN と同じ向き（対象施設 patho2 → 基準施設 EBRAINS）の画像�
     color    正規化後の patho2 のスライドごとの平均色（paper_color.py と同じ定義・同じパッチの抽出）を
              output_dir/macenko/slide_color.csv に書き、paper_color.py の出力（EBRAINS / patho2 / patho2 GAN）と
              並べた分布 color_dist.png を作る。Fig 2b の入力（paper/.../color/slide_color.csv）は触らない。
+             続けて colordist も実行する。
+    colordist 各群の色の分布の reference からの距離（ΔE76・エネルギー距離・Wasserstein・IQR 比）を
+             output_dir/macenko/color_distance.csv に書く（CSV だけ読むので軽い）。
 
 定数は torchstain の Macenko 実装と同じ（Io = 240, alpha = 1, beta = 0.15）。
 
@@ -383,9 +386,52 @@ def color(cfg: dict, out_dir: Path) -> None:
     print(f"[color] saved: {out_dir / 'slide_color.csv'} / color_dist.png")
 
 
+def color_distance(cfg: dict, out_dir: Path) -> None:
+    """各群（patho2 / patho2 GAN / patho2 Macenko）の色の分布が reference（EBRAINS）にどれだけ近いか。
+
+    スライドごとの平均色（paper_color.py / color の出力）から:
+        dE76_median   中央値どうしの CIELAB 距離（ΔE*ab、CIE76）
+        energy_Lab    L*a*b* 3 次元でのエネルギー距離（分布どうしの距離。位置と広がりの両方を見る）
+        W1_<m>        指標ごとの 1 次元 Wasserstein 距離（スライドの分布どうし）
+        IQRratio_<m>  指標ごとの四分位範囲の比（群 / reference。1 より小さいほど分布が細い）
+    出力 output_dir/macenko/color_distance.csv
+    """
+    import pandas as pd
+    from scipy.spatial.distance import cdist
+    from scipy.stats import wasserstein_distance
+
+    reference: str = cfg["reference"]
+    other = next(s for s in cfg["embedding"] if s != reference)
+    base = Path(cfg["output_dir"]) / "paper" / cfg["paper"]["version"] / "color" / "slide_color.csv"
+    df = pd.concat([pd.read_csv(base), pd.read_csv(out_dir / "slide_color.csv")], ignore_index=True)
+    ref = df[df.group == reference]
+    cols = ["L", "a", "b", "H", "E"]
+
+    def energy(X: np.ndarray, Y: np.ndarray) -> float:
+        return float(np.sqrt(2 * cdist(X, Y).mean() - cdist(X, X).mean() - cdist(Y, Y).mean()))
+
+    rows = []
+    for g in (other, f"{other} (GAN)", f"{other} (Macenko)"):
+        d = df[df.group == g]
+        if d.empty:
+            continue
+        med_ref, med = ref[["L", "a", "b"]].median(), d[["L", "a", "b"]].median()
+        r = {"group": g, "n": len(d), "dE76_median": float(np.sqrt(((med - med_ref) ** 2).sum())),
+             "energy_Lab": energy(ref[["L", "a", "b"]].to_numpy(), d[["L", "a", "b"]].to_numpy())}
+        for c in cols:
+            r[f"W1_{c}"] = float(wasserstein_distance(ref[c], d[c]))
+            iqr = lambda s: s.quantile(0.75) - s.quantile(0.25)
+            r[f"IQRratio_{c}"] = float(iqr(d[c]) / iqr(ref[c]))
+        rows.append(r)
+    out = pd.DataFrame(rows)
+    out.to_csv(out_dir / "color_distance.csv", index=False)
+    print(out.set_index("group").round(3).to_string())
+    print(f"[colordist] saved: {out_dir / 'color_distance.csv'}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["fit", "run", "preview", "color", "all"])
+    ap.add_argument("cmd", choices=["fit", "run", "preview", "color", "colordist", "all"])
     args = ap.parse_args()
     cfg = load_config()
     out_dir = Path(cfg["output_dir"]) / "macenko"
@@ -398,6 +444,8 @@ def main() -> None:
         run(cfg, out_dir)
     if args.cmd == "color":
         color(cfg, out_dir)
+    if args.cmd in ("color", "colordist"):
+        color_distance(cfg, out_dir)
 
 
 if __name__ == "__main__":
