@@ -1,7 +1,7 @@
 """method_compare.py — 補正法の比較（全指標、Supplementary の表の元）。
 
-条件: 補正なし / 色正規化（macenko）/ GAN / ComBat / 平行移動（centroid）/ 相似変換（affine_free）/
-      相似変換（正しい倍率・参考、affine_oracle）。無い variant は飛ばす。
+条件: 補正なし / 色正規化（macenko）/ GAN / ComBat / ComBat（組織型を共変量、combat_cov）/ 平行移動（centroid）/
+      相似変換（affine_free）/ 相似変換（正しい倍率・参考、affine_oracle）。無い variant は飛ばす。
 指標:
     施設の混ざり方   ASW(site)・iLISI(site)（harmonization.py と同じ定義: PCA 50 次元、k = 30）
     診断の分離       ASW(SFT vs 髄膜腫)
@@ -31,7 +31,7 @@ from dendrogram import group_means, pair_stats, raw_distance, ward_linkage
 from harmonization import compute_metrics
 from utils.loader import load_config, load_data
 
-VARIANTS = ["original", "macenko", "gan", "combat", "centroid", "affine_free", "affine_oracle"]
+VARIANTS = ["original", "macenko", "gan", "combat", "combat_cov", "centroid", "affine_free", "affine_oracle"]
 
 
 def shape_metrics(merged: pd.DataFrame, cfg: dict) -> dict[str, float]:

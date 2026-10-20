@@ -10,6 +10,7 @@ gan.py               # Cycle-GAN による補正後のバッチをエンコー�
 macenko.py           # 色正規化（Macenko、patho2 → EBRAINS）: EBRAINS から目標を推定し、patho2 のパッチを正規化して CONCH でエンコード
 titan.py             # TITAN による WSI-level aggregate（--variants で対象 variant を指定できる）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
+combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
 nc.py                # 訓練不要の施設間分類（最近傍重心法）: SFT vs 髄膜腫と組織型。Fig 5・Table S1・Fig S3・Table S2 の元
 lp.py                # TITAN 埋め込みの Linear Probe 訓練・評価（参考。論文の評価は nc.py）
 lp_bootstrap.py      # lp の予測の患者単位 bootstrap（95% CI）と条件間 McNemar
@@ -60,6 +61,8 @@ uv run python macenko.py all             # 色正規化: EBRAINS から目標を
 uv run python titan.py     # patch-level を slide-level に集約（original / gan の 2 variant）
 uv run python titan.py --variants macenko  # macenko variant の slide-level 集約
 uv run python centroid.py  # slide-level を施設間で重心補正し centroid variant HDF5 を生成
+uv run python combat.py    # ComBat（共変量なし）→ combat/
+uv run python combat.py --covariates subtype   # 組織型を共変量にした ComBat → combat_cov/（査読対応の参考。combat/ は触らない）
 
 # 以下は順不同（可視化・評価）
 uv run python nc.py             # 施設間分類（最近傍重心法、訓練不要）。combat.py / affine.py の後
@@ -70,6 +73,7 @@ uv run python umap_plot.py
 uv run python subtype.py
 uv run python confusion_mtx.py
 uv run python dendrogram.py
+uv run python dendrogram_bootstrap.py   # dendrogram.py と独立。出力は out/dendrogram/pairs_bootstrap.csv
 uv run python sft_distance_bar.py
 uv run python shift_direction.py
 uv run python shift_bio_axes.py     # Δ の生物学的な軸に沿った成分（Fig 4e）。出力は out/shift_bio_axes/

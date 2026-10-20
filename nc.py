@@ -10,7 +10,8 @@
                 各クラスの確率は softmax(−d)（d = クラス平均までのユークリッド距離）と定義し、AUC（one-vs-rest の
                 クラス平均）はこの確率から計算する。指標: accuracy / balanced_accuracy / f1_macro / auc_ovr_macro、
                 クラスごとの recall
-条件: config の nc.variants（既定は original / gan / combat / centroid / affine_free / affine_oracle）。
+条件: config の nc.variants（既定は original / gan / combat / centroid / affine_free / affine_oracle。config では
+    macenko と combat_cov＝組織型を共変量にした ComBat も含める。本番図表は figs/ 側で CONDITIONS_FIG3 に絞る）。
     reference 施設は補正 variant でも常に original（load_data と同じ規則）。
 CI: 評価施設の患者単位 bootstrap（lp_bootstrap.py と同じ実装・同じ回数と seed）。条件間は McNemar exact 検定。
 集約器: 既定は TITAN。--aggregator mean で平均プーリング（meanpool.py の対照。条件は config の meanpool.variants、
