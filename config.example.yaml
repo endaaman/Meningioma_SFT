@@ -250,6 +250,13 @@ harmonization:
     seed:   42
     nulls:  [within_subtype, free]      # within_subtype（サブタイプ内でシャッフル）が本文の基準
 
+# ---- meanpool.py（平均プーリングのスライド埋め込み = TITAN の対照。Table S4・S5）----
+meanpool:
+  root:          data/{site}/meanpool      # {site} は embedding のキー。配下に original / gan / macenko / centroid / combat
+  slide_feature: aggregates/mean/feature   # HDF5 キー（{tile_model}/ の下）
+  variants:      [original, macenko, gan, combat, centroid]   # analyze で比べる条件（Table S5 の行）
+  overwrite:     false                     # true にすると build が original / gan / macenko の平均を作り直す（centroid / combat は常に作り直す）
+
 # ---- paper_figs.py ----
 paper:
   version: v1   # 図表の出力先 output_dir/paper/{version}/

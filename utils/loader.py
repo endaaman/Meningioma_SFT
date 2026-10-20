@@ -15,20 +15,30 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def load_data(cfg: dict, dir_key: str) -> pd.DataFrame:
+def load_data(cfg: dict, dir_key: str, aggregator: str = "titan") -> pd.DataFrame:
     """slide-level 埋め込みとサブタイプラベルを結合して返す。
 
     dir_key: config の embedding.*.{dir_key} を参照する。
     reference が設定されている場合、reference 側は dir_key によらず original を使う。
+    aggregator: "titan"（既定。embedding.*.{dir_key} の {tile_model}/{keys.slide_feature}）/
+                "mean"（平均プーリング。meanpool.root.format(site=...)/{dir_key} の {tile_model}/{meanpool.slide_feature}。
+                meanpool.py が書く対照用）。
     """
+    if aggregator not in ("titan", "mean"):
+        raise ValueError(f"unknown aggregator: {aggregator!r} (titan / mean)")
     reference: str | None = cfg.get("reference")
     frames = []
     for ds_name, ds_cfg in cfg["embedding"].items():
-        h5_key = f"{ds_cfg['tile_model']}/{cfg['keys']['slide_feature']}"
         effective_key = "original" if (reference == ds_name and dir_key != "original") else dir_key
-        if effective_key not in ds_cfg:
-            continue
-        emb_dir = Path(ds_cfg[effective_key])
+        if aggregator == "mean":
+            mp_cfg = cfg["meanpool"]
+            h5_key = f"{ds_cfg['tile_model']}/{mp_cfg['slide_feature']}"
+            emb_dir = Path(mp_cfg["root"].format(site=ds_name)) / effective_key
+        else:
+            h5_key = f"{ds_cfg['tile_model']}/{cfg['keys']['slide_feature']}"
+            if effective_key not in ds_cfg:
+                continue
+            emb_dir = Path(ds_cfg[effective_key])
         if not emb_dir.exists():
             print(f"  WARN [{ds_name}]: dir not found: {emb_dir}")
             continue

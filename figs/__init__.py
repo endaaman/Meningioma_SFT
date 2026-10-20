@@ -34,6 +34,8 @@ SUPP_TABLES = [
     "performance",                    # 施設間の分類性能（SFT vs 髄膜腫、旧 Table 2。主な数値は Results 本文と Fig 5b）
     "histotype_performance",          # 組織型分類の balanced accuracy・macro F1（95% CI）
     "method_comparison",              # 補正法の比較（全指標、Macenko・相似変換を含む 7 条件）
+    "meanpool_geometry",              # 施設差の幾何: 平均プーリング vs TITAN（集約器の対照。meanpool.py）
+    "meanpool_comparison",            # 補正法の比較（平均プーリング、5 条件。meanpool.py）
 ]
 
 
