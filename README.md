@@ -20,8 +20,11 @@ dendrogram.py        # 施設間距離の樹形図（補正前後）。生のユ
 dataset.py           # データセット構成の円グラフと Table 1 の元データ（table1.csv）
 sft_distance_bar.py  # SFT と各サブタイプ間の距離棒グラフ
 shift_direction.py   # 群ごとの施設間シフトの向きの一致度（centroid 補正の前提の検証）
+shift_estimation.py  # 平行移動のシフト推定の実用面: 症例構成の切り分け（組織型を合わせたシフト Δ*）と、新施設から何例あれば推定できるか（部分抽出のシミュレーション）
 harmonization.py     # 補正の効き具合の指標（ASW・LISI、補正なし / centroid / GAN）
 meanpool.py          # 平均プーリングのスライド埋め込み（TITAN の対照）: build で h5 を作り、analyze で Fig 4・Table S3 と同じ指標を出す。Table S4・S5 の元
+paper_color.py       # スライドごとの組織の平均色（CIELAB と Ruifrok–Johnston の H/E、32 パッチ）。Fig 2c の元（out/paper/{version}/color/slide_color.csv）
+stain_response.py    # 埋め込みの施設間シフト方向 u への射影 s と、スライドの H/E 染色バランス（log H/E）の対応。施設内相関・施設差の色による説明割合・応答曲線・補正（GAN/Macenko）による Δs と色変化の対応（out/stain_response/）
 figs/                # 論文の図表を out/ の解析結果から組み立てる（重い計算はしない）
   __init__.py        # 図表番号の唯一の定義（MAIN / TABLES / SUPP の順序）
   common.py          # 出力先・共通スタイル・保存
@@ -67,8 +70,10 @@ uv run python confusion_mtx.py
 uv run python dendrogram.py
 uv run python sft_distance_bar.py
 uv run python shift_direction.py
+uv run python shift_estimation.py   # 平行移動のシフト推定（症例構成の切り分け・推定に要る例数）。出力は out/shift_estimation/
 uv run python harmonization.py
 uv run python -u meanpool.py all   # 平均プーリングの対照（build は NFS から全パッチ埋め込みを読むので 10〜20 分）
+uv run python stain_response.py    # paper_color.py / macenko.py の slide_color.csv と meanpool.py build の後。TITAN と平均プーリングの両方
 uv run python dataset.py   # 他スクリプトと独立。任意のタイミングで実行可
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
@@ -190,5 +195,6 @@ HDF5: cache/{size}/gan/patches
   dendrogram.py         施設間距離の樹形図（補正前後）
   sft_distance_bar.py   SFT と各サブタイプ間の距離棒グラフ
   shift_direction.py    群ごとの施設間シフトの向き（全体シフトとの cos、例数を揃えた帰無と比較）
+  shift_estimation.py   平行移動のシフト推定（組織型を合わせたシフト Δ* との比較、新施設の部分抽出で推定したときの精度）
   harmonization.py      施設差の補正の効き具合（ASW・iLISI / cLISI）
 ```

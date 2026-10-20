@@ -236,6 +236,18 @@ shift_direction:
   n_perm:  1000       # 帰無（シャッフル / 例数を揃えた抽出）の回数
   seed:    42
 
+# ---- shift_estimation.py（平行移動のシフト推定: 症例構成の切り分けと、推定に要る例数）----
+shift_estimation:
+  n_list:  [3, 5, 10, 20, 50, 100, 200]   # 対象施設から抜く例数（全例は自動で足す。単一組織型はその型の例数まで）
+  n_draws: 200                            # 設定ごとの抽出回数（n が全例のときは 1 回）
+  seed:    42
+  n_jobs:  16                             # 評価の並列数（抽出は主プロセスで行うので結果は並列数によらない）
+  min_n:   5                              # 組織型を合わせたシフト Δ* の群（両施設でこの例数以上）と、除去する生物学的方向の群（reference でこの例数以上）
+  single_subtypes:                        # 単一組織型だけから抜く最悪ケース（対象施設で多い 3 型）
+    - Fibrous meningioma
+    - Meningothelial meningioma
+    - Atypical meningioma
+
 # ---- dataset.py（Table 1）----
 dataset:
   demographics:            # 年齢・性別の CSV（EBRAINS annotation.csv 形式: uuid, pat_id, age, sex）。無い施設は書かない
@@ -276,6 +288,11 @@ paper_color:
   stride:     4            # 画素の間引き（計算量削減。4 なら 1/16）
   white_thr:  220          # R,G,B すべてがこの値を超える画素を背景として除外
   seed:       42
+
+# ---- stain_response.py（埋め込みのシフト方向への射影と H/E 染色バランスのスライド単位の対応）----
+stain_response:
+  n_bins:        10   # 応答曲線の分位数（he_balance / H / E）
+  min_n_subtype: 3    # 組織型内の残差化に使う組織型の最小例数（施設内）
 
 # ---- 出力 ----
 output_dir: ./output
