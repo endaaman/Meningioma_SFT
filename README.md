@@ -20,6 +20,7 @@ dendrogram.py        # 施設間距離の樹形図（補正前後）。生のユ
 dataset.py           # データセット構成の円グラフと Table 1 の元データ（table1.csv）
 sft_distance_bar.py  # SFT と各サブタイプ間の距離棒グラフ
 shift_direction.py   # 群ごとの施設間シフトの向きの一致度（centroid 補正の前提の検証）
+shift_bio_axes.py    # 施設間シフト Δ の生物学的な軸（SFT−髄膜腫 / 組織型の組）に沿った成分 r と共分散を考慮した帰無。Fig 4e の元（out/shift_bio_axes/）
 shift_estimation.py  # 平行移動のシフト推定の実用面: 症例構成の切り分け（組織型を合わせたシフト Δ*）と、新施設から何例あれば推定できるか（部分抽出のシミュレーション）。Fig S4 の元
 harmonization.py     # 補正の効き具合の指標（ASW・LISI、補正なし / centroid / GAN）
 meanpool.py          # 平均プーリングのスライド埋め込み（TITAN の対照）: build で h5 を作り、analyze で Fig 4・Table S3 と同じ指標を出す。Table S4 の元（幾何の数値は Results 本文）
@@ -71,6 +72,7 @@ uv run python confusion_mtx.py
 uv run python dendrogram.py
 uv run python sft_distance_bar.py
 uv run python shift_direction.py
+uv run python shift_bio_axes.py     # Δ の生物学的な軸に沿った成分（Fig 4e）。出力は out/shift_bio_axes/
 uv run python shift_estimation.py   # 平行移動のシフト推定（症例構成の切り分け・推定に要る例数）。出力は out/shift_estimation/
 uv run python harmonization.py
 uv run python -u meanpool.py all   # 平均プーリングの対照（build は NFS から全パッチ埋め込みを読むので 10〜20 分）

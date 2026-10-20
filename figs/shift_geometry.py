@@ -1,8 +1,10 @@
 """施設差の幾何: 群ごとのシフトの向き（a）・大きさ（b）、シフトと SFT − 髄膜腫 方向（c）、
-組織型の平均どうしの距離の施設間比較（d: 形を保った一様な縮み）。
+組織型の平均どうしの距離の施設間比較（d: 形を保った一様な縮み）、生物学的な軸（SFT−髄膜腫 / 組織型の組）に
+沿ったシフトの相対移動量 r と共分散を考慮した帰無（e）。
 
 入力: output_dir/shift_direction/{shift_direction,bio_direction,subtype_distance_pairs,subtype_distance_scaling}_{variant}.csv
       （shift_direction.py）
+      output_dir/shift_bio_axes/axes.csv（shift_bio_axes.py）
 出力: fig/{fig n}_shift_geometry.{png,pdf}（番号は figs/__init__.py）
 
 Usage:
@@ -14,6 +16,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.gridspec import GridSpec
 
+import shift_bio_axes
 import shift_direction
 from figs import label
 from figs.common import FONT, config, out_root, panel, panel_fig, save
@@ -31,9 +34,14 @@ def main() -> None:
     bio = pd.read_csv(sd_dir / f"bio_direction_{variant}.csv")
     pairs = pd.read_csv(sd_dir / f"subtype_distance_pairs_{variant}.csv")
     scaling = pd.read_csv(sd_dir / f"subtype_distance_scaling_{variant}.csv")
+    axes = pd.read_csv(out_root(cfg) / "shift_bio_axes" / "axes.csv")
+    reference: str = cfg["reference"]
+    other = next(s for s in axes["site"].unique() if s != reference)
+    top_k = cfg.get("shift_bio_axes", {}).get("top_k", 10)
 
-    fig = plt.figure(figsize=(7.2, max(0.24 * len(table) + 1.3, 5.6)))
-    outer = GridSpec(1, 2, figure=fig, width_ratios=[3.3, 1.9], wspace=0.18)
+    # 3 列: a+b | c/d | e（e は a と同じ行構成の横棒なので a と高さをそろえる）。3 列目の前に e の行ラベル分の空き列
+    fig = plt.figure(figsize=(10.5, max(0.24 * len(table) + 1.3, 5.6)))
+    outer = GridSpec(1, 4, figure=fig, width_ratios=[3.3, 1.9, 1.0, 2.1], wspace=0.18)
     left = outer[0, 0].subgridspec(1, 2, width_ratios=[2.2, 1.2], wspace=0.08)
     ax_a = fig.add_subplot(left[0, 0])
     ax_b = fig.add_subplot(left[0, 1], sharey=ax_a)
@@ -45,7 +53,9 @@ def main() -> None:
     shift_direction.draw_bio(ax_c, bio, cfg, fontsize=FONT)
     ax_d = fig.add_subplot(right[1, 0])
     shift_direction.draw_scaling(ax_d, pairs, scaling, fontsize=FONT)
-    panel(ax_a, "a", x=-0.02, y=1.01); panel(ax_b, "b", x=0.02, y=1.01)
+    ax_e = fig.add_subplot(outer[0, 3])
+    shift_bio_axes.draw_axes(ax_e, axes, cfg, reference, other, fontsize=FONT, top_k=top_k)
+    panel(ax_a, "a", x=-0.02, y=1.01); panel(ax_b, "b", x=0.02, y=1.01); panel(ax_e, "e", x=-0.02, y=1.01)
     # c・d は等倍軸で位置がずれるので、軸の実位置から図座標で置く
     fig.canvas.draw()
     panel_fig(fig, ax_c.get_position().x0, ax_a.get_position().y1 + 0.01, "c")
