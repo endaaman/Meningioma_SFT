@@ -13,17 +13,21 @@
 条件: config の nc.variants（既定は original / gan / combat / centroid / affine_free / affine_oracle）。
     reference 施設は補正 variant でも常に original（load_data と同じ規則）。
 CI: 評価施設の患者単位 bootstrap（lp_bootstrap.py と同じ実装・同じ回数と seed）。条件間は McNemar exact 検定。
+集約器: 既定は TITAN。--aggregator mean で平均プーリング（meanpool.py の対照。条件は config の meanpool.variants、
+    出力は output_dir/meanpool/nc/）。
 
-出力 (output_dir/nc/{binary,histotype}/):
+出力 (output_dir/nc/{binary,histotype}/。--aggregator mean は output_dir/meanpool/nc/{binary,histotype}/):
     trained_by_{src}/{variant}/predictions.csv — case_id, true, pred, prob（binary: SFT スコア / histotype: 予測クラスの確率）
                                                   histotype は prob_0.. も
     bootstrap.csv, mcnemar.csv, confusion.csv（histotype は per_class.csv も）
 
 Usage:
-    uv run python nc.py
+    uv run python nc.py                     # TITAN（本文・Table S1・S2）
+    uv run python nc.py --aggregator mean   # 平均プーリング（対照）
 """
 from __future__ import annotations
 
+import argparse
 from itertools import combinations
 from pathlib import Path
 
@@ -40,8 +44,8 @@ from utils.loader import load_config, load_data
 DEFAULT_VARIANTS = ["original", "gan", "combat", "centroid", "affine_free", "affine_oracle"]
 
 
-def _load(cfg: dict, variant: str) -> pd.DataFrame:
-    df = load_data(cfg, cfg.get("variants", {}).get(variant, variant))
+def _load(cfg: dict, variant: str, aggregator: str = "titan") -> pd.DataFrame:
+    df = load_data(cfg, cfg.get("variants", {}).get(variant, variant), aggregator=aggregator)
     return df.sort_values(["source", "case_id"]).reset_index(drop=True)
 
 
@@ -76,12 +80,12 @@ def _mcnemar(preds: dict[str, pd.DataFrame], tr: str, te: str) -> list[dict]:
     return rows
 
 
-def run_binary(cfg: dict, variants: list[str], out_dir: Path, n_boot: int, seed: int) -> None:
+def run_binary(cfg: dict, variants: list[str], out_dir: Path, n_boot: int, seed: int, aggregator: str) -> None:
     rows, mc_rows, cm_rows = [], [], []
     for tr, te in _directions(cfg):
         preds: dict[str, pd.DataFrame] = {}
         for v in variants:
-            d = _load(cfg, v)
+            d = _load(cfg, v, aggregator)
             Z = np.stack(d["embedding"].values).astype(np.float64)
             y = d["subtype"].str.contains("sft", case=False).to_numpy().astype(int)
             src = d["source"].to_numpy()
@@ -119,7 +123,7 @@ def run_binary(cfg: dict, variants: list[str], out_dir: Path, n_boot: int, seed:
     print(f"  saved: {out_dir}/{{bootstrap,mcnemar,confusion}}.csv")
 
 
-def run_histotype(cfg: dict, variants: list[str], out_dir: Path, n_boot: int, seed: int) -> None:
+def run_histotype(cfg: dict, variants: list[str], out_dir: Path, n_boot: int, seed: int, aggregator: str) -> None:
     classes: list[str] = cfg["lp_histotype"]["classes"]
     k = len(classes)
     short = [c.replace(" meningioma", "") for c in classes]
@@ -127,7 +131,7 @@ def run_histotype(cfg: dict, variants: list[str], out_dir: Path, n_boot: int, se
     for tr, te in _directions(cfg):
         preds: dict[str, pd.DataFrame] = {}
         for v in variants:
-            d = _load(cfg, v)
+            d = _load(cfg, v, aggregator)
             d = d[d["subtype"].isin(classes)].reset_index(drop=True)
             Z = np.stack(d["embedding"].values).astype(np.float64)
             y = d["subtype"].map({c: i for i, c in enumerate(classes)}).to_numpy()
@@ -177,20 +181,29 @@ def run_histotype(cfg: dict, variants: list[str], out_dir: Path, n_boot: int, se
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--aggregator", choices=["titan", "mean"], default="titan",
+                    help="スライド埋め込みの集約器（titan = 既定 / mean = 平均プーリングの対照）")
+    args = ap.parse_args()
     cfg = load_config()
     nc_cfg = cfg.get("nc", {})
     bs_cfg = cfg.get("lp_bootstrap", {})
     n_boot, seed = bs_cfg.get("n_boot", 2000), bs_cfg.get("seed", 42)
-    variants = order_conditions(nc_cfg.get("variants", DEFAULT_VARIANTS))
-    root = Path(cfg["output_dir"]) / "nc"
+    if args.aggregator == "mean":
+        variants = order_conditions(cfg["meanpool"]["variants"])
+        root = Path(cfg["output_dir"]) / "meanpool" / "nc"
+    else:
+        variants = order_conditions(nc_cfg.get("variants", DEFAULT_VARIANTS))
+        root = Path(cfg["output_dir"]) / "nc"
     for task in ("binary", "histotype"):
         out_dir = root / task
         out_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[nc / {task}]")
+        print(f"[nc / {task} / {args.aggregator}]")
         if task == "binary":
-            run_binary(cfg, variants, out_dir, n_boot, seed)
+            run_binary(cfg, variants, out_dir, n_boot, seed, args.aggregator)
         else:
-            run_histotype(apply_set(cfg, nc_cfg.get("histotype_set", "main")), variants, out_dir, n_boot, seed)
+            run_histotype(apply_set(cfg, nc_cfg.get("histotype_set", "main")), variants, out_dir, n_boot, seed,
+                          args.aggregator)
 
 
 if __name__ == "__main__":

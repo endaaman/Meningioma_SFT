@@ -58,6 +58,7 @@ uv run python centroid.py  # slide-level を施設間で重心補正し centroid
 
 # 以下は順不同（可視化・評価）
 uv run python nc.py             # 施設間分類（最近傍重心法、訓練不要）。combat.py / affine.py の後
+uv run python nc.py --aggregator mean   # 同じ分類を平均プーリングの埋め込みで（対照、meanpool.py build の後）。出力は out/meanpool/nc/
 uv run python lp.py             # 参考（線形プローブ）
 uv run python lp_bootstrap.py   # lp.py の後
 uv run python umap_plot.py
