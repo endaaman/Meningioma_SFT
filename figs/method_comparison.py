@@ -1,6 +1,6 @@
 """補正法の比較（全指標）の表（Supplementary）。
 
-行: 補正なし / 色正規化（Macenko）/ GAN / ComBat / 平行移動 / 相似変換 / 相似変換（正しい倍率・参考）
+行: 補正なし / 色正規化（Macenko）/ GAN / ComBat / 平行移動 / 相似変換（CONDITIONS_SUPP の 6 条件。相似変換が出るのはこの表だけ）
 列: 施設の混ざり方（ASW・iLISI）、診断の分離（ASW SFT vs 髄膜腫）、組織型のまとまり（ASW・cLISI）、
     樹形図の隣接ペア数、対象施設内の SFT − 髄膜腫 距離、組織型の平均どうしの距離の施設間の相対ずれ
 
@@ -16,10 +16,10 @@ from __future__ import annotations
 import pandas as pd
 
 from figs import label
-from figs.common import CONDITION_LABELS_JA, CONDITIONS_SUPP_REF, SITE_DISPLAY, config, out_root, table_path
+from figs.common import CONDITION_LABELS_JA, CONDITIONS_SUPP, SITE_DISPLAY, config, out_root, table_path
 
 NAME = "method_comparison"
-ROWS = CONDITIONS_SUPP_REF
+ROWS = CONDITIONS_SUPP
 
 
 def main() -> None:
@@ -45,7 +45,7 @@ def main() -> None:
            "adjacent_pairs": "{:d}", f"sft_men_dist_{other}": "{:.2f}", "subtype_dist_mismatch": "{:.1%}"}
     records = []
     for v in [r for r in ROWS if r in s.index]:
-        rec = {"補正": CONDITION_LABELS_JA[v] + ("†" if v == "affine_oracle" else "")}
+        rec = {"補正": CONDITION_LABELS_JA[v]}
         for k, c in cols.items():
             val = s.loc[v, k]
             rec[c] = fmt[k].format(int(val) if k == "adjacent_pairs" else float(val))
@@ -64,7 +64,7 @@ def main() -> None:
               f"条件平均）は ASW {chance.get('asw_batch', float('nan')):.4f}、iLISI {chance.get('ilisi', float('nan')):.3f}。"
               "隣接ペアは施設 × 組織型の平均ベクトルの Ward 樹形図で同じ組織型の 2 施設が隣り合う数（Fig 6 と同じ）。"
               f"組織型間距離の施設差は、両施設で 5 例以上の組織型の平均どうしの距離の |{oth_d} − {ref_d}| / {ref_d} の中央値。"
-              "†倍率を組織型ラベル（評価施設を含む）から推定した参考値（循環のため上限の参考）。 {#tbl:method_comparison}"]
+              " {#tbl:method_comparison}"]
     path = table_path(cfg, NAME, ".md")
     path.write_text("\n".join(lines) + "\n")
     print(f"  saved: {table_path(cfg, NAME, '.csv')} / {path.name}")

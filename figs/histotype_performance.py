@@ -1,7 +1,7 @@
 """組織型（主要 5 クラス）の施設間分類の指標表（Supplementary）。
 
 訓練不要の最近傍重心法。balanced accuracy・macro F1・AUC（OvR、クラスの確率 = softmax(−距離)）の点推定 [95% CI]
-（テスト側施設の患者単位 bootstrap）。2 方向 × 4 条件。
+（テスト側施設の患者単位 bootstrap）。2 方向 × 5 条件（CONDITIONS_FIG3: 補正なし / Macenko / GAN / ComBat / 平行移動）。
 
 入力: output_dir/nc/histotype/bootstrap.csv（nc.py）
 出力: tables/{table S n}_histotype_performance.{csv,md}（番号は figs/__init__.py）
@@ -14,7 +14,7 @@ from __future__ import annotations
 import pandas as pd
 
 from figs import label
-from figs.common import CONDITION_LABELS_JA, CONDITIONS_SUPP_REF, SITE_DISPLAY, config, order_conditions, out_root, table_path
+from figs.common import CONDITION_LABELS_JA, CONDITIONS_FIG3, SITE_DISPLAY, config, order_conditions, out_root, table_path
 from histotype_labels import apply_set
 
 NAME = "histotype_performance"
@@ -33,12 +33,12 @@ def main() -> None:
     records = []
     for tr in sources:
         te = next(s for s in sources if s != tr)
-        for v in order_conditions([v for v in CONDITIONS_SUPP_REF if v in set(bs["variant"])]):
+        for v in order_conditions([v for v in CONDITIONS_FIG3 if v in set(bs["variant"])]):
             sub = bs[(bs.train_source == tr) & (bs.variant == v)].set_index("metric")
             if sub.empty:
                 continue
             rec = {"学習 → 評価": f"{SITE_DISPLAY[tr]} → {SITE_DISPLAY[te]}",
-                   "補正": CONDITION_LABELS_JA[v] + ("†" if v == "affine_oracle" else "")}
+                   "補正": CONDITION_LABELS_JA[v]}
             for m, col in METRICS:
                 r = sub.loc[m]
                 rec[col] = f"{r['value']:.3f} [{r['ci_low']:.3f}, {r['ci_high']:.3f}]"
@@ -59,10 +59,9 @@ def main() -> None:
     lines += ["", f": 組織型（{len(classes)} クラス: {', '.join(classes)}）の施設間分類（最近傍重心法: 学習施設の組織型平均のうち最も近いものに割り当てる。訓練なし）。"
               f"AUC は one-vs-rest のクラス平均で、各クラスの確率を softmax(−距離) とした。各値は点推定 [95% CI]"
               f"（テスト側施設の患者単位 bootstrap、{n_boot} 回）。偶然の balanced accuracy は 1/{len(classes)} = "
-              f"{1 / len(classes):.2f}。相似変換 = 一様なスケール＋平行移動（倍率はラベル不要の推定）。"
+              f"{1 / len(classes):.2f}。"
               "色正規化（Macenko）= patho2 のパッチを Macenko 法で EBRAINS の染色に合わせてから埋め込みを作り直したもの"
               "（GAN と同じ画像レベルの補正）。"
-              "†倍率を組織型ラベル（評価施設を含む）から推定した参考値（組織型分類の評価としては循環のため上限の参考）。"
               " {{#tbl:histotype_performance}}"]
     path = table_path(cfg, NAME, ".md")
     path.write_text("\n".join(lines) + "\n")

@@ -8,7 +8,8 @@ Table S3（TITAN）と同じ指標を、学習なしの平均プーリングで�
 列: 施設平均どうしの距離、施設の混ざり方（ASW・iLISI）、樹形図の隣接ペア数、対象施設内の SFT − 髄膜腫 距離、
     組織型のまとまり（ASW・cLISI）、組織型の平均どうしの距離の施設間の相対ずれ
 
-入力: output_dir/meanpool/summary.csv、output_dir/meanpool/site_null.csv（meanpool.py）
+入力: output_dir/meanpool/summary.csv、output_dir/meanpool/site_null.csv（meanpool.py）、
+      output_dir/stain_response/shift_decomposition.csv（stain_response.py。Macenko の行の説明に使う、aggregator=mean）
 出力: tables/{table S n}_meanpool_comparison.{csv,md}（番号は figs/__init__.py）
 
 Usage:
@@ -38,6 +39,12 @@ def main() -> None:
     other = next(k for k in cfg["embedding"] if k != ref)
     ref_d, oth_d = SITE_DISPLAY.get(ref, ref), SITE_DISPLAY.get(other, other)
     n_sub = int(s["n_subtypes"].iloc[0])
+    # Macenko で施設平均どうしの距離がむしろ増える理由: 補正によるシフトの変化を、補正なしの施設シフト方向 u に沿う成分と
+    # それに直交する成分に分けた値（stain_response.py）
+    dec = pd.read_csv(root / "stain_response" / "shift_decomposition.csv")
+    dec = dec[dec["aggregator"] == "mean"].set_index("condition")
+    mac_along, mac_orth = float(dec.loc["macenko", "along_u"]), float(dec.loc["macenko", "orthogonal"])
+    raw_norm = float(dec.loc["original", "shift_norm"])
 
     cols = {
         "site_shift_norm": "施設平均どうしの距離 ↓", "asw_batch": "ASW 施設 ↓", "ilisi": "iLISI 施設 ↑",
@@ -69,6 +76,9 @@ def main() -> None:
               f"補正なし・平行移動の平均）は ASW {chance.get('asw_batch', float('nan')):.4f}、iLISI {chance.get('ilisi', float('nan')):.3f}。"
               "隣接ペアは施設 × 組織型の平均ベクトルの Ward 樹形図で同じ組織型の 2 施設が隣り合う数。"
               f"組織型間距離の施設差は、両施設で 5 例以上の組織型の平均どうしの距離の |{oth_d} − {ref_d}| / {ref_d} の中央値。"
+              f"色正規化で施設平均どうしの距離が増えるのは、補正後の施設シフトを補正なしのシフト方向に沿う成分と直交する成分に分けると"
+              f"、沿う成分は {raw_norm:.1f} → {mac_along:.1f} と {raw_norm - mac_along:.1f} しか減らない一方で、直交する成分が {mac_orth:.1f} と新たに生じるため"
+              "（色正規化は平均プーリングの埋め込みを施設差の方向にはあまり動かさず、別の向きのずれを作る）。"
               " {#tbl:meanpool_comparison}"]
     path = table_path(cfg, NAME, ".md")
     path.write_text("\n".join(lines) + "\n")

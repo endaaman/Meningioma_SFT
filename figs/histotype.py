@@ -5,8 +5,8 @@ Transitional（meningothelial と fibrous の混合型で、施設間の診断�
 Secretory（patho2 が 6 例で、patho2 で学習する方向が成り立たない）は除外。組織型の例数は Table 1。
 
 評価は訓練不要の最近傍重心法（学習施設の組織型平均のうち最も近いものに割り当てる）。
-条件は本文の 4 条件に色正規化（Macenko、画像レベル）と相似変換（一様なスケール＋平行移動、倍率はラベル不要）を足した 6 条件
-（`utils/display.py` の CONDITIONS_SUPP）。
+条件は本文の 4 条件に色正規化（Macenko、画像レベル）を足した 5 条件（`utils/display.py` の CONDITIONS_FIG3）。
+相似変換は Table S3 だけに出す。
 
 入力: output_dir/nc/histotype/trained_by_*/*/predictions.csv（nc.py）
 出力: fig/{fig S n}_histotype.png / .pdf（番号は figs/__init__.py）
@@ -17,7 +17,7 @@ Usage:
 from __future__ import annotations
 
 from figs import label
-from figs.common import CONDITIONS_SUPP, config, save
+from figs.common import CONDITIONS_FIG3, config, save
 from figs.histotype_preview import cm_figure
 from histotype_labels import apply_set
 
@@ -28,7 +28,7 @@ CLASS_SET = "main"
 def main() -> None:
     print(f"[{label(NAME)}] {NAME}")
     cfg = apply_set(config(), CLASS_SET)
-    cfg["lp_histotype"] = {**cfg["lp_histotype"], "output_subdir": "nc/histotype", "variants": CONDITIONS_SUPP}
+    cfg["lp_histotype"] = {**cfg["lp_histotype"], "output_subdir": "nc/histotype", "variants": CONDITIONS_FIG3}
     save(cm_figure(cfg), cfg, NAME)
 
 

@@ -20,18 +20,19 @@ dendrogram.py        # 施設間距離の樹形図（補正前後）。生のユ
 dataset.py           # データセット構成の円グラフと Table 1 の元データ（table1.csv）
 sft_distance_bar.py  # SFT と各サブタイプ間の距離棒グラフ
 shift_direction.py   # 群ごとの施設間シフトの向きの一致度（centroid 補正の前提の検証）
-shift_estimation.py  # 平行移動のシフト推定の実用面: 症例構成の切り分け（組織型を合わせたシフト Δ*）と、新施設から何例あれば推定できるか（部分抽出のシミュレーション）
+shift_estimation.py  # 平行移動のシフト推定の実用面: 症例構成の切り分け（組織型を合わせたシフト Δ*）と、新施設から何例あれば推定できるか（部分抽出のシミュレーション）。Fig S4 の元
 harmonization.py     # 補正の効き具合の指標（ASW・LISI、補正なし / centroid / GAN）
-meanpool.py          # 平均プーリングのスライド埋め込み（TITAN の対照）: build で h5 を作り、analyze で Fig 4・Table S3 と同じ指標を出す。Table S4・S5 の元
+meanpool.py          # 平均プーリングのスライド埋め込み（TITAN の対照）: build で h5 を作り、analyze で Fig 4・Table S3 と同じ指標を出す。Table S4 の元（幾何の数値は Results 本文）
 paper_color.py       # スライドごとの組織の平均色（CIELAB と Ruifrok–Johnston の H/E、32 パッチ）。Fig 2c の元（out/paper/{version}/color/slide_color.csv）
 stain_response.py    # 埋め込みの施設間シフト方向 u への射影 s と、スライドの H/E 染色バランス（log H/E）の対応。施設内相関・施設差の色による説明割合・応答曲線・補正（GAN/Macenko）による Δs と色変化の対応（out/stain_response/）
 figs/                # 論文の図表を out/ の解析結果から組み立てる（重い計算はしない）
   __init__.py        # 図表番号の唯一の定義（MAIN / TABLES / SUPP の順序）
   common.py          # 出力先・共通スタイル・保存
-  umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py  # 図（内容名）
-  cohort.py / performance.py  # 表
-  subtype_structure_gan.py / subtype_distance_heatmap.py  # Supplementary
-  method_comparison.py / meanpool_geometry.py / meanpool_comparison.py  # Supplementary の表
+  tissue.py / umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py  # 図（内容名）
+  cohort.py          # 表
+  subtype_distance_heatmap.py / sft_distance.py / histotype.py / shift_sample_size.py  # Supplementary の図
+  performance.py / histotype_performance.py / method_comparison.py / meanpool_comparison.py  # Supplementary の表
+  meanpool_geometry.py  # 参考用（登録していない。figs.all では作らない）
   all.py             # 自分の出力を掃除してから全部作る
 utils/
   loader.py          # load_config / load_data（各スクリプトが共通利用）

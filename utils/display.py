@@ -9,21 +9,21 @@ CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCE
 # 補正条件の集合（図表ごとにどちらを使うかを各 figs/*.py で明示する）。
 # 並びは全図表で共通: 補正なし → Macenko → GAN → ComBat → 平行移動（centroid。画像レベルの弱い順 → 埋め込みレベル、
 # 提案の平行移動を最後に。Macenko を GAN の前に置くのは ken 決定 2026-10-20）。
-#   FULL: 4 条件。Fig 5・Table 2・Fig 6・Fig S1
-#   FIG3: 5 条件 = FULL ＋ Macenko。Fig 3（UMAP と補正法の比較）だけがこれ
+#   FULL: 4 条件。Fig 5・Fig 6・Fig S1・S2
+#   FIG3: 5 条件 = FULL ＋ Macenko。Fig 3（UMAP と補正法の比較）と Supplementary の Table S1・S2・S4、Fig S3
 #   CORE: ComBat を除く 3 条件（harmonization.draw_metric の既定など、本番図表では未使用）
 CONDITIONS_FULL = ["original", "gan", "combat", "centroid"]
 CONDITIONS_FIG3 = ["original", "macenko", "gan", "combat", "centroid"]
 CONDITIONS_CORE = [v for v in CONDITIONS_FULL if v != "combat"]
 # 並び順の基準（order_conditions が使う。全条件の順）
 CONDITION_ORDER = ["original", "macenko", "gan", "combat", "centroid", "affine_free", "affine_oracle"]
-# Supplementary の表・Fig S3 用: FIG3 に相似変換を足したもの
+# Table S3（補正法の比較、全指標）だけ: FIG3 に相似変換を足したもの。affine_oracle（正しい倍率・参考）は図表に出さない
+# （ken 決定 2026-10-20。解析の出力 out/method_compare/ 等には残る）
 CONDITIONS_SUPP = [v for v in CONDITION_ORDER if v in CONDITIONS_FIG3 or v == "affine_free"]
-CONDITIONS_SUPP_REF = CONDITIONS_SUPP + ["affine_oracle"]   # 表のみ。affine_oracle は組織型ラベルを使った参考値
 # 補正条件の表示名（図表・表の表示はすべてここから引く。コード内部のキーは変えない）。
 #   centroid      = 平行移動（各施設の平均を揃える位置のみの補正）
 #   affine_free   = 相似変換（一様なスケール＋平行移動、倍率はラベル不要の推定）
-#   affine_oracle = 相似変換（倍率を組織型ラベルから推定した参考値）
+#   affine_oracle = 相似変換（倍率を組織型ラベルから推定した参考値。論文の図表には出さない）
 #   combat        = ComBat（次元ごとの位置・尺度の補正）
 #   macenko       = 色正規化（Macenko。画像レベル、GAN と同じ向き patho2 → EBRAINS、目標は EBRAINS 全体から 1 つ）
 CONDITION_LABELS = {"original": "No correction", "gan": "GAN", "macenko": "Macenko", "combat": "ComBat",

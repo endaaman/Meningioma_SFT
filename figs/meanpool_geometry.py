@@ -1,4 +1,7 @@
-"""施設差の幾何: 平均プーリング vs TITAN の表（Supplementary）。
+"""施設差の幾何: 平均プーリング vs TITAN の表（参考用。figs/__init__.py に登録していない）。
+
+2026-10-20 に Supplementary から外した（ken 決定）。表の数値は Results 本文に書く。figs.all では作らないので、
+見たいときはこのスクリプトを直接実行する（出力名は番号を持たないので tables/_meanpool_geometry.{csv,md}）。
 
 Fig 4（TITAN）の数値を、同じパッチ埋め込みを学習なしの平均で集約したスライド埋め込み（meanpool.py）と並べる。
 集約器によらず「施設差 = 群に依存しない平行移動、施設内の形は保たれる」が成り立つかを見る。
@@ -9,7 +12,7 @@ Fig 4（TITAN）の数値を、同じパッチ埋め込みを学習なしの平�
 
 入力: output_dir/meanpool/{shift_direction,bio_direction,subtype_distance_scaling}_original.csv（meanpool.py）、
       output_dir/shift_direction/{同}_{variant}.csv（shift_direction.py、Fig 4 と同じファイル）
-出力: tables/{table S n}_meanpool_geometry.{csv,md}（番号は figs/__init__.py）
+出力: tables/_meanpool_geometry.{csv,md}（番号体系の外）
 
 Usage:
     uv run python -m figs.meanpool_geometry
@@ -21,8 +24,7 @@ from pathlib import Path
 import pandas as pd
 
 import shift_direction
-from figs import label
-from figs.common import SITE_DISPLAY, config, out_root, table_path
+from figs.common import SITE_DISPLAY, config, out_root, table_dir
 
 NAME = "meanpool_geometry"
 AGGREGATORS = [("平均プーリング", "mean"), ("TITAN", "titan")]
@@ -38,7 +40,7 @@ def _read(root: Path, cfg: dict, agg: str) -> tuple[pd.DataFrame, pd.DataFrame, 
 
 
 def main() -> None:
-    print(f"[{label(NAME)}] {NAME}")
+    print(f"[unregistered] {NAME}")
     cfg = config()
     root = out_root(cfg)
     ref = cfg["reference"]
@@ -64,7 +66,9 @@ def main() -> None:
             f"傾き（{oth_d}/{ref_d}）": f"{s['slope_origin']:.2f}",
         })
     table = pd.DataFrame(records)
-    table.to_csv(table_path(cfg, NAME, ".csv"), index=False)
+    table_dir(cfg).mkdir(parents=True, exist_ok=True)
+    csv_path = table_dir(cfg) / f"_{NAME}.csv"
+    table.to_csv(csv_path, index=False)
 
     head = list(table.columns)
     lines = ["| " + " | ".join(head) + " |", "|" + "|".join(["---"] * len(head)) + "|"]
@@ -76,9 +80,9 @@ def main() -> None:
               f"{n_g}）ごとの同じシフト。cos(Δ_g, Δ) と |Δ_g| は群の範囲（min–max）。cos(Δ, SFT−髄膜腫) は各施設内の"
               f"SFT − 髄膜腫 の平均の差との cos（Fig 4c）。相関と傾きは、両施設で {min_n} 例以上の組織型の平均どうしの距離を"
               f"施設間で比べたもの（Fig 4d。傾きは原点を通る回帰、{oth_d} / {ref_d}）。 {{#tbl:meanpool_geometry}}"]
-    path = table_path(cfg, NAME, ".md")
+    path = table_dir(cfg) / f"_{NAME}.md"
     path.write_text("\n".join(lines) + "\n")
-    print(f"  saved: {table_path(cfg, NAME, '.csv')} / {path.name}")
+    print(f"  saved: {csv_path} / {path.name}")
 
 
 if __name__ == "__main__":
