@@ -271,6 +271,7 @@ shift_estimation:
 dataset:
   demographics:            # 年齢・性別の CSV（EBRAINS annotation.csv 形式: uuid, pat_id, age, sex）。無い施設は書かない
     site_a: path/to/site_a/annotation.csv
+    site_b: path/to/site_b/demographics.csv   # 同じ形式（uuid, pat_id, age, sex）。1 症例 = 1 患者なら uuid = pat_id = case_id でよい
 
 # ---- harmonization.py ----
 harmonization:
