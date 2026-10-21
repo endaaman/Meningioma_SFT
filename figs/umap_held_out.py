@@ -5,7 +5,8 @@
 2 条件で、3 枚と Fibrous の近傍を拡大して示す。全体の UMAP（SFT の塊を含む）は inset に置き、拡大枠を描く。
 
     a: 補正なし（original）      b: 平行移動（centroid）
-    背景: 施設 = マーカーの形（Fig 3 と同じ）、診断 = 色（髄膜腫 薄灰 / Fibrous 薄青 / SFT 黒）。3 枚 = 黒縁の白いマーカーに番号。
+    背景: 施設 = マーカーの形（Fig 3 と同じ）、診断 = 色（SFT 黒 / Fibrous・Atypical・Anaplastic は Fig 3 の色を薄く / 他の髄膜腫 薄灰）。
+    Atypical は ② の診断名、Anaplastic は ① の最近傍の組織型（held_out_case.py）。3 枚 = 黒縁の白いマーカーに番号（ken 指示 2026-10-21）。
     3 枚は EBRAINS（reference 側）なので埋め込みは条件によらず同じ。条件で変わるのは UMAP の fit（patho2 側の補正後の点群）。
 
 入力: output_dir/umap/{variant}/coords.csv・heldout_coords.csv（umap_plot.py。held-out は fit に使わず transform だけ）
@@ -30,12 +31,14 @@ NAME = "umap_held_out"
 VARIANTS = ["original", "centroid"]
 TITLES = {**CONDITION_LABELS, "original": "Uncorrected"}   # Fig 3 と同じ表記
 FIBROUS = "Fibrous meningioma"
+# 薄い色を付ける組織型（Fig 3 の色 × HIGHLIGHT_ALPHA）。Fibrous = ②③ の最近傍、Atypical = ② の診断名、Anaplastic = ① の最近傍
+HIGHLIGHT = [FIBROUS, "Atypical meningioma", "Anaplastic meningioma"]
 # 時間順（番号は図と凡例で共通）。臨床情報は config.yaml の held_out の注記（EBRAINS annotation.csv）から。
 ORDER = [("a1965734", "SFT, primary (age 27)"),
          ("a1967e5e", "Atypical meningioma (same year, other site)"),
          ("a19545d6", "SFT, recurrence (next year)")]
-MEN_COLOR = "#D0D0D0"          # 髄膜腫（Fibrous 以外）
-FIBROUS_ALPHA = 0.55           # Fibrous は subtype_color_map の色を薄くする
+MEN_COLOR = "#D0D0D0"          # 髄膜腫（HIGHLIGHT 以外）
+HIGHLIGHT_ALPHA = 0.5          # HIGHLIGHT の組織型は subtype_color_map の色を薄くする（①②③ の白丸が埋もれない程度）
 ZOOM_W, ZOOM_H = 5.2, 3.4      # 拡大の幅・高さ（UMAP 単位、両パネル共通で尺度を揃える）
 # 番号ラベルのオフセット（points）。② と ③ はほぼ重なるので反対側に逃がす
 LABEL_OFFSET = {
@@ -48,23 +51,23 @@ INSET_MARGIN = 0.08
 
 
 def _colors(coords: pd.DataFrame, cfg: dict) -> dict[str, tuple]:
-    """診断 → 色。SFT は Fig 3 と同じ（subtype_color_map）、Fibrous はその色を薄く、他の髄膜腫は薄い灰。"""
+    """診断 → 色。SFT は Fig 3 と同じ（subtype_color_map）、HIGHLIGHT の組織型はその色を薄く、他の髄膜腫は薄い灰。"""
     sub_map = subtype_color_map(sorted(set(coords["subtype"])), cfg)
     out = {}
     for sub, c in sub_map.items():
         if "sft" in sub.lower():
             out[sub] = mcolors.to_rgba(c)
-        elif sub == FIBROUS:
-            out[sub] = mcolors.to_rgba(c, alpha=FIBROUS_ALPHA)
+        elif sub in HIGHLIGHT:
+            out[sub] = mcolors.to_rgba(c, alpha=HIGHLIGHT_ALPHA)
         else:
             out[sub] = mcolors.to_rgba(MEN_COLOR)
     return out
 
 
 def _scatter(ax: plt.Axes, coords: pd.DataFrame, color: dict, src_mkr: dict, s: float, alpha: float) -> None:
-    """描画順: 髄膜腫（灰）→ Fibrous → SFT（黒）の順で上に重ねる。"""
+    """描画順: 髄膜腫（灰）→ HIGHLIGHT の組織型 → SFT（黒）の順で上に重ねる。"""
     def tier(sub: str) -> int:
-        return 2 if "sft" in sub.lower() else (1 if sub == FIBROUS else 0)
+        return 2 if "sft" in sub.lower() else (1 if sub in HIGHLIGHT else 0)
     for t in (0, 1, 2):
         for src, mkr in src_mkr.items():
             m = (coords["source"] == src) & coords["subtype"].map(lambda x: tier(x) == t)
@@ -132,18 +135,18 @@ def build(cfg: dict) -> plt.Figure:
             sp.set_linewidth(0.6)
 
     # 凡例（2 パネル共通、下に横並び）: 診断の色 / 施設の形 / held-out の番号
-    handles = [Patch(facecolor=color[next(s for s in color if "sft" in s.lower())], label="SFT"),
-               Patch(facecolor=color[FIBROUS], label="Fibrous meningioma"),
-               Patch(facecolor=MEN_COLOR, label="Other meningioma")]
+    handles = [Patch(facecolor=color[next(s for s in color if "sft" in s.lower())], label="SFT")]
+    handles += [Patch(facecolor=color[sub], label=sub) for sub in HIGHLIGHT]
+    handles += [Patch(facecolor=MEN_COLOR, label="Other meningioma")]
     handles += [Line2D([0], [0], marker=m, color="#666666", ls="none", markersize=5, label=SITE_DISPLAY.get(t, t))
                 for t, m in src_mkr.items()]
     handles += [Line2D([0], [0], marker=held_mkr, mfc="white", mec="black", mew=1.0, ls="none", markersize=7,
                        label="Held-out slides (one EBRAINS patient)")]
-    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.085), ncol=6, frameon=False,
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.075), ncol=4, frameon=False,
                handlelength=1.0, handleheight=0.9, columnspacing=1.0, handletextpad=0.4, fontsize=FONT - 1)
     fig.text(0.5, 0.02, "   ".join(f"{i} {t}" for i, (_, t) in enumerate(ORDER, start=1)),
              ha="center", va="bottom", fontsize=FONT - 1)
-    fig.subplots_adjust(left=0.05, right=0.99, top=0.93, bottom=0.2, wspace=0.12)
+    fig.subplots_adjust(left=0.05, right=0.99, top=0.93, bottom=0.22, wspace=0.12)
     return fig
 
 

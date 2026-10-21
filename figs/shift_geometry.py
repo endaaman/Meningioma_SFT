@@ -56,11 +56,12 @@ def main() -> None:
     ax_e = fig.add_subplot(outer[0, 3])
     shift_bio_axes.draw_axes(ax_e, axes, cfg, reference, other, fontsize=FONT, top_k=top_k)
     panel(ax_a, "a", x=-0.02, y=1.01); panel(ax_b, "b", x=0.02, y=1.01); panel(ax_e, "e", x=-0.02, y=1.01)
-    # c・d は等倍軸で位置がずれるので、軸の実位置から図座標で置く
+    # c・d は等倍軸で位置がずれるので、軸の実位置から図座標で置く。c・d の記号は同じ x（中央の列の左端）に揃える
+    # （d を軸より左に寄せると b の Psam 行の脇に見えてしまう）
     fig.canvas.draw()
-    panel_fig(fig, ax_c.get_position().x0, ax_a.get_position().y1 + 0.01, "c")
-    pos_d = ax_d.get_position()
-    panel_fig(fig, pos_d.x0 - 0.06, pos_d.y1 + 0.02, "d")
+    x_cd = min(ax_c.get_position().x0, ax_d.get_position().x0)
+    panel_fig(fig, x_cd, ax_a.get_position().y1 + 0.01, "c")
+    panel_fig(fig, x_cd, ax_d.get_position().y1 + 0.02, "d")
     save(fig, cfg, NAME)
 
 

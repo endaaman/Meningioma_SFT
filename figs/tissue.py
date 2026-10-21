@@ -141,6 +141,13 @@ def draw_color(fig: plt.Figure, gs, cfg: dict) -> None:
         groups.append(f"{GAN_SITE} (Macenko)")
         labels.append(f"{SITE_DISPLAY[GAN_SITE]} → Macenko")
         colors.append(CONDITION_COLORS["macenko"])
+    # 色の CSV は作成時のラベル CSV のスライド一覧（paper_color.py）なので、現在のコホート（cfg の subtype CSV）に絞る
+    # （EBRAINS の n554 → n551: held-out の 3 枚を落とす。paper_color.py を回し直さなくてよい）
+    keep = pd.concat([pd.read_csv(cfg["label"][site]["subtype"], usecols=["case_id"]).assign(site=site)
+                      for site in df["site"].unique()])
+    before = len(df)
+    df = df.merge(keep, on=["site", "case_id"], how="inner")
+    print(f"  color: {before} → {len(df)} rows after restricting to the current label CSVs")
     rng = np.random.default_rng(42)
     for j, (m, title) in enumerate(COLOR_METRICS):
         ax = fig.add_subplot(gs[0, j])
