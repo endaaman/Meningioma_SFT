@@ -313,5 +313,14 @@ stain_response:
   n_bins:        10   # 応答曲線の分位数（he_balance / H / E）
   min_n_subtype: 3    # 組織型内の残差化に使う組織型の最小例数（施設内）
 
+# ---- held_out_case.py（コホートから除外して症例検討に使うスライド = ラベルが矛盾する患者。ラベル CSV からは既に除いてある）----
+held_out:
+  ebrains:
+    - a19545d6               # pat_id 831: SFT 再発（N2140-15、28 歳、右脳神経）
+    - a1965734               # pat_id 831: SFT 初発（N2296-14、27 歳）
+    - a1967e5e               # pat_id 831: Atypical meningioma（N2586-14、27 歳、左前頭部）
+  subtype:                   # 元の診断名を引く CSV（除外前のラベル。表示用）
+    ebrains: data/ebrains/label/case_subtypes_n554.csv
+
 # ---- 出力 ----
 output_dir: ./output

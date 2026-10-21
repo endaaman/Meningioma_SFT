@@ -12,6 +12,7 @@ titan.py             # TITAN による WSI-level aggregate（--variants で対�
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
 nc.py                # 訓練不要の施設間分類（最近傍重心法）: SFT vs 髄膜腫と組織型。Fig 5・Table S1・Fig S3・Table S2 の元
+held_out_case.py     # コホートから除外した held-out スライド（ラベルが矛盾する患者）の症例検討: 両施設の SFT / 髄膜腫 / 組織型の重心への距離と割り当て（out/held_out_case/）
 lp.py                # TITAN 埋め込みの Linear Probe 訓練・評価（参考。論文の評価は nc.py）
 lp_bootstrap.py      # lp の予測の患者単位 bootstrap（95% CI）と条件間 McNemar
 umap_plot.py         # 補正前後の UMAP プロット（座標 coords.csv も保存）
@@ -67,6 +68,7 @@ uv run python combat.py --covariates subtype   # 組織型を共変量にした 
 # 以下は順不同（可視化・評価）
 uv run python nc.py             # 施設間分類（最近傍重心法、訓練不要）。combat.py / affine.py の後
 uv run python nc.py --aggregator mean   # 同じ分類を平均プーリングの埋め込みで（対照、meanpool.py build の後）。出力は out/meanpool/nc/
+uv run python held_out_case.py  # コホートから除外した held-out スライド（config の held_out）を両施設の SFT / 髄膜腫の重心に当てる症例検討。出力は out/held_out_case/
 uv run python lp.py             # 参考（線形プローブ）
 uv run python lp_bootstrap.py   # lp.py の後
 uv run python umap_plot.py
