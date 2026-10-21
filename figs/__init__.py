@@ -29,6 +29,7 @@ SUPP = [
     "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
     "histotype",                      # 組織型（主要 5 クラス）の施設間分類の混同行列（2 方向 × 5 条件、Macenko を含む）
     "shift_sample_size",              # 平行移動のシフト推定に要る例数（無作為 / 単一組織型 × n。shift_estimation.py）
+    "umap_held_out",                  # held-out 症例（EBRAINS pat_id 831 の 3 枚）を Fig 3 の UMAP に写す（補正なし / 平行移動、拡大 ＋ inset）
 ]
 # Supplementary の表（順 = Table S 番号）
 SUPP_TABLES = [
