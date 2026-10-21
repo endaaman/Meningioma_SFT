@@ -40,8 +40,9 @@ def main() -> None:
     top_k = cfg.get("shift_bio_axes", {}).get("top_k", 10)
 
     # 3 列: a+b | c/d | e（e は a と同じ行構成の横棒なので a と高さをそろえる）。3 列目の前に e の行ラベル分の空き列
-    fig = plt.figure(figsize=(10.5, max(0.24 * len(table) + 1.3, 5.6)))
-    outer = GridSpec(1, 4, figure=fig, width_ratios=[3.3, 1.9, 1.0, 2.1], wspace=0.18)
+    # （空き列は c の矢印の注記と e の行ラベルが横で接触しない幅にする。ken 指摘 2026-10-21）
+    fig = plt.figure(figsize=(11.0, max(0.24 * len(table) + 1.3, 5.6)))
+    outer = GridSpec(1, 4, figure=fig, width_ratios=[3.3, 1.9, 1.7, 2.1], wspace=0.18)
     left = outer[0, 0].subgridspec(1, 2, width_ratios=[2.2, 1.2], wspace=0.08)
     ax_a = fig.add_subplot(left[0, 0])
     ax_b = fig.add_subplot(left[0, 1], sharey=ax_a)
