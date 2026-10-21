@@ -139,7 +139,7 @@ def build_combat(cfg: dict) -> None:
     """combat.py と同じ: neuroCombat（ref_batch = reference、combat.covariates）。ラベルのある症例だけ書く。"""
     merged = load_data(cfg, "original", aggregator="mean").reset_index(drop=True)
     print(f"\n[combat] {merged['source'].value_counts().to_dict()}  covariates: {cfg.get('combat', {}).get('covariates', [])}")
-    Y = run_combat(merged, cfg)
+    Y = run_combat(merged, cfg, [])   # 共変量なし（combat.py の既定と同じ）
     X = np.stack(merged["embedding"].values).astype(np.float64)
     ref = merged["source"].values == cfg.get("reference")
     print(f"  reference ({cfg.get('reference')}) max |combat - original| = {np.abs(Y[ref] - X[ref]).max():.2e}")
