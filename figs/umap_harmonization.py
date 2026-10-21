@@ -6,12 +6,12 @@
 入力:
     output_dir/umap/{variant}/coords.csv          （umap_plot.py）
     output_dir/method_compare/summary.csv         （method_compare.py: 施設指標・隣接ペア・形の指標・施設平均の距離）
-    output_dir/harmonization/site_null.csv        （harmonization.py: 施設指標の chance level）
+    output_dir/harmonization/site_null.csv        （harmonization.py: 施設指標の chance level。補正なし条件の within_subtype 帰無の平均を使う）
 出力: fig/{fig n}_umap_harmonization.{png,pdf}（番号は figs/__init__.py）
 
 パネル:
     a–e  UMAP（パラメータ共通）
-    f    施設差をどれだけ落としたか: 施設平均どうしの距離 / ASW 施設（chance の破線）/ iLISI（同）/ 隣接ペア
+    f    施設差をどれだけ落としたか: 施設平均どうしの距離 / ASW 施設（chance の破線 = 補正なし条件の within-subtype 置換帰無の平均）/ iLISI（同）/ 隣接ペア
     g    病変の構造を壊していないか（補正しすぎ）: patho2 内 SFT−髄膜腫 距離（EBRAINS の値の破線）/ ASW 組織型 /
          cLISI 組織型 / 組織型間距離の施設差（%）
 
@@ -37,6 +37,7 @@ VARIANTS = CONDITIONS_FIG3
 TITLES = {**CONDITION_LABELS, "original": "Uncorrected"}
 TIERS = [("none", [0]), ("image", [1, 2]), ("embedding", [3, 4])]   # VARIANTS の添字
 NULL_KIND = "within_subtype"  # chance level の基準（サブタイプ内で施設ラベルを並べ替え）
+NULL_STATE = "original"       # chance level は補正なし条件の帰無平均（本文・Table S3・Fig S4 と同じ基準。条件平均は使わない）
 
 
 def _draw_umap(ax: plt.Axes, coords: pd.DataFrame, sub_map: dict, src_mkr: dict) -> None:
@@ -100,7 +101,7 @@ def build(cfg: dict) -> plt.Figure:
               for v in VARIANTS}
     s = pd.read_csv(root / "method_compare" / "summary.csv").set_index("variant")
     null = pd.read_csv(root / "harmonization" / "site_null.csv")
-    null = null[null["null"] == NULL_KIND].groupby("metric")["null_mean"].mean()   # 状態間でほぼ同じなので平均
+    null = null[(null["null"] == NULL_KIND) & (null["state"] == NULL_STATE)].set_index("metric")["null_mean"]
     ref, other = cfg["reference"], next(k for k in cfg["embedding"] if k != cfg["reference"])
     n_sub = int(s["n_subtypes"].iloc[0])
     d_ref = float(s[f"sft_men_dist_{ref}"].iloc[0])

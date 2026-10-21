@@ -5,7 +5,7 @@
     樹形図の隣接ペア数、対象施設内の SFT − 髄膜腫 距離、組織型の平均どうしの距離の施設間の相対ずれ
 
 入力: output_dir/method_compare/summary.csv（method_compare.py）、
-      output_dir/harmonization/site_null.csv（施設指標の chance level、harmonization.py）
+      output_dir/harmonization/site_null.csv（施設指標の chance level = 補正なし条件の within_subtype 帰無の平均、harmonization.py）
 出力: tables/{table S n}_method_comparison.{csv,md}（番号は figs/__init__.py）
 
 Usage:
@@ -28,8 +28,8 @@ def main() -> None:
     root = out_root(cfg)
     s = pd.read_csv(root / "method_compare" / "summary.csv").set_index("variant")
     null = pd.read_csv(root / "harmonization" / "site_null.csv")
-    null = null[null["null"] == "within_subtype"]
-    chance = null.groupby("metric")["null_mean"].mean()
+    # chance level は補正なし条件の within-subtype 置換帰無の平均（Fig 3f・Fig S4・本文と同じ基準。条件平均は使わない）
+    chance = null[(null["null"] == "within_subtype") & (null["state"] == "original")].set_index("metric")["null_mean"]
     ref = cfg["reference"]
     other = next(k for k in cfg["embedding"] if k != ref)
     ref_d, oth_d = SITE_DISPLAY.get(ref, ref), SITE_DISPLAY.get(other, other)
@@ -60,8 +60,8 @@ def main() -> None:
               "（倍率は施設平均まわりの広がりの比で、ラベル不要）、ComBat = 次元ごとの位置・尺度の補正。"
               f"色正規化（Macenko）= {oth_d} のパッチを Macenko 法で {ref_d} の染色（{ref_d} 全スライドから推定した"
               "染色ベクトルと濃度の上限）に合わせてから埋め込みを作り直したもの（GAN と同じ画像レベルの補正）。"
-              "ASW・iLISI・cLISI は PCA 50 次元・k = 30。施設の指標の chance level（施設ラベルを組織型内で入れ替えた 1000 回の平均、"
-              f"条件平均）は ASW {chance.get('asw_batch', float('nan')):.4f}、iLISI {chance.get('ilisi', float('nan')):.3f}。"
+              "ASW・iLISI・cLISI は PCA 50 次元・k = 30。施設の指標の chance level（補正なし条件で施設ラベルを組織型内で入れ替えた"
+              f" 1000 回の平均 = within-subtype 置換帰無。条件ごとの値は ASW 0.004–0.006 の範囲でほぼ同じ）は ASW {chance.get('asw_batch', float('nan')):.4f}、iLISI {chance.get('ilisi', float('nan')):.3f}。"
               "隣接ペアは施設 × 組織型の平均ベクトルの Ward 樹形図で同じ組織型の 2 施設が隣り合う数（Fig 6 と同じ）。"
               f"組織型間距離の施設差は、両施設で 5 例以上の組織型の平均どうしの距離の |{oth_d} − {ref_d}| / {ref_d} の中央値。"
               " {#tbl:method_comparison}"]
