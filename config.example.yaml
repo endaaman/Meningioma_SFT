@@ -323,5 +323,11 @@ held_out:
   subtype:                   # 元の診断名を引く CSV（除外前のラベル。表示用）
     ebrains: data/ebrains/label/case_subtypes_n554.csv
 
+# ---- stat6_case.py（patho2 の STAT6 免疫染色の有無・結果による記述統計。Supplementary 用）----
+stat6:
+  site:       patho2                                   # STAT6 の情報がある施設（補正される側）
+  source:     /mnt/server42/AI/Datasets/Meningioma_SFT/__archive/all_cases_updated_n1721.csv   # 読み取り専用（NFS）。case_id, stat6_nuclear, stat6_cytoplasmic, vlm_class, original_diagnosis, findings
+  status_csv: data/patho2/stat6_status.csv             # 書き出す先（Sync 側）。コホート（label.patho2.subtype）の症例だけ
+
 # ---- 出力 ----
 output_dir: ./output
