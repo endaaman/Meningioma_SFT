@@ -2,6 +2,8 @@
 
 入力（config の patho2_gliomas）:
     wsi_root/<群>/<症例番号>/*.ndpi
+      コピーが途中で切れているファイルがある（N20-097#1_HE: 295 MB、正本は 4,952 MB。openslide も tifffile も開けない）。review_root
+      （server41/脳腫瘍レビュー、院内 WSI の正本）に同名でより大きいファイルがあればそちらを読む（index の wsi_source = review）。
       群: A = IDH 変異型星細胞腫（ast）、G = IDH 野生型（glm）、O = 乏突起膠腫（odg）、L = リンパ腫（lym）、M = 転移（met）。
       略号は山田さんの WSI_BT（folder_labels.txt）と同じ。B（剖検様番号）と unused / todo / その他 / small / other は対象外。
       症例番号のディレクトリは `17-0395` / `N22-263` の形（空のディレクトリもある）。
@@ -82,7 +84,19 @@ def h5_state(h5_path: Path, feature_groups: list[str], tile_model: str, keys: di
         return "error"
 
 
-def build_index(wsi_root: Path, out_root: Path, groups: dict[str, str], order: list[str]) -> pd.DataFrame:
+def review_twins(review_root: Path | None) -> dict[str, list[tuple[int, Path]]]:
+    """院内 WSI の正本（server41/脳腫瘍レビュー）の ndpi をファイル名 → [(size, path)] で引けるようにする（Patho2Gliomas の途中で切れたコピーの代替用）。"""
+    twins: dict[str, list[tuple[int, Path]]] = {}
+    if review_root is None or not review_root.is_dir():
+        return twins
+    for p in review_root.rglob("*.ndpi"):
+        twins.setdefault(p.name, []).append((p.stat().st_size, p))
+    return twins
+
+
+def build_index(wsi_root: Path, out_root: Path, groups: dict[str, str], order: list[str],
+                review_root: Path | None = None) -> pd.DataFrame:
+    twins = review_twins(review_root)
     rows = []
     for g in order:
         gdir = wsi_root / g
@@ -94,10 +108,15 @@ def build_index(wsi_root: Path, out_root: Path, groups: dict[str, str], order: l
                 continue
             for ndpi in sorted(cdir.glob("*.ndpi")):
                 stain, is_he, recut = classify(ndpi.stem)
+                # Patho2Gliomas のコピーが正本（同名ファイル）より小さければ途中で切れたコピーなので、正本の方を読む
+                src, source = ndpi, "patho2_gliomas"
+                bigger = [(s, p) for s, p in twins.get(ndpi.name, []) if s > ndpi.stat().st_size]
+                if bigger:
+                    src, source = max(bigger)[1], "review"
                 rows.append({
                     "group": g, "label": groups[g], "case": cdir.name, "file": ndpi.name,
                     "stain": stain, "is_he": is_he, "recut": recut,
-                    "wsi": str(ndpi), "h5": str(out_root / g / cdir.name / f"{ndpi.stem}.h5"),
+                    "wsi": str(src), "wsi_source": source, "h5": str(out_root / g / cdir.name / f"{ndpi.stem}.h5"),
                 })
     return pd.DataFrame(rows)
 
@@ -123,9 +142,14 @@ def main() -> None:
     out_dir = Path(cfg["output_dir"]) / "patho2_gliomas"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    index = build_index(wsi_root, out_root, groups, order)
+    review_root = Path(pcfg["review_root"]) if pcfg.get("review_root") else None
+    index = build_index(wsi_root, out_root, groups, order, review_root)
     he = index[index["is_he"]]
     print(f"wsi_root: {wsi_root}\nout_root: {out_root}")
+    n_rev = int((index["wsi_source"] == "review").sum())
+    if n_rev:
+        print(f"途中で切れたコピーの代わりに正本（{review_root}）を読むファイル: {n_rev}")
+        print(index.loc[index["wsi_source"] == "review", ["group", "case", "file"]].to_string(index=False))
     summary = index.groupby("group").agg(cases=("case", "nunique"), files=("file", "size"), he=("is_he", "sum")).reindex(order)
     summary["he_cases"] = he.groupby("group")["case"].nunique().reindex(order)
     summary["recut"] = he.groupby("group")["recut"].sum().reindex(order)
