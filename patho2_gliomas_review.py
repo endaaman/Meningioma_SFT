@@ -106,12 +106,12 @@ def load_cases(cfg: dict) -> list[dict]:
         items = []
         for r in df.sort_values("file").itertuples(index=False):
             tp = thumb_path(rdir, r)
-            slide_paths.append(r.wsi)
             items.append({
                 "id": len(slide_paths), "file": r.file, "recut": bool(r.recut),
                 "n_patches": None if pd.isna(r.n_patches) else int(r.n_patches),
                 "thumb": str(tp.relative_to(rdir)) if tp.exists() else None,
             })
+            slide_paths.append(r.wsi)   # id = append 前の長さ
         cases.append({"group": group, "label": df["label"].iloc[0], "case": str(case), "slides": items})
     cases.sort(key=lambda c: (order.index(c["group"]) if c["group"] in order else 99, c["case"]))
     return cases, slide_paths
