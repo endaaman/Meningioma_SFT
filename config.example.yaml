@@ -291,7 +291,7 @@ meanpool:
 
 # ---- paper_figs.py ----
 paper:
-  version: v2   # 図表の出力先 output_dir/paper/{version}/（v1 は凍結、v2 が現行）
+  version: v3   # 図表の出力先 output_dir/paper/{version}/。v1・v2 は凍結、v3 が現行
 
 # ---- paper_patches.py（新 Fig 2 の代表パッチ候補）----
 paper_patches:
