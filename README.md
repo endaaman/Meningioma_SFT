@@ -11,8 +11,7 @@ macenko.py           # 色正規化（Macenko、patho2 → EBRAINS）: EBRAINS �
 titan.py             # TITAN による WSI-level aggregate（--variants で対象 variant を指定できる）
 titan_batch.py       # 外部の h5 の木に TITAN を書く（EBRAINS 全体の CONCH 特徴 = /mnt/server42/AI/Datasets/EBRAINS_embeddings。config の ebrains_embeddings.priority のグリオーマを先に、残りは名前順。ログは out/ebrains_embeddings/）
 patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor）の HE から CONCH v1.5（wsi-toolbox 0.7.0 の preset conch15、cls 1024 と proj 768 を 1 回で）+ TITAN を作り Patho2Gliomas_embeddings に置く（EBRAINS_embeddings と同じ構成）。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
-patho2_gliomas_select.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を選ぶ（再切片 HE があればそれ、無ければ組織パッチ数が最大。手動上書きは config の patho2_gliomas.override、EXCLUDE で症例除外）→ out/patho2_gliomas/representatives.csv
-patho2_gliomas_review.py   # 代表 HE を目で選ぶ簡易ツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶ静的 HTML（html）→ out/patho2_gliomas/review/index.html。書き出した CSV を data/patho2_gliomas/representative_override.csv に置くと select.py が優先する
+patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を目で選ぶツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶページ（serve: クリックごとに data/patho2_gliomas/representatives.csv が書かれる。html: サーバーなしの静的版）。HE 1 枚の症例は自動で選択済み、EXCLUDE で症例除外。解析はこの CSV を読む
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
 nc.py                # 訓練不要の施設間分類（最近傍重心法）: SFT vs 髄膜腫と組織型。Fig 5・Table S1・Fig S3・Table S2 の元
@@ -99,7 +98,8 @@ uv run python -u titan_batch.py --dry-run                  # EBRAINS_embeddings 
 uv run python -u titan_batch.py                            # 学生が作った CONCH 特徴（3,121 本）に TITAN を書く（約 2 秒/本）
 uv run python -u patho2_gliomas_extract.py --dry-run       # 院内の HE 判定の監査（out/patho2_gliomas/slides.csv）
 uv run python -u patho2_gliomas_extract.py                 # 院内 A/G/O/L/M の HE 全部を抽出（約 30–45 秒/枚）。--groups A G O で群を絞れる
-uv run python patho2_gliomas_select.py                     # 抽出が終わってから。1 症例 1 枚の代表 HE（out/patho2_gliomas/representatives.csv）
+uv run python -u patho2_gliomas_review.py thumbs           # HE 全部のサムネイル（out/patho2_gliomas/review/thumbs/、4 分）
+uv run python -u patho2_gliomas_review.py serve            # tmux の担当 window で。http://127.0.0.1:8765/ で代表を選ぶ → data/patho2_gliomas/representatives.csv
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
 # ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる

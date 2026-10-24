@@ -366,4 +366,5 @@ patho2_gliomas:
   batch_size: 256
   device:     auto
   thumb_px:   1400                                                # patho2_gliomas_review.py のサムネイルの長辺（px）
-  override:   data/patho2_gliomas/representative_override.csv   # 任意。patho2_gliomas_select.py の手動上書き（case, file）。無ければ規則どおり
+  review_port: 8765                                               # patho2_gliomas_review.py serve のポート（127.0.0.1）
+  representatives: data/patho2_gliomas/representatives.csv       # 1 症例 1 枚の代表 HE（case, file, note）。review.py が書き、解析が読む。file が EXCLUDE は除外
