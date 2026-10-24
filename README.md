@@ -32,10 +32,11 @@ stain_response.py    # 埋め込みの施設間シフト方向 u への射影 s 
 figs/                # 論文の図表を out/ の解析結果から組み立てる（重い計算はしない）
   __init__.py        # 図表番号の唯一の定義（MAIN / TABLES / SUPP の順序）
   common.py          # 出力先・共通スタイル・保存
-  tissue.py / umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py  # 図（内容名）
+  tissue.py / umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py / pathology_checks.py  # 図（内容名）
+  umap_held_out.py   # Fig 7a–b（held-out 症例）の描画。pathology_checks.py から呼ぶ（単体では登録しない）
   cohort.py          # 表
   subtype_distance_heatmap.py / sft_distance.py / histotype.py / shift_sample_size.py  # Supplementary の図
-  performance.py / histotype_performance.py / method_comparison.py / meanpool_comparison.py  # Supplementary の表
+  performance.py / histotype_performance.py / method_comparison.py / meanpool_comparison.py / stat6_groups.py  # Supplementary の表
   meanpool_geometry.py  # 参考用（登録していない。figs.all では作らない）
   all.py             # 自分の出力を掃除してから全部作る
 utils/

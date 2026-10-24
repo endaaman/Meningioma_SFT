@@ -18,6 +18,7 @@ MAIN = [
     "shift_geometry",       # Fig 4 施設差の幾何
     "classification",       # Fig 5 施設間の分類性能（4 条件）
     "subtype_structure",    # Fig 6 サブタイプ構造（樹形図 補正なし / GAN / ComBat / centroid の 4 段、euc_mean）
+    "pathology_checks",     # Fig 7 病理医の判断との対応: held-out 症例（旧 Fig S5、umap_held_out.py の描画）＋ STAT6 を染めた patho2 症例の UMAP 上の位置と距離差（stat6_case.py）
 ]
 # 表（順 = Table 番号）
 TABLES = [
@@ -29,7 +30,6 @@ SUPP = [
     "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
     "histotype",                      # 組織型（主要 5 クラス）の施設間分類の混同行列（2 方向 × 5 条件、Macenko を含む）
     "shift_sample_size",              # 平行移動のシフト推定に要る例数（無作為 / 単一組織型 × n。shift_estimation.py）
-    "umap_held_out",                  # held-out 症例（EBRAINS pat_id 831 の 3 枚）を Fig 3 の UMAP に写す（補正なし / 平行移動、拡大 ＋ inset）
 ]
 # Supplementary の表（順 = Table S 番号）
 SUPP_TABLES = [
@@ -37,10 +37,12 @@ SUPP_TABLES = [
     "histotype_performance",          # 組織型分類の balanced accuracy・macro F1（95% CI、5 条件）
     "method_comparison",              # 補正法の比較（全指標、Macenko・相似変換を含む 6 条件。相似変換はここだけ）
     "meanpool_comparison",            # 補正法の比較（平均プーリング、5 条件。meanpool.py）
+    "stat6_groups",                   # STAT6 の状態の群 × 条件: SFT 割り当て n/N と距離差の中央値 [IQR]（EBRAINS 重心。stat6_case.py）
 ]
 # 登録を外したもの（スクリプトは残す、figs.all では作らないが、番号付きの古い出力は all の掃除で消す）
 UNREGISTERED = [
     "meanpool_geometry",              # 施設差の幾何: 平均プーリング vs TITAN。数値は Results 本文に書く（ken 決定 2026-10-20）
+    "umap_held_out",                  # 旧 Fig S5。Fig 7a–b として pathology_checks に取り込んだ（ken 決定 2026-10-24）。描画コードはそのまま使う
 ]
 
 

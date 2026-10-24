@@ -1,4 +1,8 @@
-"""held-out 症例（EBRAINS pat_id 831、ラベル矛盾でコホートから除外した 3 枚）を Fig 3 の UMAP に out-of-sample で写した図（Supplementary）。
+"""held-out 症例（EBRAINS pat_id 831、ラベル矛盾でコホートから除外した 3 枚）を Fig 3 の UMAP に out-of-sample で写した 2 パネル。
+
+旧 Supplementary Fig S5。2026-10-24（ken 決定）に本文 Fig 7 の a–b へ昇格し、図全体は figs/pathology_checks.py が組む。
+このモジュールは描画（draw）を持ち、pathology_checks から呼ばれる。単体では figs/__init__.py に登録していない
+（`uv run python -m figs.umap_held_out` は Fig 7 全体を作る）。
 
 3 枚は時間順に ① SFT 初発（27 歳）→ ② Atypical meningioma（同年、別部位）→ ③ SFT 再発（翌年）。重心法（held_out_case.py）では
 ① が両施設の重心で SFT 側、② と ③ は髄膜腫側（最近傍の組織型は Fibrous）。UMAP 上でどこに落ちるかを、補正なしと平行移動の
@@ -10,10 +14,10 @@
     3 枚は EBRAINS（reference 側）なので埋め込みは条件によらず同じ。条件で変わるのは UMAP の fit（patho2 側の補正後の点群）。
 
 入力: output_dir/umap/{variant}/coords.csv・heldout_coords.csv（umap_plot.py。held-out は fit に使わず transform だけ）
-出力: fig/{fig S n}_umap_held_out.{png,pdf}（番号は figs/__init__.py）
+出力: figs.pathology_checks を参照（fig/{fig n}_pathology_checks.{png,pdf}）
 
 Usage:
-    uv run python -m figs.umap_held_out
+    uv run python -m figs.pathology_checks
 """
 from __future__ import annotations
 
@@ -23,11 +27,9 @@ import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, Rectangle
 
-from figs import label
-from figs.common import CONDITION_LABELS, FONT, SITE_DISPLAY, config, out_root, panel, save, src_markers
+from figs.common import CONDITION_LABELS, FONT, SITE_DISPLAY, out_root, panel, src_markers
 from utils.display import subtype_color_map
 
-NAME = "umap_held_out"
 VARIANTS = ["original", "centroid"]
 TITLES = {**CONDITION_LABELS, "original": "Uncorrected"}   # Fig 3 と同じ表記
 FIBROUS = "Fibrous meningioma"
@@ -91,19 +93,25 @@ def _zoom_box(held: pd.DataFrame, fibrous: pd.DataFrame) -> tuple[float, float, 
     return cx - ZOOM_W / 2, cx + ZOOM_W / 2, cy - ZOOM_H / 2, cy + ZOOM_H / 2
 
 
-def build(cfg: dict) -> plt.Figure:
+def load(cfg: dict) -> tuple[dict[str, pd.DataFrame], dict[str, pd.DataFrame]]:
+    """UMAP 座標（variant → コホート / held-out 3 枚、ORDER の順）。"""
     root = out_root(cfg)
-    ref = cfg["reference"]
     coords = {v: pd.read_csv(root / "umap" / cfg["variants"].get(v, v) / "coords.csv", dtype={"case_id": str})
               for v in VARIANTS}
     held = {v: pd.read_csv(root / "umap" / cfg["variants"].get(v, v) / "heldout_coords.csv", dtype={"case_id": str})
             .set_index("case_id").loc[[c for c, _ in ORDER]].reset_index() for v in VARIANTS}
+    return coords, held
+
+
+def draw(axes, cfg: dict, letters: str = "ab") -> tuple[list, str]:
+    """2 つの ax に a: 補正なし / b: 平行移動 を描く（拡大 ＋ inset）。凡例のハンドルと、番号の注記（1 行）を返す。"""
+    ref = cfg["reference"]
+    coords, held = load(cfg)
     color = _colors(coords["original"], cfg)
     src_mkr = src_markers(cfg, sorted(coords["original"]["source"].unique()))
     held_mkr = src_mkr[ref]   # held-out は reference 施設のスライド
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.9))
-    for ax, v, letter in zip(axes, VARIANTS, "ab"):
+    for ax, v, letter in zip(axes, VARIANTS, letters):
         c, h = coords[v], held[v]
         x0, x1, y0, y1 = _zoom_box(h, c[(c["source"] == ref) & (c["subtype"] == FIBROUS)])
         _scatter(ax, c, color, src_mkr, s=16, alpha=0.9)
@@ -134,7 +142,7 @@ def build(cfg: dict) -> plt.Figure:
         for sp in ins.spines.values():
             sp.set_linewidth(0.6)
 
-    # 凡例（2 パネル共通、下に横並び）: 診断の色 / 施設の形 / held-out の番号
+    # 凡例（2 パネル共通）: 診断の色 / 施設の形 / held-out の番号
     handles = [Patch(facecolor=color[next(s for s in color if "sft" in s.lower())], label="SFT")]
     handles += [Patch(facecolor=color[sub], label=sub) for sub in HIGHLIGHT]
     handles += [Patch(facecolor=MEN_COLOR, label="Other meningioma")]
@@ -142,18 +150,25 @@ def build(cfg: dict) -> plt.Figure:
                 for t, m in src_mkr.items()]
     handles += [Line2D([0], [0], marker=held_mkr, mfc="white", mec="black", mew=1.0, ls="none", markersize=7,
                        label="Held-out slides (one EBRAINS patient)")]
+    note = "   ".join(f"{i} {t}" for i, (_, t) in enumerate(ORDER, start=1))
+    return handles, note
+
+
+def build(cfg: dict) -> plt.Figure:
+    """単体の 2 パネル図（旧 Fig S5 の形。参照用。保存は pathology_checks が担う）。"""
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.9))
+    handles, note = draw(axes, cfg)
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.075), ncol=4, frameon=False,
                handlelength=1.0, handleheight=0.9, columnspacing=1.0, handletextpad=0.4, fontsize=FONT - 1)
-    fig.text(0.5, 0.02, "   ".join(f"{i} {t}" for i, (_, t) in enumerate(ORDER, start=1)),
-             ha="center", va="bottom", fontsize=FONT - 1)
+    fig.text(0.5, 0.02, note, ha="center", va="bottom", fontsize=FONT - 1)
     fig.subplots_adjust(left=0.05, right=0.99, top=0.93, bottom=0.22, wspace=0.12)
     return fig
 
 
 def main() -> None:
-    print(f"[{label(NAME)}] {NAME}")
-    cfg = config()
-    save(build(cfg), cfg, NAME)
+    """旧 Fig S5 は Fig 7 の a–b になった（ken 決定 2026-10-24）。図全体を作る。"""
+    from figs import pathology_checks
+    pathology_checks.main()
 
 
 if __name__ == "__main__":
