@@ -10,13 +10,15 @@
       免疫染色として除外。判定は全ファイル分を index CSV に残す（監査用）。
 出力:
     out_root/<群>/<症例番号>/<元ファイル名>.h5
-      論文と同じキー: conch15_768/{features,coordinates}（512 px / 0.5 mpp。wsi-toolbox の FeatureExtractionCommand =
-      `wt extract --preset conch15_768 -S 512 --mpp 0.5`。パッチ画像のキャッシュは持たない）と conch15_768/aggregates/titan/feature
-      （titan_batch.encode_file = titan.py / wt aggregate と同じ計算）。
+      EBRAINS_embeddings（学生が作った EBRAINS 全体の特徴）と同じ構成: wsi-toolbox 0.7.0 の `wt extract --preset conch15 --outputs cls,proj
+      -S 512 --mpp 0.5` 相当（FeatureExtractionCommand(outputs=("cls","proj"))）で、1 回の forward から
+      conch15/{features(1024 = cls),coordinates} と conch15_768/{features(768 = attn-pool 射影、TITAN 入力),coordinates} の両方を書く
+      （パッチ画像のキャッシュは持たない）。続けて conch15_768/aggregates/titan/feature（titan_batch.encode_file = titan.py / wt aggregate と同じ計算）。
       1 症例に HE が複数あるときは全部作る。どのスライドを症例の代表にするかは解析側で選ぶ（index CSV の n_patches・recut を材料にする）。
     output_dir/patho2_gliomas/slides.csv   … 全 ndpi の一覧（group, label, case, file, stain, is_he, recut, h5, n_patches, status）
     output_dir/patho2_gliomas/extract_log.csv … 処理ログ（1 本ずつ追記）
-既存の h5 は、特徴と TITAN が揃っていればスキップ、TITAN だけ無ければ TITAN だけ書く、特徴が無ければ作り直す。
+既存の h5 は、両方の特徴と TITAN が揃っていればスキップ、TITAN だけ無ければ TITAN だけ書く、特徴がどちらか欠けていれば作り直す
+（0.6.2 の conch15_768 だけの h5 も作り直しの対象）。
 
 Usage:
     uv run python -u patho2_gliomas_extract.py --dry-run           # HE 判定と件数だけ（index CSV は書く。GPU を使わない）
@@ -33,10 +35,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import h5py
 import pandas as pd
 import torch
 
-from titan_batch import encode_file, load_titan, resolve_device, titan_status
+from titan_batch import encode_file, load_titan, resolve_device
 from utils.loader import load_config
 
 SKIP_DIRS = {"unused", "todo", "その他", "small", "other"}
@@ -62,6 +65,21 @@ def classify(stem: str) -> tuple[str, bool, bool]:
     compact = stain.replace(" ", "").replace("_", "")
     is_he = stain == "" or bool(HE_RE.search(stain)) or compact in ("HERECUT", "RECUTHE")   # "HERECUT" は区切りなしの再切片 HE
     return stain, is_he, "RECUT" in stain
+
+
+def h5_state(h5_path: Path, feature_groups: list[str], tile_model: str, keys: dict) -> str:
+    """'done'（全グループの特徴 + TITAN）/ 'todo'（特徴は揃っているが TITAN 無し）/ 'no_features'（どれか欠ける）/ 'error' / 'missing'。"""
+    if not h5_path.exists():
+        return "missing"
+    try:
+        with h5py.File(h5_path, "r") as f:
+            for g in feature_groups:
+                grp = f.get(g)
+                if grp is None or keys["tile_features"] not in grp or keys["tile_coords"] not in grp:
+                    return "no_features"
+            return "done" if keys["slide_feature"] in f[tile_model] else "todo"
+    except OSError:
+        return "error"
 
 
 def build_index(wsi_root: Path, out_root: Path, groups: dict[str, str], order: list[str]) -> pd.DataFrame:
@@ -97,7 +115,10 @@ def main() -> None:
     wsi_root, out_root = Path(pcfg["wsi_root"]), Path(pcfg["out_root"])
     groups: dict[str, str] = pcfg["groups"]
     order: list[str] = args.groups or pcfg.get("priority", list(groups))
-    tile_model: str = pcfg.get("tile_model", "conch15_768")
+    tile_model: str = pcfg.get("tile_model", "conch15_768")           # TITAN の入力グループ
+    preset: str = pcfg.get("preset", "conch15")
+    outputs: tuple[str, ...] = tuple(pcfg.get("outputs", ["cls", "proj"]))
+    feature_groups = [preset if o == "cls" else f"{preset}_768" for o in outputs if o in ("cls", "proj")]   # 0.7.0 の書き先: cls → {preset}/、proj → {preset}_768/
     keys = cfg["keys"]
     out_dir = Path(cfg["output_dir"]) / "patho2_gliomas"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -124,9 +145,9 @@ def main() -> None:
     import wsi_toolbox as wt
     wt.set_default_progress("none")
     device = resolve_device(pcfg.get("device", "auto"))
-    print(f"\ndevice: {device}  targets: {len(targets)} HE slides")
+    print(f"\ndevice: {device}  targets: {len(targets)} HE slides  preset: {preset} outputs: {outputs} -> {feature_groups}")
     extract = wt.FeatureExtractionCommand(
-        model=tile_model, preset=tile_model, device=device,
+        model=preset, preset=preset, outputs=outputs, device=device,
         batch_size=int(pcfg.get("batch_size", 256)), overwrite=True,
         patch_size=int(pcfg.get("patch_size", 512)), target_mpp=float(pcfg.get("target_mpp", 0.5)),
     )
@@ -144,7 +165,7 @@ def main() -> None:
             h5_path, wsi_path = Path(r.h5), Path(r.wsi)
             t0 = time.time()
             try:
-                state = titan_status(h5_path, tile_model, keys) if h5_path.exists() else "missing"
+                state = h5_state(h5_path, feature_groups, tile_model, keys)
                 if state == "done" and not args.overwrite:
                     status, n = "skip", 0
                 else:
@@ -166,11 +187,10 @@ def main() -> None:
                 lf.flush()
 
     # index を更新（h5 の有無・パッチ数・状態）
-    import h5py
     n_patches, states = [], []
     for r in index.itertuples(index=False):
         p = Path(r.h5)
-        st = titan_status(p, tile_model, keys) if (r.is_he and p.exists()) else ("" if not r.is_he else "missing")
+        st = h5_state(p, feature_groups, tile_model, keys) if r.is_he else ""
         states.append(st)
         n = ""
         if st in ("done", "todo"):

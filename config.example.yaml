@@ -357,7 +357,9 @@ patho2_gliomas:
   out_root:   /mnt/server42/AI/Datasets/Patho2Gliomas_embeddings  # <群>/<症例番号>/<元ファイル名>.h5
   groups:     {A: ast, G: glm, O: odg, L: lym, M: met}            # ディレクトリ → ラベル略号（WSI_BT と同じ）。B は対象外
   priority:   [A, G, O, L, M]                                     # 処理順（グリオーマ 3 群 → リンパ腫 → 転移）
-  tile_model: conch15_768
+  preset:     conch15                                             # wsi-toolbox 0.7.0: 1 回の forward で cls（1024）と proj（768）を取る
+  outputs:    [cls, proj]                                         # cls → conch15/features、proj → conch15_768/features（EBRAINS_embeddings と同じ構成）
+  tile_model: conch15_768                                         # TITAN の入力グループ
   patch_size: 512
   target_mpp: 0.5
   batch_size: 256
