@@ -28,18 +28,18 @@ TABLES = [
 SUPP = [
     "subtype_distance_heatmap",       # サブタイプ間距離のヒートマップ 4 枚（補正なし / GAN / ComBat / centroid、euc_mean、固定順）
     "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
+    "site_axis_stain",                # 施設軸と染色の関係: 施設シフト方向への射影 s vs H / E（十分位の bin 平均）、画像レベル補正後に残る施設差の u 方向 / 直交分解、平均色で説明される割合（stain_response.py）
     "histotype",                      # 組織型（主要 5 クラス）の施設間分類の混同行列（2 方向 × 5 条件、Macenko を含む）
     "shift_sample_size",              # 平行移動のシフト推定に要る例数（無作為 / 単一組織型 × n。shift_estimation.py）
-    "site_axis_stain",                # 施設軸と染色の関係: 施設シフト方向への射影 s vs H / E（十分位の bin 平均）、画像レベル補正後に残る施設差の u 方向 / 直交分解、平均色で説明される割合（stain_response.py）
 ]
 # Supplementary の表（順 = Table S 番号）
 SUPP_TABLES = [
+    "meanpool_comparison",            # 補正法の比較（平均プーリング、5 条件。meanpool.py）
+    "knn_performance",                # 施設間の分類性能（スライド単位の k 近傍法、k = 1 / 5 / 15、5 条件。Table S1 の平均に依らない対照。knn.py）
+    "method_comparison",              # 補正法の比較（全指標、Macenko・相似変換を含む 6 条件。相似変換はここだけ）
     "performance",                    # 施設間の分類性能（SFT vs 髄膜腫、5 条件、旧 Table 2。主な数値は Results 本文と Fig 5b）
     "histotype_performance",          # 組織型分類の balanced accuracy・macro F1（95% CI、5 条件）
-    "method_comparison",              # 補正法の比較（全指標、Macenko・相似変換を含む 6 条件。相似変換はここだけ）
-    "meanpool_comparison",            # 補正法の比較（平均プーリング、5 条件。meanpool.py）
     "stat6_groups",                   # STAT6 の状態の群 × 条件: SFT 割り当て n/N と距離差の中央値 [IQR]（EBRAINS 重心。stat6_case.py）
-    "knn_performance",                # 施設間の分類性能（スライド単位の k 近傍法、k = 1 / 5 / 15、5 条件。Table S1 の平均に依らない対照。knn.py）
 ]
 # 登録を外したもの（スクリプトは残す、figs.all では作らないが、番号付きの古い出力は all の掃除で消す）
 UNREGISTERED = [
