@@ -38,6 +38,7 @@ SUPP_TABLES = [
     "method_comparison",              # 補正法の比較（全指標、Macenko・相似変換を含む 6 条件。相似変換はここだけ）
     "meanpool_comparison",            # 補正法の比較（平均プーリング、5 条件。meanpool.py）
     "stat6_groups",                   # STAT6 の状態の群 × 条件: SFT 割り当て n/N と距離差の中央値 [IQR]（EBRAINS 重心。stat6_case.py）
+    "knn_performance",                # 施設間の分類性能（スライド単位の k 近傍法、k = 1 / 5 / 15、5 条件。Table S1 の平均に依らない対照。knn.py）
 ]
 # 登録を外したもの（スクリプトは残す、figs.all では作らないが、番号付きの古い出力は all の掃除で消す）
 UNREGISTERED = [
