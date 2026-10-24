@@ -233,6 +233,8 @@ def cmd_serve(cfg: dict, host: str, port: int) -> None:
     choices = read_choices(csv_path)
     n_single = prefill_single(choices, cases)
     write_choices(csv_path, choices, cases)
+    page = page_data(cfg, cases)
+    generated = page["generated"]
     html_bytes = build_html(cfg, cases).encode("utf-8")
     print(f"cases {len(cases)}, HE {sum(len(c['slides']) for c in cases)}, "
           f"選択済み {len(choices)}（HE 1 枚で自動 {n_single}）\ncsv: {csv_path}\nlisten: {host}:{port}  open: http://{_shown_host(host)}:{port}/")
@@ -262,7 +264,7 @@ def cmd_serve(cfg: dict, host: str, port: int) -> None:
                 self.wfile.write(html_bytes)
             elif self.path == "/state":
                 with lock:
-                    self._json({"choices": choices, "csv": str(csv_path)})
+                    self._json({"choices": choices, "csv": str(csv_path), "generated": generated})
             elif (m := DZI_RE.match(self.path)):
                 self._bytes(tiles.xml(int(m.group(1))), "application/xml")
             elif (m := TILE_RE.match(self.path)):
@@ -393,6 +395,7 @@ async function post(caseId, file){
   try {
     const r = await fetch('/choice', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({case: caseId, file})});
     const j = await r.json(); if (j.error) throw new Error(j.error);
+    if (j.generated && j.generated !== DATA.generated) { location.reload(); return; }   // サーバーが再起動されていたら読み直す（番号がずれるのを防ぐ）
     choice = j.choices; document.getElementById('err').textContent = '';
   } catch (e) { document.getElementById('err').textContent = '保存できませんでした: ' + e.message; }
   render();
@@ -499,7 +502,8 @@ function importCsv(f){
 async function init(){
   const sel = document.getElementById('fGroup'); for (const [k, v] of Object.entries(DATA.groups)) { const o = document.createElement('option'); o.value = k; o.textContent = v; sel.appendChild(o); }
   try {
-    if (location.protocol.startsWith('http')) { const r = await fetch('/state'); if (r.ok) { const j = await r.json(); choice = j.choices; server = true; document.getElementById('mode').textContent = 'クリックごとに ' + j.csv + ' に保存'; } }
+    if (location.protocol.startsWith('http')) { const r = await fetch('/state'); if (r.ok) { const j = await r.json(); choice = j.choices; server = true; document.getElementById('mode').textContent = 'クリックごとに ' + j.csv + ' に保存';
+      setInterval(async () => { try { const r = await fetch('/state'); if (!r.ok) return; const j = await r.json(); if (j.generated && j.generated !== DATA.generated) location.reload(); else if (!viewing) { choice = j.choices; render(); } } catch (e) {} }, 15000); } }
   } catch (e) {}
   if (!server) {
     try { choice = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { choice = {}; }
