@@ -9,6 +9,8 @@ config.yaml          # 全設定（パス・色・パラメータ）
 gan.py               # Cycle-GAN による補正後のバッチをエンコードして HDF5 書き込みするラッパー
 macenko.py           # 色正規化（Macenko、patho2 → EBRAINS）: EBRAINS から目標を推定し、patho2 のパッチを正規化して CONCH でエンコード
 titan.py             # TITAN による WSI-level aggregate（--variants で対象 variant を指定できる）
+titan_batch.py       # 外部の h5 の木に TITAN を書く（EBRAINS 全体の CONCH 特徴 = /mnt/server42/AI/Datasets/EBRAINS_embeddings。config の ebrains_embeddings.priority のグリオーマを先に、残りは名前順。ログは out/ebrains_embeddings/）
+patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor）の HE から CONCH v1.5 + TITAN を作り Patho2Gliomas_embeddings に置く。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
 nc.py                # 訓練不要の施設間分類（最近傍重心法）: SFT vs 髄膜腫と組織型。Fig 5・Table S1・Fig S3・Table S2 の元
@@ -89,6 +91,12 @@ uv run python harmonization.py
 uv run python -u meanpool.py all   # 平均プーリングの対照（build は NFS から全パッチ埋め込みを読むので 10〜20 分）
 uv run python stain_response.py    # paper_color.py / macenko.py の slide_color.csv と meanpool.py build の後。TITAN と平均プーリングの両方
 uv run python dataset.py   # 他スクリプトと独立。任意のタイミングで実行可
+
+# グリオーマ（平行移動 Δ の転移テスト用。論文のコホートとは別の h5 の木。どちらも既存はスキップするので途中から再開できる）
+uv run python -u titan_batch.py --dry-run                  # EBRAINS_embeddings の対象と順番（グリオーマ → 残り）
+uv run python -u titan_batch.py                            # 学生が作った CONCH 特徴（3,121 本）に TITAN を書く（約 2 秒/本）
+uv run python -u patho2_gliomas_extract.py --dry-run       # 院内の HE 判定の監査（out/patho2_gliomas/slides.csv）
+uv run python -u patho2_gliomas_extract.py --groups A G O  # 院内グリオーマ 3 群の HE 全部を抽出（約 30 秒/枚）。L（リンパ腫）M（転移）は指定したときだけ
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
 # ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる

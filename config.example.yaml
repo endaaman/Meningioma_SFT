@@ -331,3 +331,34 @@ stat6:
 
 # ---- 出力 ----
 output_dir: ./output
+# ---- titan_batch.py（EBRAINS 全体の CONCH 特徴 = EBRAINS_embeddings に TITAN を書き込む。グリオーマを先に、残りは名前順）----
+ebrains_embeddings:
+  root:       /mnt/server42/AI/Datasets/EBRAINS_embeddings   # <診断名>/<uuid>_hdf.h5。学生が wt extract --preset conch15 で作った特徴（conch15 と conch15_768、512 px / 0.5 mpp）。「1p/19q」は入れ子
+  tile_model: conch15_768
+  device:     auto
+  log:        ebrains_embeddings/titan_log.csv              # output_dir 配下
+  priority:                                                # 先に回す診断名ディレクトリ（WHO 2016 のびまん性グリオーマ）。順番どおり
+    - "Glioblastoma, IDH-wildtype"
+    - "Glioblastoma, IDH-mutant"
+    - "Anaplastic astrocytoma, IDH-mutant"
+    - "Anaplastic astrocytoma, IDH-wildtype"
+    - "Diffuse astrocytoma, IDH-mutant"
+    - "Diffuse astrocytoma, IDH-wildtype"
+    - "Oligodendroglioma, IDH-mutant and 1p"                # 実体は …1p/19q codeleted/（入れ子）
+    - "Anaplastic oligodendroglioma, IDH-mutant and 1p"
+    - "Gemistocytic astrocytoma, IDH-mutant"
+    - "Giant cell glioblastoma"
+    - "Gliosarcoma"
+    - "Diffuse midline glioma, H3 K27M-mutant"
+
+# ---- patho2_gliomas_extract.py（院内グリオーマ Patho2Gliomas の HE から CONCH v1.5 + TITAN を作る）----
+patho2_gliomas:
+  wsi_root:   /mnt/server42/AI/Datasets/Patho2Gliomas             # <群>/<症例番号>/*.ndpi（旧 BrainTumor）
+  out_root:   /mnt/server42/AI/Datasets/Patho2Gliomas_embeddings  # <群>/<症例番号>/<元ファイル名>.h5
+  groups:     {A: ast, G: glm, O: odg, L: lym, M: met}            # ディレクトリ → ラベル略号（WSI_BT と同じ）。B は対象外
+  priority:   [A, G, O, L, M]                                     # 処理順（グリオーマ 3 群 → リンパ腫 → 転移）
+  tile_model: conch15_768
+  patch_size: 512
+  target_mpp: 0.5
+  batch_size: 256
+  device:     auto
