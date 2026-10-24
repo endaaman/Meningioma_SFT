@@ -366,5 +366,6 @@ patho2_gliomas:
   batch_size: 256
   device:     auto
   thumb_px:   1400                                                # patho2_gliomas_review.py のサムネイルの長辺（px）
-  review_port: 8765                                               # patho2_gliomas_review.py serve のポート（127.0.0.1）
+  review_host: 0.0.0.0                                            # patho2_gliomas_review.py serve の bind 先。SSH 先のブラウザから開くので LAN に公開（127.0.0.1 なら手元だけ）
+  review_port: 8765                                               # patho2_gliomas_review.py serve のポート
   representatives: data/patho2_gliomas/representatives.csv       # 1 症例 1 枚の代表 HE（case, file, note）。review.py が書き、解析が読む。file が EXCLUDE は除外

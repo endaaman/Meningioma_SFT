@@ -8,7 +8,7 @@ file が EXCLUDE の症例は除外。note は single（HE 1 枚）/ manual（�
 手順:
     thumbs   slides.csv（patho2_gliomas_extract.py が書く）の HE 全部について WSI からサムネイル（長辺 thumb_px、JPEG）を作る
              → out/patho2_gliomas/review/thumbs/<群>/<症例>/<元名>.jpg。既存はスキップ
-    serve    ブラウザで選ぶサーバーを起動（http://127.0.0.1:{review_port}/）。クリックした瞬間に representatives.csv が書かれる。
+    serve    ブラウザで選ぶサーバーを起動（{review_host}:{review_port}。SSH 先のブラウザから開くなら review_host を 0.0.0.0 に）。クリックした瞬間に representatives.csv が書かれる。
              起動時に HE 1 枚の症例を選択済みとして埋める。thumbs は先に済ませておく
     html     サーバーを使わないとき用: 静的な out/patho2_gliomas/review/index.html を組む（選択はブラウザに保存、「CSV を書き出す」で
              representatives.csv を保存して data/patho2_gliomas/ に置く）
@@ -165,7 +165,19 @@ def cmd_html(cfg: dict) -> None:
 
 # ---- serve ----
 
-def cmd_serve(cfg: dict, port: int) -> None:
+def _shown_host(host: str) -> str:
+    """0.0.0.0 で待つときは案内用にこのホストの IP を出す。"""
+    if host not in ("0.0.0.0", "::"):
+        return host
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("10.255.255.255", 1)); ip = s.getsockname()[0]; s.close()
+        return ip
+    except OSError:
+        return socket.gethostname()
+
+
+def cmd_serve(cfg: dict, host: str, port: int) -> None:
     rdir = review_dir(cfg)
     csv_path = representatives_path(cfg)
     cases = load_cases(cfg)
@@ -175,7 +187,7 @@ def cmd_serve(cfg: dict, port: int) -> None:
     write_choices(csv_path, choices, cases)
     html_bytes = build_html(cfg, cases).encode("utf-8")
     print(f"cases {len(cases)}, HE {sum(len(c['slides']) for c in cases)}, "
-          f"選択済み {len(choices)}（HE 1 枚で自動 {n_single}）\ncsv: {csv_path}\nopen: http://127.0.0.1:{port}/")
+          f"選択済み {len(choices)}（HE 1 枚で自動 {n_single}）\ncsv: {csv_path}\nlisten: {host}:{port}  open: http://{_shown_host(host)}:{port}/")
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):
@@ -224,7 +236,7 @@ def cmd_serve(cfg: dict, port: int) -> None:
                 write_choices(csv_path, choices, cases)
                 self._json({"choices": choices, "csv": str(csv_path)})
 
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
 
 
 HTML_TEMPLATE = r"""<!doctype html>
@@ -371,13 +383,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["thumbs", "serve", "html"])
     ap.add_argument("--workers", type=int, default=4, help="thumbs の並列数（NFS 読み）")
+    ap.add_argument("--host", default=None, help="serve の bind 先（既定: config の patho2_gliomas.review_host、無ければ 127.0.0.1。SSH 先から開くなら 0.0.0.0）")
     ap.add_argument("--port", type=int, default=None, help="serve のポート（既定: config の patho2_gliomas.review_port）")
     args = ap.parse_args()
     cfg = load_config()
     if args.cmd == "thumbs":
         cmd_thumbs(cfg, args.workers)
     elif args.cmd == "serve":
-        cmd_serve(cfg, args.port or int(cfg["patho2_gliomas"].get("review_port", 8765)))
+        pcfg = cfg["patho2_gliomas"]
+        cmd_serve(cfg, args.host or str(pcfg.get("review_host", "127.0.0.1")), args.port or int(pcfg.get("review_port", 8765)))
     else:
         cmd_html(cfg)
 
