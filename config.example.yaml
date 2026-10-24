@@ -364,3 +364,4 @@ patho2_gliomas:
   target_mpp: 0.5
   batch_size: 256
   device:     auto
+  override:   data/patho2_gliomas/representative_override.csv   # 任意。patho2_gliomas_select.py の手動上書き（case, file）。無ければ規則どおり
