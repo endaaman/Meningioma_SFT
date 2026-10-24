@@ -8,7 +8,9 @@ file が EXCLUDE の症例は除外。note は single（HE 1 枚）/ manual（�
 手順:
     thumbs   slides.csv（patho2_gliomas_extract.py が書く）の HE 全部について WSI からサムネイル（長辺 thumb_px、JPEG）を作る
              → out/patho2_gliomas/review/thumbs/<群>/<症例>/<元名>.jpg。既存はスキップ
-    serve    ブラウザで選ぶサーバーを起動（{review_host}:{review_port}。SSH 先のブラウザから開くなら review_host を 0.0.0.0 に）。クリックした瞬間に representatives.csv が書かれる。
+    serve    ブラウザで選ぶサーバーを起動（{review_host}:{review_port}。SSH 先のブラウザから開くなら review_host を 0.0.0.0 に）。
+             サムネイルをダブルクリックすると WSI をそのまま拡大して見られる（wsi_toolbox.dzi で NDPI から Deep Zoom タイルをその場で切り、
+             OpenSeadragon（cdnjs）で表示。事前生成なし）。クリックした瞬間に representatives.csv が書かれる。
              起動時に HE 1 枚の症例を選択済みとして埋める。thumbs は先に済ませておく
     html     サーバーを使わないとき用: 静的な out/patho2_gliomas/review/index.html を組む（選択はブラウザに保存、「CSV を書き出す」で
              representatives.csv を保存して data/patho2_gliomas/ に置く）
@@ -23,6 +25,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -98,18 +101,20 @@ def load_cases(cfg: dict) -> list[dict]:
     he["n_patches"] = pd.to_numeric(he["n_patches"], errors="coerce")
     order = list(cfg["patho2_gliomas"].get("priority", ["A", "G", "O", "L", "M"]))
     cases = []
+    slide_paths: list[str] = []   # id → WSI のパス（serve の DZI 用）
     for (group, case), df in he.groupby(["group", "case"], sort=False):
         items = []
         for r in df.sort_values("file").itertuples(index=False):
             tp = thumb_path(rdir, r)
+            slide_paths.append(r.wsi)
             items.append({
-                "file": r.file, "recut": bool(r.recut),
+                "id": len(slide_paths), "file": r.file, "recut": bool(r.recut),
                 "n_patches": None if pd.isna(r.n_patches) else int(r.n_patches),
                 "thumb": str(tp.relative_to(rdir)) if tp.exists() else None,
             })
         cases.append({"group": group, "label": df["label"].iloc[0], "case": str(case), "slides": items})
     cases.sort(key=lambda c: (order.index(c["group"]) if c["group"] in order else 99, c["case"]))
-    return cases
+    return cases, slide_paths
 
 
 def read_choices(path: Path) -> dict[str, dict]:
@@ -156,7 +161,7 @@ def build_html(cfg: dict, cases: list[dict]) -> str:
 
 def cmd_html(cfg: dict) -> None:
     rdir = review_dir(cfg)
-    cases = load_cases(cfg)
+    cases, _ = load_cases(cfg)
     rdir.mkdir(parents=True, exist_ok=True)
     (rdir / "index.html").write_text(build_html(cfg, cases), encoding="utf-8")
     n_thumb = sum(1 for c in cases for s in c["slides"] if s["thumb"])
@@ -177,11 +182,54 @@ def _shown_host(host: str) -> str:
         return socket.gethostname()
 
 
+class DziCache:
+    """WSI を開いたまま持ち、Deep Zoom のタイルをその場で切る（スライドごとにロック。開くのは最大 max_open 本）。"""
+
+    def __init__(self, slide_paths: list[str], max_open: int = 8, tile_size: int = 256):
+        self.paths, self.max_open, self.tile_size = slide_paths, max_open, tile_size
+        self.lock = threading.Lock()
+        self.open: dict[int, tuple[threading.Lock, object]] = {}   # id → (lock, DziGenerator)
+        self.order: list[int] = []
+
+    def get(self, sid: int):
+        from wsi_toolbox import DziGenerator, create_wsi_file
+        with self.lock:
+            if sid in self.open:
+                self.order.remove(sid); self.order.append(sid)
+                return self.open[sid]
+            if sid < 0 or sid >= len(self.paths):
+                raise KeyError(sid)
+            while len(self.order) >= self.max_open:
+                old = self.order.pop(0); self.open.pop(old, None)
+            entry = (threading.Lock(), DziGenerator(create_wsi_file(self.paths[sid]), tile_size=self.tile_size))
+            self.open[sid] = entry; self.order.append(sid)
+            return entry
+
+    def xml(self, sid: int) -> bytes:
+        lk, dzi = self.get(sid)
+        with lk:
+            return dzi.xml().encode("utf-8")
+
+    def tile(self, sid: int, level: int, col: int, row: int) -> bytes | None:
+        from wsi_toolbox import DziTileNotFound, encode_tile
+        lk, dzi = self.get(sid)
+        with lk:
+            try:
+                return encode_tile(dzi.tile(level, col, row), quality=85)
+            except DziTileNotFound:
+                return None
+
+
+DZI_RE = re.compile(r"^/dzi/(\d+)\.dzi$")
+TILE_RE = re.compile(r"^/dzi/(\d+)_files/(\d+)/(\d+)_(\d+)\.jpe?g$")
+
+
 def cmd_serve(cfg: dict, host: str, port: int) -> None:
     rdir = review_dir(cfg)
     csv_path = representatives_path(cfg)
-    cases = load_cases(cfg)
+    cases, slide_paths = load_cases(cfg)
     lock = threading.Lock()
+    tiles = DziCache(slide_paths)
     choices = read_choices(csv_path)
     n_single = prefill_single(choices, cases)
     write_choices(csv_path, choices, cases)
@@ -193,8 +241,8 @@ def cmd_serve(cfg: dict, host: str, port: int) -> None:
         def __init__(self, *a, **kw):
             super().__init__(*a, directory=str(rdir), **kw)
 
-        def log_message(self, fmt, *args):  # 静的ファイルのログは出さない
-            if self.command == "POST":
+        def log_message(self, fmt, *args):  # タイルや静的ファイルのログは出さない
+            if self.command == "POST" or "error" in fmt:
                 super().log_message(fmt, *args)
 
         def _json(self, obj, code: int = 200):
@@ -215,8 +263,28 @@ def cmd_serve(cfg: dict, host: str, port: int) -> None:
             elif self.path == "/state":
                 with lock:
                     self._json({"choices": choices, "csv": str(csv_path)})
+            elif (m := DZI_RE.match(self.path)):
+                self._bytes(tiles.xml(int(m.group(1))), "application/xml")
+            elif (m := TILE_RE.match(self.path)):
+                sid, level, col, row = (int(x) for x in m.groups())
+                try:
+                    body = tiles.tile(sid, level, col, row)
+                except Exception as e:  # 開けない WSI など
+                    self.log_message("dzi error %s: %s", self.path, e); body = None
+                if body is None:
+                    self.send_error(404)
+                else:
+                    self._bytes(body, "image/jpeg")
             else:
                 super().do_GET()
+
+        def _bytes(self, body: bytes, ctype: str):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "max-age=3600")
+            self.end_headers()
+            self.wfile.write(body)
 
         def do_POST(self):
             if self.path != "/choice":
@@ -258,8 +326,11 @@ main{padding:12px 16px}
 .case h3 .meta{color:var(--muted);font-weight:normal;font-size:13px}
 .case h3 .state{margin-left:auto;font-size:13px;font-weight:normal}
 .slides{display:flex;gap:10px;flex-wrap:wrap}
-.slide{width:300px;border:3px solid transparent;border-radius:8px;padding:4px;cursor:pointer;background:#f3f3f3}
-.slide:hover{background:#e9eef5}
+.slide{width:300px;border:3px solid transparent;border-radius:8px;padding:4px;background:#f3f3f3}
+.slide .imgwrap{cursor:zoom-in}
+.slide .imgwrap:hover img{outline:2px solid #9bbce0}
+.selbtn{font-size:12px;padding:2px 8px;margin:4px 6px 4px 0;border:1px solid #9bbce0;border-radius:6px;background:#fff;cursor:pointer}
+.selbtn.on{background:var(--sel);color:#fff;border-color:var(--sel)}
 .slide.selected{border-color:var(--sel);background:#e3eef9}
 .slide img{width:100%;height:auto;display:block;border-radius:4px;background:#fff}
 .slide .noimg{height:200px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
@@ -269,6 +340,12 @@ main{padding:12px 16px}
 .zoom{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
 .zoom img{max-width:98vw;max-height:96vh}
 .zoom.show{display:flex}
+.viewer{position:fixed;inset:0;background:#111;display:none;flex-direction:column;z-index:60}
+.viewer.show{display:flex}
+.vbar{display:flex;gap:12px;align-items:center;padding:6px 12px;background:#222;color:#eee;font-size:13px}
+.vbar #vhint{color:#aaa;margin-left:auto}
+.vbar button.on{background:#2e7d32;color:#fff;border-color:#2e7d32}
+#osd{flex:1}
 small.hint{color:var(--muted)}
 #mode{font-size:12px;color:var(--muted)}
 #err{color:var(--ex);font-size:13px}
@@ -288,10 +365,14 @@ small.hint{color:var(--muted)}
   </div>
 </header>
 <main>
-  <small class="hint">クリックで代表、もう一度クリックで解除。「除外」で症例ごと外す。画像をダブルクリックで拡大。HE が 1 枚の症例は最初から選択済み。</small>
+  <small class="hint">画像をクリックで WSI をそのまま拡大（← → で同じ症例の HE を切り替え）。代表は「代表にする」ボタン（カードでもビューアでも）。「除外」で症例ごと外す。HE が 1 枚の症例は最初から選択済み。</small>
   <div id="cases"></div>
 </main>
 <div class="zoom" id="zoom" onclick="this.classList.remove('show')"><img id="zoomimg"></div>
+<div class="viewer" id="viewer">
+  <div class="vbar"><button id="vprev" onclick="viewerStep(-1)">◀ 前の HE</button><span id="vtitle"></span><button id="vnext" onclick="viewerStep(1)">次の HE ▶</button><button class="primary" id="vpick" onclick="viewerPick()">この切片を代表にする</button><span id="vhint">ドラッグで移動、ホイールで拡大。← → で同じ症例の HE、Space で代表、Esc で閉じる</span><button onclick="closeViewer()">閉じる</button></div>
+  <div id="osd"></div>
+</div>
 <script>
 const DATA = __DATA__;
 const KEY = 'patho2_gliomas_review_v2';
@@ -330,20 +411,45 @@ function render(){
     const div = document.createElement('div');
     div.className = 'case' + (ch ? (ch.file === 'EXCLUDE' ? ' excluded' : ' done') : '');
     const state = ch ? (ch.file === 'EXCLUDE' ? '除外' : (ch.note === 'single' ? '1 枚なので自動' : '選択済み')) : '未選択';
+    if (viewing) updateViewerPick();
     let h = `<h3><span>${esc(c.case)}</span><span class="meta">${esc(DATA.groups[c.group] || c.group)} ・ HE ${c.slides.length} 枚</span>` +
             `<span class="state">${state} <button onclick="exclude('${esc(c.case)}')">${ch && ch.file === 'EXCLUDE' ? '除外を戻す' : '除外'}</button></span></h3><div class="slides">`;
     for (const s of c.slides) {
       const sel = ch && ch.file === s.file;
       const badges = (s.recut ? '<span class="badge recut">再切片</span>' : '') +
                      (s.n_patches != null ? `<span class="badge n">${s.n_patches} patches</span>` : '<span class="badge n">未抽出</span>');
-      const img = s.thumb ? `<img loading="lazy" src="${esc(url(s.thumb))}" ondblclick="event.stopPropagation();zoom('${esc(url(s.thumb))}')">` : '<div class="noimg">サムネイル未生成</div>';
-      h += `<div class="slide${sel ? ' selected' : ''}" onclick="if(event.detail>1)return;pick('${esc(c.case)}','${esc(s.file)}')">${img}<div class="cap">${badges}<br>${esc(s.file)}</div></div>`;
+      const img = s.thumb ? `<img loading="lazy" src="${esc(url(s.thumb))}">` : `<div class="noimg">サムネイル未生成</div>`;
+      const selbtn = `<button class="selbtn${sel ? ' on' : ''}" onclick="pick('${esc(c.case)}','${esc(s.file)}')">${sel ? '✔ 代表' : '代表にする'}</button>`;
+      h += `<div class="slide${sel ? ' selected' : ''}"><div class="imgwrap" title="クリックで拡大" onclick="openViewer('${esc(c.case)}',${c.slides.indexOf(s)})">${img}</div><div class="cap">${selbtn}${badges}<br>${esc(s.file)}</div></div>`;
     }
     div.innerHTML = h + '</div>'; root.appendChild(div);
   }
   document.getElementById('progress').textContent = `選択済み ${done} / ${total} 症例（うち 1 枚で自動 ${single}、除外 ${excluded}）`;
 }
 function zoom(src){ document.getElementById('zoomimg').src = src; document.getElementById('zoom').classList.add('show'); }
+// ---- WSI ビューア（serve のときだけ。Deep Zoom タイルをサーバーがその場で切る）----
+let osd = null, viewing = null;   // viewing = {caseId, idx}（症例の HE の何枚目か）
+function caseOf(caseId){ return DATA.cases.find(c => c.case === caseId); }
+function loadOsd(){
+  if (window.OpenSeadragon) return Promise.resolve();
+  return new Promise((ok, ng) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/openseadragon.min.js'; s.onload = ok; s.onerror = () => ng(new Error('OpenSeadragon を読み込めません（インターネットが要ります）')); document.head.appendChild(s); });
+}
+async function openViewer(caseId, idx){
+  const c = caseOf(caseId); const s = c.slides[idx];
+  if (!server) { if (s.thumb) zoom(url(s.thumb)); return; }
+  try { await loadOsd(); } catch (e) { document.getElementById('err').textContent = e.message; if (s.thumb) zoom(url(s.thumb)); return; }
+  viewing = {caseId, idx};
+  document.getElementById('vtitle').textContent = `${caseId}（${DATA.groups[c.group] || c.group}） ${idx + 1} / ${c.slides.length} 枚目 ・ ${s.file}` + (s.recut ? ' ・ 再切片' : '');
+  document.getElementById('viewer').classList.add('show');
+  if (!osd) osd = OpenSeadragon({id: 'osd', prefixUrl: 'https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/images/', showNavigator: true, navigatorPosition: 'BOTTOM_RIGHT', maxZoomPixelRatio: 2, animationTime: 0.3, imageLoaderLimit: 6});
+  osd.open('/dzi/' + s.id + '.dzi');
+  updateViewerPick();
+}
+function viewerStep(d){ if (!viewing) return; const c = caseOf(viewing.caseId); const n = (viewing.idx + d + c.slides.length) % c.slides.length; openViewer(viewing.caseId, n); }
+function updateViewerPick(){ if (!viewing) return; const c = caseOf(viewing.caseId); const file = c.slides[viewing.idx].file; const ch = choice[viewing.caseId]; const b = document.getElementById('vpick'); const on = ch && ch.file === file; b.textContent = on ? '✔ 代表に選択済み（クリックで解除）' : 'この切片を代表にする'; b.className = on ? 'on' : 'primary'; document.getElementById('vprev').style.display = document.getElementById('vnext').style.display = c.slides.length > 1 ? '' : 'none'; }
+function viewerPick(){ if (!viewing) return; const c = caseOf(viewing.caseId); pick(viewing.caseId, c.slides[viewing.idx].file); setTimeout(updateViewerPick, 300); }
+function closeViewer(){ document.getElementById('viewer').classList.remove('show'); if (osd) osd.close(); viewing = null; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); document.getElementById('zoom').classList.remove('show'); } else if (viewing && e.key === 'ArrowRight') viewerStep(1); else if (viewing && e.key === 'ArrowLeft') viewerStep(-1); else if (viewing && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); viewerPick(); } });
 function exportCsv(){
   const rows = [['case','file','note']];
   for (const c of DATA.cases) { const ch = choice[c.case]; if (ch) rows.push([c.case, ch.file, ch.note]); }
