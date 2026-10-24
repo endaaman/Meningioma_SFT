@@ -30,6 +30,7 @@ SUPP = [
     "sft_distance",                   # SFT からの距離（euc_mean、施設内。旧 Fig 6c）
     "histotype",                      # 組織型（主要 5 クラス）の施設間分類の混同行列（2 方向 × 5 条件、Macenko を含む）
     "shift_sample_size",              # 平行移動のシフト推定に要る例数（無作為 / 単一組織型 × n。shift_estimation.py）
+    "site_axis_stain",                # 施設軸と染色の関係: 施設シフト方向への射影 s vs H / E（十分位の bin 平均）、画像レベル補正後に残る施設差の u 方向 / 直交分解、平均色で説明される割合（stain_response.py）
 ]
 # Supplementary の表（順 = Table S 番号）
 SUPP_TABLES = [
