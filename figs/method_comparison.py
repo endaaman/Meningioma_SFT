@@ -63,7 +63,7 @@ def main() -> None:
               "ASW・iLISI・cLISI は PCA 50 次元・k = 30。施設の指標の chance level（補正なし条件で施設ラベルを組織型内で入れ替えた"
               f" 1000 回の平均 = within-subtype 置換帰無。条件ごとの値は ASW 0.004–0.006 の範囲でほぼ同じ）は ASW {chance.get('asw_batch', float('nan')):.4f}、iLISI {chance.get('ilisi', float('nan')):.3f}。"
               "隣接ペアは施設 × 組織型の平均ベクトルの Ward 樹形図で同じ組織型の 2 施設が隣り合う数（Fig 6 と同じ）。"
-              f"組織型間距離の施設差は、両施設で 5 例以上の組織型の平均どうしの距離の |{oth_d} − {ref_d}| / {ref_d} の中央値。"
+              f"組織型間距離の施設差は、両施設で 5 例以上の群（SFT を含む）の平均どうしの距離の |{oth_d} − {ref_d}| / {ref_d} の中央値。"
               " {#tbl:method_comparison}"]
     path = table_path(cfg, NAME, ".md")
     path.write_text("\n".join(lines) + "\n")
