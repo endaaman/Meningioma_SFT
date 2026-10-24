@@ -345,6 +345,13 @@ main{padding:12px 16px}
 .vbar{display:flex;gap:12px;align-items:center;padding:6px 12px;background:#222;color:#eee;font-size:13px}
 .vbar #vhint{color:#aaa;margin-left:auto}
 .vbar button.on{background:#2e7d32;color:#fff;border-color:#2e7d32}
+.vstrip{display:flex;gap:8px;padding:6px 12px;background:#1a1a1a;overflow-x:auto;flex:none}
+.vstrip .t{flex:none;width:150px;border:3px solid transparent;border-radius:6px;padding:2px;cursor:pointer;background:#2a2a2a;color:#ccc;font-size:11px}
+.vstrip .t img{width:100%;display:block;border-radius:3px;background:#fff}
+.vstrip .t .noimg{height:90px}
+.vstrip .t.cur{border-color:#fff}
+.vstrip .t.sel{background:#1b4d2b}
+.vstrip .t .cap{padding:2px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #osd{flex:1}
 small.hint{color:var(--muted)}
 #mode{font-size:12px;color:var(--muted)}
@@ -370,7 +377,8 @@ small.hint{color:var(--muted)}
 </main>
 <div class="zoom" id="zoom" onclick="this.classList.remove('show')"><img id="zoomimg"></div>
 <div class="viewer" id="viewer">
-  <div class="vbar"><button id="vprev" onclick="viewerStep(-1)">◀ 前の HE</button><span id="vtitle"></span><button id="vnext" onclick="viewerStep(1)">次の HE ▶</button><button class="primary" id="vpick" onclick="viewerPick()">この切片を代表にする</button><span id="vhint">ドラッグで移動、ホイールで拡大。← → で同じ症例の HE、Space で代表、Esc で閉じる</span><button onclick="closeViewer()">閉じる</button></div>
+  <div class="vbar"><button onclick="caseStep(-1)">◀ 前の症例</button><button onclick="caseStep(1)">次の症例 ▶</button><span id="vtitle"></span><button class="primary" id="vpick" onclick="viewerPick()">この切片を代表にする</button><button id="vexcl" onclick="viewerExclude()">症例を除外</button><span id="vhint">ホイールで拡大、ドラッグで移動。← → で同じ症例の HE、n / p で症例、Space で代表、Esc で閉じる</span><button onclick="closeViewer()">閉じる</button></div>
+  <div class="vstrip" id="vstrip"></div>
   <div id="osd"></div>
 </div>
 <script>
@@ -396,9 +404,10 @@ function setChoice(caseId, file){   // file: ファイル名 / 'EXCLUDE' / null�
 }
 function pick(caseId, file){ const cur = choice[caseId]; setChoice(caseId, cur && cur.file === file ? null : file); }
 function exclude(caseId){ const cur = choice[caseId]; setChoice(caseId, cur && cur.file === 'EXCLUDE' ? null : 'EXCLUDE'); }
+let visibleCases = [];   // いまのフィルタで表示している症例（ビューアの「次の症例」はこの順）
 function render(){
   const g = document.getElementById('fGroup').value, st = document.getElementById('fState').value;
-  const root = document.getElementById('cases'); root.innerHTML = '';
+  const root = document.getElementById('cases'); root.innerHTML = ''; visibleCases = [];
   let done = 0, total = 0, excluded = 0, single = 0;
   for (const c of DATA.cases) {
     const ch = choice[c.case]; total++;
@@ -408,7 +417,9 @@ function render(){
     if (st === 'todo' && ch) continue;
     if (st === 'done' && !ch) continue;
     if (st === 'multi' && c.slides.length < 2) continue;
+    visibleCases.push(c.case);
     const div = document.createElement('div');
+    div.id = 'case-' + c.case;
     div.className = 'case' + (ch ? (ch.file === 'EXCLUDE' ? ' excluded' : ' done') : '');
     const state = ch ? (ch.file === 'EXCLUDE' ? '除外' : (ch.note === 'single' ? '1 枚なので自動' : '選択済み')) : '未選択';
     if (viewing) updateViewerPick();
@@ -439,17 +450,34 @@ async function openViewer(caseId, idx){
   if (!server) { if (s.thumb) zoom(url(s.thumb)); return; }
   try { await loadOsd(); } catch (e) { document.getElementById('err').textContent = e.message; if (s.thumb) zoom(url(s.thumb)); return; }
   viewing = {caseId, idx};
-  document.getElementById('vtitle').textContent = `${caseId}（${DATA.groups[c.group] || c.group}） ${idx + 1} / ${c.slides.length} 枚目 ・ ${s.file}` + (s.recut ? ' ・ 再切片' : '');
+  document.getElementById('vtitle').textContent = `${caseId}（${DATA.groups[c.group] || c.group}） ${idx + 1} / ${c.slides.length} 枚目` + (s.recut ? ' ・ 再切片' : '');
   document.getElementById('viewer').classList.add('show');
   if (!osd) osd = OpenSeadragon({id: 'osd', prefixUrl: 'https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/images/', showNavigator: true, navigatorPosition: 'BOTTOM_RIGHT', maxZoomPixelRatio: 2, animationTime: 0.3, imageLoaderLimit: 6});
   osd.open('/dzi/' + s.id + '.dzi');
   updateViewerPick();
 }
 function viewerStep(d){ if (!viewing) return; const c = caseOf(viewing.caseId); const n = (viewing.idx + d + c.slides.length) % c.slides.length; openViewer(viewing.caseId, n); }
-function updateViewerPick(){ if (!viewing) return; const c = caseOf(viewing.caseId); const file = c.slides[viewing.idx].file; const ch = choice[viewing.caseId]; const b = document.getElementById('vpick'); const on = ch && ch.file === file; b.textContent = on ? '✔ 代表に選択済み（クリックで解除）' : 'この切片を代表にする'; b.className = on ? 'on' : 'primary'; document.getElementById('vprev').style.display = document.getElementById('vnext').style.display = c.slides.length > 1 ? '' : 'none'; }
+function caseStep(d){
+  if (!viewing) return;
+  const list = visibleCases.length ? visibleCases : DATA.cases.map(c => c.case);
+  let i = list.indexOf(viewing.caseId); if (i < 0) i = 0; else i = (i + d + list.length) % list.length;
+  openViewer(list[i], 0);
+  const el = document.getElementById('case-' + CSS.escape(list[i])); if (el) el.scrollIntoView({block: 'start'});
+}
+function renderStrip(){
+  if (!viewing) return;
+  const c = caseOf(viewing.caseId); const ch = choice[viewing.caseId];
+  document.getElementById('vstrip').innerHTML = c.slides.map((s, i) => {
+    const cls = 't' + (i === viewing.idx ? ' cur' : '') + (ch && ch.file === s.file ? ' sel' : '');
+    const img = s.thumb ? `<img src="${esc(url(s.thumb))}">` : '<div class="noimg"></div>';
+    return `<div class="${cls}" onclick="openViewer('${esc(c.case)}',${i})" title="${esc(s.file)}">${img}<div class="cap">${ch && ch.file === s.file ? '✔ ' : ''}${i + 1}. ${s.recut ? '再切片 ' : ''}${s.n_patches != null ? s.n_patches + 'p ' : ''}${esc(s.file)}</div></div>`;
+  }).join('');
+}
+function viewerExclude(){ if (!viewing) return; exclude(viewing.caseId); setTimeout(updateViewerPick, 300); }
+function updateViewerPick(){ if (!viewing) return; const c = caseOf(viewing.caseId); const file = c.slides[viewing.idx].file; const ch = choice[viewing.caseId]; const b = document.getElementById('vpick'); const on = ch && ch.file === file; b.textContent = on ? '✔ 代表に選択済み（クリックで解除）' : 'この切片を代表にする'; b.className = on ? 'on' : 'primary'; const ex = ch && ch.file === 'EXCLUDE'; document.getElementById('vexcl').textContent = ex ? '除外を戻す' : '症例を除外'; document.getElementById('vexcl').className = ex ? 'on' : ''; renderStrip(); }
 function viewerPick(){ if (!viewing) return; const c = caseOf(viewing.caseId); pick(viewing.caseId, c.slides[viewing.idx].file); setTimeout(updateViewerPick, 300); }
 function closeViewer(){ document.getElementById('viewer').classList.remove('show'); if (osd) osd.close(); viewing = null; }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); document.getElementById('zoom').classList.remove('show'); } else if (viewing && e.key === 'ArrowRight') viewerStep(1); else if (viewing && e.key === 'ArrowLeft') viewerStep(-1); else if (viewing && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); viewerPick(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); document.getElementById('zoom').classList.remove('show'); } else if (viewing && e.key === 'ArrowRight') viewerStep(1); else if (viewing && e.key === 'ArrowLeft') viewerStep(-1); else if (viewing && e.key === 'n') caseStep(1); else if (viewing && e.key === 'p') caseStep(-1); else if (viewing && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); viewerPick(); } });
 function exportCsv(){
   const rows = [['case','file','note']];
   for (const c of DATA.cases) { const ch = choice[c.case]; if (ch) rows.push([c.case, ch.file, ch.note]); }
