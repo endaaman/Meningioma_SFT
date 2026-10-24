@@ -16,8 +16,8 @@ MAIN = [
     "tissue",               # Fig 2 組織パッチ（patho2 / patho2→GAN / EBRAINS × サブタイプ）と色の定量
     "umap_harmonization",   # Fig 3 UMAP と指標（補正なし / GAN / ComBat / centroid の 4 条件）
     "shift_geometry",       # Fig 4 施設差の幾何
-    "classification",       # Fig 5 施設間の分類性能（4 条件）
     "subtype_structure",    # Fig 6 サブタイプ構造（樹形図 補正なし / GAN / ComBat / centroid の 4 段、euc_mean）
+    "classification",       # Fig 5 施設間の分類性能（4 条件）
     "pathology_checks",     # Fig 7 病理医の判断との対応: held-out 症例（旧 Fig S5、umap_held_out.py の描画）＋ STAT6 を染めた patho2 症例の UMAP 上の位置と距離差（stat6_case.py）
 ]
 # 表（順 = Table 番号）
