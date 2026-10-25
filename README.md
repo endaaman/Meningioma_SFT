@@ -12,6 +12,7 @@ titan.py             # TITAN による WSI-level aggregate（--variants で対�
 titan_batch.py       # 外部の h5 の木に TITAN を書く（EBRAINS 全体の CONCH 特徴 = /mnt/server42/AI/Datasets/EBRAINS_embeddings。config の ebrains_embeddings.priority のグリオーマを先に、残りは名前順。ログは out/ebrains_embeddings/）
 patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor）の HE から CONCH v1.5（wsi-toolbox 0.7.0 の preset conch15、cls 1024 と proj 768 を 1 回で）+ TITAN を作り Patho2Gliomas_embeddings に置く（EBRAINS_embeddings と同じ構成）。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
 patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を目で選ぶツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶページ（serve: クリックごとに data/patho2_gliomas/representatives.csv が書かれる。html: サーバーなしの静的版）。HE 1 枚の症例は自動で選択済み、EXCLUDE で症例除外。解析はこの CSV を読む
+shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
 nc.py                # 訓練不要の施設間分類（最近傍重心法）: SFT vs 髄膜腫と組織型。Fig 5・Table S1・Fig S3・Table S2 の元
@@ -100,6 +101,7 @@ uv run python -u patho2_gliomas_extract.py --dry-run       # 院内の HE 判定
 uv run python -u patho2_gliomas_extract.py                 # 院内 A/G/O/L/M の HE 全部を抽出（約 30–45 秒/枚）。--groups A G O で群を絞れる
 uv run python -u patho2_gliomas_review.py thumbs           # HE 全部のサムネイル（out/patho2_gliomas/review/thumbs/、4 分）
 uv run python -u patho2_gliomas_review.py serve            # tmux の担当 window で。http://127.0.0.1:8765/ で代表を選ぶ → data/patho2_gliomas/representatives.csv
+uv run python shift_transfer.py                            # 代表を選び終えてから。Δ の向きの群・科による違い（out/shift_transfer/）。埋め込みはキャッシュ（--reload で読み直し）
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
 # ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる
@@ -221,5 +223,6 @@ HDF5: cache/{size}/gan/patches
   sft_distance_bar.py   SFT と各サブタイプ間の距離棒グラフ
   shift_direction.py    群ごとの施設間シフトの向き（全体シフトとの cos、例数を揃えた帰無と比較）
   shift_estimation.py   平行移動のシフト推定（組織型を合わせたシフト Δ* との比較、新施設の部分抽出で推定したときの精度）
+  shift_transfer.py     Δ の向きは腫瘍の科を越えて同じか（髄膜腫サブタイプ / SFT / グリオーマ 3 群 / DLBCL / 転移のシフトの cos 行列、ノイズ補正つき）
   harmonization.py      施設差の補正の効き具合（ASW・iLISI / cLISI）
 ```

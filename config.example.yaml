@@ -369,3 +369,18 @@ patho2_gliomas:
   review_host: 0.0.0.0                                            # patho2_gliomas_review.py serve の bind 先。SSH 先のブラウザから開くので LAN に公開（127.0.0.1 なら手元だけ）
   review_port: 8765                                               # patho2_gliomas_review.py serve のポート
   representatives: data/patho2_gliomas/representatives.csv       # 1 症例 1 枚の代表 HE（case, file, note）。review.py が書き、解析が読む。file が EXCLUDE は除外
+
+# ---- shift_transfer.py（Δ の向きは腫瘍の科を越えて同じか。論文コホートの Δ と Patho2Gliomas × EBRAINS の各群のシフトを比べる予備解析）----
+shift_transfer:
+  seed:   42
+  n_boot: 1000
+  subtype_min_n: 20        # 髄膜腫サブタイプを群にする両施設の最小例数（例数が少ない群は推定ノイズで cos が下がる）
+  ebrains_annotation: /mnt/server42/AI/Datasets/EBRAINS/annotation.csv   # uuid, pat_id, diagnosis, control（EBRAINS 配布のメタデータ）
+  ebrains_groups:          # 院内の群（patho2_gliomas.groups の略号）→ EBRAINS の diagnosis（WHO 2016 の名前）
+    ast: ["Diffuse astrocytoma, IDH-mutant", "Anaplastic astrocytoma, IDH-mutant", "Glioblastoma, IDH-mutant", "Gemistocytic astrocytoma, IDH-mutant"]
+    glm: ["Glioblastoma, IDH-wildtype"]     # Giant cell glioblastoma / Gliosarcoma / IDH 野生型の（退形成性）星細胞腫は入れない（院内 G との対応が不明）
+    odg: ["Oligodendroglioma, IDH-mutant and 1p/19q codeleted", "Anaplastic oligodendroglioma, IDH-mutant and 1p/19q codeleted"]
+    lym: ["Diffuse large B-cell lymphoma of the CNS"]
+    met: ["Metastatic tumours"]
+  group_names: {ast: "Astrocytoma, IDH-mutant", glm: "Glioblastoma, IDH-wildtype", odg: "Oligodendroglioma", lym: "DLBCL", met: "Metastasis"}
+  families:    {ast: glioma, glm: glioma, odg: glioma, lym: lymphoma, met: metastasis}
