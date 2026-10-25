@@ -324,6 +324,7 @@ main{padding:12px 16px}
 .case{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:10px 12px}
 .case.done{border-left:6px solid var(--sel)}
 .case.excluded{border-left:6px solid var(--ex);opacity:.75}
+.case.todo{border-left:6px solid #e0a800;background:#fffbe8}
 .case h3{margin:0 0 6px;font-size:15px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .case h3 .meta{color:var(--muted);font-weight:normal;font-size:13px}
 .case h3 .state{margin-left:auto;font-size:13px;font-weight:normal}
@@ -369,6 +370,7 @@ small.hint{color:var(--muted)}
     <label class="btn">CSV を読み込む<input type="file" accept=".csv" style="display:none" onchange="importCsv(this.files[0])"></label>
   </span>
   <div class="filters">
+    <button onclick="nextTodo()" title="未選択の症例へ順に移動（u キー）">次の未選択 ▶</button>
     <select id="fGroup" onchange="render()"><option value="">全群</option></select>
     <select id="fState" onchange="render()"><option value="multi">HE が 2 枚以上だけ</option><option value="">全部</option><option value="todo">未選択だけ</option><option value="done">選択済みだけ</option></select>
   </div>
@@ -379,7 +381,7 @@ small.hint{color:var(--muted)}
 </main>
 <div class="zoom" id="zoom" onclick="this.classList.remove('show')"><img id="zoomimg"></div>
 <div class="viewer" id="viewer">
-  <div class="vbar"><button onclick="caseStep(-1)">◀ 前の症例</button><button onclick="caseStep(1)">次の症例 ▶</button><span id="vtitle"></span><button class="primary" id="vpick" onclick="viewerPick()">この切片を代表にする</button><button id="vexcl" onclick="viewerExclude()">症例を除外</button><span id="vhint">ホイールで拡大、ドラッグで移動。← → で同じ症例の HE、n / p で症例、Space で代表、Esc で閉じる</span><button onclick="closeViewer()">閉じる</button></div>
+  <div class="vbar"><button onclick="caseStep(-1)">◀ 前の症例</button><button onclick="caseStep(1)">次の症例 ▶</button><button onclick="nextTodo()">次の未選択 ▶</button><span id="vtitle"></span><button class="primary" id="vpick" onclick="viewerPick()">この切片を代表にする</button><button id="vexcl" onclick="viewerExclude()">症例を除外</button><span id="vhint">ホイールで拡大、ドラッグで移動。← → で同じ症例の HE、n / p で症例、u で次の未選択、Space で代表、Esc で閉じる</span><button onclick="closeViewer()">閉じる</button></div>
   <div class="vstrip" id="vstrip"></div>
   <div id="osd"></div>
 </div>
@@ -423,7 +425,7 @@ function render(){
     visibleCases.push(c.case);
     const div = document.createElement('div');
     div.id = 'case-' + c.case;
-    div.className = 'case' + (ch ? (ch.file === 'EXCLUDE' ? ' excluded' : ' done') : '');
+    div.className = 'case' + (ch ? (ch.file === 'EXCLUDE' ? ' excluded' : ' done') : ' todo');
     const state = ch ? (ch.file === 'EXCLUDE' ? '除外' : (ch.note === 'single' ? '1 枚なので自動' : '選択済み')) : '未選択';
     if (viewing) updateViewerPick();
     let h = `<h3><span>${esc(c.case)}</span><span class="meta">${esc(DATA.groups[c.group] || c.group)} ・ HE ${c.slides.length} 枚</span>` +
@@ -438,7 +440,21 @@ function render(){
     }
     div.innerHTML = h + '</div>'; root.appendChild(div);
   }
-  document.getElementById('progress').textContent = `選択済み ${done} / ${total} 症例（うち 1 枚で自動 ${single}、除外 ${excluded}）`;
+  const todo = total - done - excluded;
+  document.getElementById('progress').textContent = `選択済み ${done} / ${total} 症例（うち 1 枚で自動 ${single}、除外 ${excluded}）` + (todo ? `　未選択 ${todo}` : '　未選択なし');
+}
+let lastTodo = null;   // 「次の未選択」で最後に飛んだ症例（ビューアが開いていなければここから続ける）
+function nextTodo(){
+  const order = DATA.cases.map(c => c.case);
+  const cur = viewing ? viewing.caseId : lastTodo;
+  const start = cur ? order.indexOf(cur) + 1 : 0;
+  let id = null;
+  for (let k = 0; k < order.length; k++) { const c = order[(start + k) % order.length]; if (!choice[c]) { id = c; break; } }
+  if (!id) { document.getElementById('err').textContent = '未選択の症例はありません'; return; }
+  document.getElementById('err').textContent = ''; lastTodo = id;
+  if (!visibleCases.includes(id)) { document.getElementById('fState').value = 'todo'; render(); }   // 今のフィルタに無ければ「未選択だけ」に切り替える
+  if (viewing) openViewer(id, 0);
+  const el = document.getElementById('case-' + CSS.escape(id)); if (el) el.scrollIntoView({block: 'start'});
 }
 function zoom(src){ document.getElementById('zoomimg').src = src; document.getElementById('zoom').classList.add('show'); }
 // ---- WSI ビューア（serve のときだけ。Deep Zoom タイルをサーバーがその場で切る）----
@@ -480,7 +496,7 @@ function viewerExclude(){ if (!viewing) return; exclude(viewing.caseId); setTime
 function updateViewerPick(){ if (!viewing) return; const c = caseOf(viewing.caseId); const file = c.slides[viewing.idx].file; const ch = choice[viewing.caseId]; const b = document.getElementById('vpick'); const on = ch && ch.file === file; b.textContent = on ? '✔ 代表に選択済み（クリックで解除）' : 'この切片を代表にする'; b.className = on ? 'on' : 'primary'; const ex = ch && ch.file === 'EXCLUDE'; document.getElementById('vexcl').textContent = ex ? '除外を戻す' : '症例を除外'; document.getElementById('vexcl').className = ex ? 'on' : ''; renderStrip(); }
 function viewerPick(){ if (!viewing) return; const c = caseOf(viewing.caseId); pick(viewing.caseId, c.slides[viewing.idx].file); setTimeout(updateViewerPick, 300); }
 function closeViewer(){ document.getElementById('viewer').classList.remove('show'); if (osd) osd.close(); viewing = null; }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); document.getElementById('zoom').classList.remove('show'); } else if (viewing && e.key === 'ArrowRight') viewerStep(1); else if (viewing && e.key === 'ArrowLeft') viewerStep(-1); else if (viewing && e.key === 'n') caseStep(1); else if (viewing && e.key === 'p') caseStep(-1); else if (viewing && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); viewerPick(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeViewer(); document.getElementById('zoom').classList.remove('show'); } else if (viewing && e.key === 'ArrowRight') viewerStep(1); else if (viewing && e.key === 'ArrowLeft') viewerStep(-1); else if (viewing && e.key === 'n') caseStep(1); else if (viewing && e.key === 'p') caseStep(-1); else if (e.key === 'u' && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') nextTodo(); else if (viewing && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); viewerPick(); } });
 function exportCsv(){
   const rows = [['case','file','note']];
   for (const c of DATA.cases) { const ch = choice[c.case]; if (ch) rows.push([c.case, ch.file, ch.note]); }
