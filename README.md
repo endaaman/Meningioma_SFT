@@ -16,6 +16,7 @@ transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で�
 transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（out/transfer/correction_{encoder}.*）
 prism_extract.py     # 第 2 のスライドエンコーダ: manifest の全スライドに Virchow（224 px / 0.5 mpp、concat 2560 次元）→ PRISM を足す。書き先は既存の h5（EBRAINS_embeddings / Patho2Gliomas_embeddings / 論文の original）の virchow_2560/…。既存はスキップ、ログ out/transfer/prism_log.csv
 atlas_retrieval.py   # 参照アトラス: EBRAINS 全体（5 枚以上の 78 診断）の診断ごとの重心で院内スライドを最近傍診断。補正なし / 論文の Δ / 他の科の Δ（全平均・科ごと）/ 自分の科の Δ と EBRAINS 内 LOO（out/atlas/）
+dispersion_ratio.py  # Supplementary 用: 施設間の「ばらつきの比」（次元ごとの分散比）は腫瘍をまたいで共有されるか。科どうしの相関 vs 分割半分の再現性、平均のずれの cos と並べる（out/dispersion_ratio/）。shift_transfer.py のキャッシュを読む
 shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
@@ -110,6 +111,7 @@ uv run python transfer_correction.py                       # transfer_manifest.p
 uv run python -u prism_extract.py --dry-run                # Virchow → PRISM の対象と状態（manifest の h5_prism）
 uv run python -u prism_extract.py                          # tmux の担当 window で。EBRAINS → 院内の順に 2,301 枚（1〜3 分/枚、数日）。--sites / --families で絞れる
 uv run python atlas_retrieval.py                           # 参照アトラスへの最近傍診断（out/atlas/）。埋め込みはキャッシュ（--reload で読み直し）。--min-n で参照のクラスの最小枚数（既定以外は出力名に _min{n}）、--encoder prism は抽出後
+uv run python dispersion_ratio.py                          # shift_transfer.py の後。ばらつきの比は腫瘍をまたいで共有されるか（out/dispersion_ratio/、Supplementary 用）
 uv run python shift_transfer.py                            # 代表を選び終えてから。Δ の向きの群・科による違い（out/shift_transfer/）。埋め込みはキャッシュ（--reload で読み直し）
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
