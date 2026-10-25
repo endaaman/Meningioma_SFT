@@ -8,6 +8,9 @@
     --encoder prism は h5_prism の transfer.prism_key（manifest の prism 列が False のスライドがあれば止まる）。
     埋め込みは out/transfer/embeddings_{encoder}.npy ＋ 並び（embeddings_{encoder}_slides.csv）にキャッシュする。
     manifest の並びと合わなければ自動で読み直す（--reload で強制）。
+    --encoder meanpool（学習なしの集約器の対照: CONCH v1.5 のパッチ埋め込みの単純平均、meanpool.py と同じ定義）は
+    transfer_meanpool.py が作るキャッシュ（out/transfer/embeddings_meanpool.npy ＋ embeddings_meanpool_ids.csv）を読むだけ
+    （無ければ止まる。作り直しは transfer_meanpool.py build --reload）。
 
 科（manifest の family）: meningioma / SFT / glioma（ast・glm・odg）/ lymphoma / metastasis。
 当て先: paper（髄膜腫 + SFT。論文のベンチが使える）/ glioma / lymphoma / metastasis / all（5 科全部）。
@@ -75,6 +78,8 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
 
 受け入れ確認: source = own・target = paper（と none）で論文の値（out/harmonization/metrics.csv、out/method_compare/summary.csv、
     out/dendrogram/pairs.csv、out/affine/scale.csv、out/nc/*/bootstrap.csv）と、論文の補正済み h5（embedding.patho2.*）を再現するか。
+    meanpool は論文の平均プーリングの対照の出力（out/meanpool/summary.csv の none / centroid / combat、out/meanpool/nc/*/bootstrap.csv）と、
+    meanpool.py の補正済み h5（{meanpool.root}/{centroid,combat}）と突き合わせる（相似変換は meanpool.py に無いので確認しない）。
 
 出力 (output_dir/transfer/):
     correction_{encoder}.csv          縦長: encoder, method, source, target, metric, value, n_ebrains, n_patho2（当て先）,
@@ -85,7 +90,7 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
     embeddings_{encoder}.npy / embeddings_{encoder}_slides.csv   埋め込みのキャッシュ
 
 Usage:
-    uv run python transfer_correction.py [--encoder titan|prism] [--reload]
+    uv run python transfer_correction.py [--encoder titan|prism|meanpool] [--reload]
 """
 from __future__ import annotations
 
@@ -138,6 +143,13 @@ def _read_h5(path: str, key: str) -> np.ndarray:
 
 def load_embeddings(cfg: dict, encoder: str, out_dir: Path, reload: bool) -> tuple[pd.DataFrame, np.ndarray]:
     """manifest の全スライドの埋め込み（manifest の並び、float64）。必要なスライドに埋め込みが無ければ止まる。"""
+    if encoder == "meanpool":           # transfer_meanpool.py のキャッシュ（並びの確認もそちら）
+        from transfer_meanpool import load_cache
+        if reload:
+            print("  （--reload は meanpool には効かない。作り直すなら transfer_meanpool.py build --reload）")
+        man, X, ids = load_cache(cfg)
+        print(f"  cache: {out_dir / 'embeddings_meanpool.npy'}  {X.shape}  " + str(ids["source"].value_counts().to_dict()))
+        return man, X
     tcfg = cfg["transfer"]
     man = pd.read_csv(Path(cfg["output_dir"]) / tcfg.get("manifest", "transfer/manifest.csv"),
                       dtype={"slide_id": str, "patient": str})
@@ -343,15 +355,22 @@ def _read(path: Path, index: str) -> pd.DataFrame | None:
     return pd.read_csv(path).set_index(index) if path.exists() else None
 
 
-def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarray, np.ndarray]]) -> pd.DataFrame:
-    """source = own（と none）・target = paper の値を論文の出力と突き合わせる。"""
+def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarray, np.ndarray]],
+               encoder: str = "titan") -> pd.DataFrame:
+    """source = own（と none）・target = paper の値を論文の出力と突き合わせる（meanpool は論文の平均プーリングの対照の出力と）。"""
     out = Path(cfg["output_dir"])
-    harm = _read(out / "harmonization" / "metrics.csv", "state")
-    mc = _read(out / "method_compare" / "summary.csv", "variant")
-    dg = _read(out / "dendrogram" / "pairs.csv", "variant")
-    sc = _read(out / "affine" / "scale.csv", "variant")
-    nc_bs = {t: pd.read_csv(out / "nc" / t / "bootstrap.csv") for t in ("binary", "histotype")
-             if (out / "nc" / t / "bootstrap.csv").exists()}
+    if encoder == "meanpool":           # meanpool.py analyze / nc.py --aggregator mean の出力。harmonization・dendrogram・affine は無い
+        harm, dg, sc = None, None, None
+        mc = _read(out / "meanpool" / "summary.csv", "variant")
+        nc_root, mc_name, nc_name, agg = out / "meanpool" / "nc", "meanpool/summary.csv", "meanpool/nc", "mean"
+    else:
+        harm = _read(out / "harmonization" / "metrics.csv", "state")
+        mc = _read(out / "method_compare" / "summary.csv", "variant")
+        dg = _read(out / "dendrogram" / "pairs.csv", "variant")
+        sc = _read(out / "affine" / "scale.csv", "variant")
+        nc_root, mc_name, nc_name, agg = out / "nc", "method_compare/summary.csv", "nc", "titan"
+    nc_bs = {t: pd.read_csv(nc_root / t / "bootstrap.csv") for t in ("binary", "histotype")
+             if (nc_root / t / "bootstrap.csv").exists()}
     ref = cfg["reference"]
     got = res[(res["target"] == "paper") & res["source"].isin(["own", "none"])]
     rows = []
@@ -371,14 +390,16 @@ def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarr
             add(method, "asw_site", harm.loc[variant, "asw_batch"], 1e-4, "harmonization/metrics.csv")
             add(method, "ilisi_site", harm.loc[variant, "ilisi"], 1e-3, "harmonization/metrics.csv")
         elif mc is not None and variant in mc.index:
-            add(method, "asw_site", mc.loc[variant, "asw_batch"], 1e-4, "method_compare/summary.csv")
-            add(method, "ilisi_site", mc.loc[variant, "ilisi"], 1e-3, "method_compare/summary.csv")
+            add(method, "asw_site", mc.loc[variant, "asw_batch"], 1e-4, mc_name)
+            add(method, "ilisi_site", mc.loc[variant, "ilisi"], 1e-3, mc_name)
         if dg is not None and variant in dg.index:
             add(method, "pairs_adjacent", dg.loc[variant, "adjacent_pairs"], 0, "dendrogram/pairs.csv")
+        elif encoder == "meanpool" and mc is not None and variant in mc.index:   # meanpool の対の数は summary.csv にある
+            add(method, "pairs_adjacent", mc.loc[variant, "adjacent_pairs"], 0, mc_name)
         if mc is not None and variant in mc.index:
             for k in ("sft_men_dist_patho2", "sft_men_dist_ebrains", "subtype_dist_mismatch"):
-                add(method, k, mc.loc[variant, k], 1e-3, "method_compare/summary.csv")
-            add(method, "residual_norm", mc.loc[variant, "site_shift_norm"], 1e-3, "method_compare/summary.csv")
+                add(method, k, mc.loc[variant, k], 1e-3, mc_name)
+            add(method, "residual_norm", mc.loc[variant, "site_shift_norm"], 1e-3, mc_name)
         if method == "affine_free" and sc is not None:
             add(method, "scale", sc.loc["affine_free", "scale"], 1e-4, "affine/scale.csv")
         for task, metric in (("histotype", "nc_histotype_ba"), ("binary", "nc_sft_ba")):
@@ -389,14 +410,17 @@ def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarr
             for name, tr in (("E2P", ref), ("P2E", next(s for s in cfg["embedding"] if s != ref))):
                 v = b[b["train_source"] == tr]["value"]
                 if len(v):
-                    add(method, f"{metric}_{name}", v.iloc[0], 1e-6, f"nc/{task}/bootstrap.csv")
+                    add(method, f"{metric}_{name}", v.iloc[0], 1e-6, f"{nc_name}/{task}/bootstrap.csv")
 
-    # 論文の補正済み h5（embedding.patho2.<variant>）と、own で作った patho2 の埋め込みの一致（h5 は float32）
+    # 論文の補正済み h5（embedding.patho2.<variant>、meanpool は {meanpool.root}/<variant>）と、own で作った patho2 の埋め込みの一致（h5 は float32）
+    oth = next(s for s in cfg["embedding"] if s != ref)
     for method, (Y, ids) in own_paper.items():
         variant = PAPER_VARIANT.get(method)
         if variant in (None, "original"):
             continue
-        d = load_data(cfg, variant)
+        if encoder == "meanpool" and not (Path(cfg["meanpool"]["root"].format(site=oth)) / variant).exists():
+            continue                    # meanpool.py が作らない補正（affine_*）
+        d = load_data(cfg, variant, aggregator=agg)
         d = d[d["source"] != ref].set_index("case_id")
         common = [i for i in ids if i in d.index]
         if not common:
@@ -405,7 +429,7 @@ def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarr
         H = np.stack(d.loc[common, "embedding"].values).astype(np.float64)
         diff = float(np.abs(Y[[pos[i] for i in common]] - H).max())
         rows.append({"method": method, "metric": f"max|Y − h5|（{len(common)} 枚）", "expected": 0.0, "got": diff, "diff": diff,
-                     "ok": diff <= 1e-4, "reference": f"embedding.patho2.{variant}"})
+                     "ok": diff <= 1e-4, "reference": f"meanpool.root/{variant}" if encoder == "meanpool" else f"embedding.patho2.{variant}"})
     return pd.DataFrame(rows)
 
 
@@ -462,7 +486,8 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
          "推定元を飛ばす規則: 当て先と同じ科の集合（= own）と、当て先の真部分集合（一部 in-sample）は飛ばす。"
          "当て先 all だけは科ごとの推定元と paper を残す（推定元が当て先に含まれる）。"
          "others_mean = others と同じ科を科ごとに当てはめてパラメータを科ごとに等しい重みで平均（all は 5 科全部）。", ""]
-    L += ["## 受け入れ確認（target = paper、source = own / none と論文の出力）", "",
+    L += ["## 受け入れ確認（target = paper、source = own / none と論文の出力）" if encoder != "meanpool" else
+          "## 受け入れ確認（target = paper、source = own / none と論文の平均プーリングの対照の出力 out/meanpool/）", "",
           _md(acc[["method", "metric", "expected", "got", "diff", "ok", "reference"]], digits=4, index=False), ""]
     L += ["## ComBat の転移（neuroCombatFromTraining）の確認", "",
           f"- own で FromTraining が neuroCombat の直接の出力を再現するか（patho2、当て先ごとの max |差| の最大）: "
@@ -584,7 +609,8 @@ def _fit_row(fit_rows: list[dict], cohort: str, f: dict) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--encoder", choices=["titan", "prism"], default="titan", help="スライドエンコーダ（manifest の h5 と key）")
+    ap.add_argument("--encoder", choices=["titan", "prism", "meanpool"], default="titan",
+                    help="スライドエンコーダ（manifest の h5 と key）。meanpool = CONCH のパッチ平均（transfer_meanpool.py のキャッシュ）")
     ap.add_argument("--reload", action="store_true", help="埋め込みのキャッシュを捨てて h5 から読み直す")
     args = ap.parse_args()
     cfg = load_config()
@@ -673,7 +699,7 @@ def main() -> None:
     res.to_csv(csv, index=False)
     print(f"  saved: {csv}")
 
-    acc = acceptance(res, cfg, own_paper)
+    acc = acceptance(res, cfg, own_paper, args.encoder)
     print("\n[acceptance: target = paper, source = own / none vs paper outputs]")
     print(acc.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
     if len(acc) and not acc["ok"].all():

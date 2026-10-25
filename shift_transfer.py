@@ -40,8 +40,17 @@
     paper_slides.csv / paper_embeddings.npy / glioma_slides.csv / glioma_embeddings.npy — 読み込んだ埋め込みのキャッシュ（--reload で読み直す）
     extra_slides.csv / extra_embeddings.npy — 組成の感度に使う EBRAINS の IDH 野生型（退形成性）星細胞腫のキャッシュ
 
+スライド埋め込み（--encoder）:
+    titan     （既定）TITAN（{tile_model}/{keys.slide_feature}）。出力は上のとおり output_dir/shift_transfer/
+    meanpool  学習なしの集約器の対照: CONCH v1.5 のパッチ埋め込みの単純平均（meanpool.py と同じ定義、768 次元）。
+              論文コホートは meanpool.py の h5（load_data(..., aggregator="mean")）、グリオーマ側は transfer_meanpool.py の
+              キャッシュ（out/transfer/embeddings_meanpool.npy、先に transfer_meanpool.py build）を (施設, slide_id) で引く。
+              キャッシュに無いスライド（組成の感度だけに使う EBRAINS の IDH 野生型星細胞腫）だけ h5 の features から平均を取る。
+              出力は同じファイル名で output_dir/shift_transfer/meanpool/ に書く（TITAN の出力には触らない）。
+              スライドの集合と並びは TITAN と同じ
+
 Usage:
-    uv run python shift_transfer.py [--reload] [--bootstrap slides|patients]
+    uv run python shift_transfer.py [--encoder titan|meanpool] [--reload] [--bootstrap slides|patients]
 """
 from __future__ import annotations
 
@@ -68,6 +77,7 @@ FAMILY_COLOR = {"meningioma": "#4c72b0", "SFT": "#000000", "glioma": "#dd8452", 
 # 組成の感度で glm に足す EBRAINS の診断名（config の ebrains_groups には入れていない = 本解析の glm には入らない）
 COMPOSITION_EXTRA = ["Anaplastic astrocytoma, IDH-wildtype", "Diffuse astrocytoma, IDH-wildtype"]
 GBM_IDHMUT = "Glioblastoma, IDH-mutant"   # WHO 2016 では膠芽腫、CNS5 では星細胞腫 IDH 変異型 grade 4（config では ast に入れている）
+ENCODER_TAG = {"titan": "", "meanpool": "  [mean-pooled CONCH v1.5]"}   # 図の題に付ける（TITAN は付けない = 前の図と同じ）
 
 
 def _cos(a: np.ndarray, b: np.ndarray) -> float:
@@ -75,6 +85,40 @@ def _cos(a: np.ndarray, b: np.ndarray) -> float:
 
 
 # ── data ──────────────────────────────────────────────────────────────────────
+
+class SlideEmbedder:
+    """h5 1 枚 → スライド埋め込み（float32）。
+    titan:    {tile_model}/{keys.slide_feature} を読む（前と同じ）。
+    meanpool: transfer_meanpool.py のキャッシュに (施設, slide_id) があればそれを引き（h5 は開かない）、無ければ
+              {tile_model}/{keys.tile_features} のパッチ方向の平均を取る（meanpool._mean_features、float64 → float32）。"""
+
+    def __init__(self, cfg: dict, encoder: str):
+        self.cfg, self.encoder = cfg, encoder
+        self.cache: dict[tuple[str, str], np.ndarray] = {}
+        self.n_cached = self.n_computed = 0
+        if encoder == "meanpool":
+            from meanpool import _mean_features
+            from transfer_meanpool import load_cache
+            self._mean_features = _mean_features
+            man, X, _ = load_cache(cfg)
+            self.cache = {(s, i): X[k].astype(np.float32) for k, (s, i) in enumerate(zip(man["site"], man["slide_id"]))}
+
+    def key(self, tile_model: str) -> str:
+        return f"{tile_model}/{self.cfg['keys']['slide_feature' if self.encoder == 'titan' else 'tile_features']}"
+
+    def __call__(self, path, key: str, site: str, slide_id: str) -> np.ndarray | None:
+        """埋め込み。h5 に key が無ければ None。"""
+        if self.encoder == "meanpool" and (site, slide_id) in self.cache:
+            self.n_cached += 1
+            return self.cache[(site, slide_id)]
+        with h5py.File(path, "r") as f:
+            if key not in f:
+                return None
+            if self.encoder == "titan":
+                return f[key][:]
+            self.n_computed += 1
+            return self._mean_features(f, key)[0].astype(np.float32)
+
 
 def _read_cache(csv_path: Path, npy_path: Path) -> pd.DataFrame | None:
     if not (csv_path.exists() and npy_path.exists()):
@@ -90,12 +134,12 @@ def _write_cache(df: pd.DataFrame, csv_path: Path, npy_path: Path) -> None:
     np.save(npy_path, np.stack(df["embedding"].values).astype(np.float32))
 
 
-def load_paper(cfg: dict, out_dir: Path, reload: bool) -> pd.DataFrame:
-    """論文のコホート（embedding.*.original の TITAN）。列: slide_id, source, subtype, patient, embedding。"""
+def load_paper(cfg: dict, out_dir: Path, reload: bool, encoder: str = "titan") -> pd.DataFrame:
+    """論文のコホート（embedding.*.original の TITAN、meanpool は meanpool.py の平均）。列: slide_id, source, subtype, patient, embedding。"""
     csv_path, npy_path = out_dir / "paper_slides.csv", out_dir / "paper_embeddings.npy"
     if not reload and (df := _read_cache(csv_path, npy_path)) is not None:
         return df
-    df = load_data(cfg, "original").rename(columns={"case_id": "slide_id"})
+    df = load_data(cfg, "original", aggregator="mean" if encoder == "meanpool" else "titan").rename(columns={"case_id": "slide_id"})
     df["patient"] = df["slide_id"]
     for site in SITES:
         pat_csv = cfg["label"].get(site, {}).get("patient")
@@ -108,16 +152,17 @@ def load_paper(cfg: dict, out_dir: Path, reload: bool) -> pd.DataFrame:
     return df
 
 
-def load_glioma(cfg: dict, out_dir: Path, reload: bool) -> pd.DataFrame:
-    """Patho2Gliomas の代表 HE（1 症例 1 枚、representatives.csv）と EBRAINS の対応診断の TITAN。列: slide_id, source, group, patient, diagnosis, embedding。"""
+def load_glioma(cfg: dict, out_dir: Path, reload: bool, embed: SlideEmbedder | None = None) -> pd.DataFrame:
+    """Patho2Gliomas の代表 HE（1 症例 1 枚、representatives.csv）と EBRAINS の対応診断の埋め込み（既定 TITAN）。列: slide_id, source, group, patient, diagnosis, embedding。"""
     csv_path, npy_path = out_dir / "glioma_slides.csv", out_dir / "glioma_embeddings.npy"
     if not reload and (df := _read_cache(csv_path, npy_path)) is not None:
         return df
     st = cfg["shift_transfer"]
     pg = cfg["patho2_gliomas"]
     rows: list[dict] = []
+    embed = embed or SlideEmbedder(cfg, "titan")
 
-    key = f"{pg['tile_model']}/{cfg['keys']['slide_feature']}"
+    key = embed.key(pg["tile_model"])
     slides = pd.read_csv(Path(cfg["output_dir"]) / "patho2_gliomas" / "slides.csv")
     reps = pd.read_csv(pg["representatives"])
     reps = reps[reps["note"] != "exclude"]
@@ -126,26 +171,26 @@ def load_glioma(cfg: dict, out_dir: Path, reload: bool) -> pd.DataFrame:
         if not isinstance(r.h5, str) or not Path(r.h5).exists():
             print(f"  WARN [patho2] h5 not found: {r.case} / {r.file}")
             continue
-        with h5py.File(r.h5, "r") as f:
-            if key not in f:
-                print(f"  WARN [patho2] no '{key}': {r.h5}")
-                continue
-            emb = f[key][:]
+        emb = embed(r.h5, key, "patho2", r.case)
+        if emb is None:
+            print(f"  WARN [patho2] no '{key}': {r.h5}")
+            continue
         rows.append({"slide_id": r.case, "source": "patho2", "group": r.label, "patient": r.case, "diagnosis": r.label, "embedding": emb})
 
     diag2group = {d: g for g, ds in st["ebrains_groups"].items() for d in ds}
-    rows += _ebrains_rows(cfg, diag2group)
+    rows += _ebrains_rows(cfg, diag2group, embed)
     df = pd.DataFrame(rows)
     _write_cache(df, csv_path, npy_path)
     return df
 
 
-def _ebrains_rows(cfg: dict, diag2group: dict[str, str]) -> list[dict]:
-    """EBRAINS の annotation.csv で diagnosis が diag2group にあるスライド（control は除外）の TITAN。slide_id は uuid の先頭 8 文字。"""
+def _ebrains_rows(cfg: dict, diag2group: dict[str, str], embed: SlideEmbedder | None = None) -> list[dict]:
+    """EBRAINS の annotation.csv で diagnosis が diag2group にあるスライド（control は除外）の埋め込み（既定 TITAN）。slide_id は uuid の先頭 8 文字。"""
     ann = pd.read_csv(cfg["shift_transfer"]["ebrains_annotation"])
     ann = ann[ann["control"] != 1]
     root = Path(cfg["ebrains_embeddings"]["root"])
-    ekey = f"{cfg['ebrains_embeddings']['tile_model']}/{cfg['keys']['slide_feature']}"
+    embed = embed or SlideEmbedder(cfg, "titan")
+    ekey = embed.key(cfg["ebrains_embeddings"]["tile_model"])
     index: dict[str, Path] = {}   # uuid → h5。「… 1p/19q codeleted」は親 "… and 1p/" と入れ子 "19q codeleted/" に散らばっているので、木全体から引く（浅い方を優先）
     for p in sorted(root.rglob("*_hdf.h5"), key=lambda q: len(q.parts)):
         index.setdefault(p.name[: -len("_hdf.h5")], p)
@@ -155,22 +200,21 @@ def _ebrains_rows(cfg: dict, diag2group: dict[str, str]) -> list[dict]:
         if p is None:
             print(f"  WARN [ebrains] h5 not found: {r.uuid} ({r.diagnosis})")
             continue
-        with h5py.File(p, "r") as f:
-            if ekey not in f:
-                print(f"  WARN [ebrains] no '{ekey}': {p}")
-                continue
-            emb = f[ekey][:]
+        emb = embed(p, ekey, "ebrains", r.uuid[:8])
+        if emb is None:
+            print(f"  WARN [ebrains] no '{ekey}': {p}")
+            continue
         rows.append({"slide_id": r.uuid[:8], "source": "ebrains", "group": diag2group[r.diagnosis], "patient": str(r.pat_id),
                      "diagnosis": r.diagnosis, "embedding": emb})
     return rows
 
 
-def load_extra(cfg: dict, out_dir: Path, reload: bool) -> pd.DataFrame:
-    """組成の感度だけに使う EBRAINS の IDH 野生型（退形成性）星細胞腫（COMPOSITION_EXTRA）の TITAN。列は load_glioma と同じ（group = "glm_extra"）。"""
+def load_extra(cfg: dict, out_dir: Path, reload: bool, embed: SlideEmbedder | None = None) -> pd.DataFrame:
+    """組成の感度だけに使う EBRAINS の IDH 野生型（退形成性）星細胞腫（COMPOSITION_EXTRA）の埋め込み（既定 TITAN）。列は load_glioma と同じ（group = "glm_extra"）。"""
     csv_path, npy_path = out_dir / "extra_slides.csv", out_dir / "extra_embeddings.npy"
     if not reload and (df := _read_cache(csv_path, npy_path)) is not None:
         return df
-    df = pd.DataFrame(_ebrains_rows(cfg, {d: "glm_extra" for d in COMPOSITION_EXTRA}))
+    df = pd.DataFrame(_ebrains_rows(cfg, {d: "glm_extra" for d in COMPOSITION_EXTRA}, embed))
     _write_cache(df, csv_path, npy_path)
     return df
 
@@ -527,7 +571,7 @@ def composition(paper: pd.DataFrame, glioma: pd.DataFrame, extra: pd.DataFrame, 
 
 # ── figure ────────────────────────────────────────────────────────────────────
 
-def plot(groups: list[dict], pairs: pd.DataFrame, out_path: Path) -> None:
+def plot(groups: list[dict], pairs: pd.DataFrame, out_path: Path, tag: str = "") -> None:
     disjoint = [g for g in groups if g["kind"] in ("subtype", "sft", "glioma")]
     disjoint.sort(key=lambda g: FAMILY_ORDER.index(g["family"]) if g["family"] in FAMILY_ORDER else 99)
     names = [g["name"] for g in disjoint]
@@ -557,7 +601,7 @@ def plot(groups: list[dict], pairs: pd.DataFrame, out_path: Path) -> None:
     for k in range(1, n):
         if fams[k] != fams[k - 1]:
             ax.axhline(k - 0.5, color="k", lw=1.2); ax.axvline(k - 0.5, color="k", lw=1.2)
-    ax.set_title("cos between site-shift vectors\n(upper: raw, lower: noise-corrected)", fontsize=10)
+    ax.set_title("cos between site-shift vectors" + tag + "\n(upper: raw, lower: noise-corrected)", fontsize=10)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
 
     allg = [g for g in groups]
@@ -591,7 +635,7 @@ def _spread(y: np.ndarray, gap: float, n_iter: int = 500) -> np.ndarray:
     return out
 
 
-def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path) -> None:
+def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "") -> None:
     """a: 両施設の重心と patho2 → EBRAINS の矢印（平行四辺形）。b: 同じ矢印を原点から並べたもの（平行・同じ長さかを見る）。両方とも縦横同じ縮尺。"""
     from matplotlib.lines import Line2D
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(14, 7.4), gridspec_kw={"width_ratios": [1.0, 1.15]})
@@ -614,7 +658,7 @@ def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path) -> None:
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("Δ_paper direction (L2 units)")
     ax.set_ylabel(f"PC1 of between-group variation ⊥ Δ_paper ({summary['pc1_frac']:.0%})")
-    ax.set_title("centroids at both sites (open: patho2, filled: EBRAINS)\narrow = site shift of each group, dashed = Paper cohort", fontsize=10)
+    ax.set_title("centroids at both sites (open: patho2, filled: EBRAINS)" + tag + "\narrow = site shift of each group, dashed = Paper cohort", fontsize=10)
     ax.grid(alpha=0.25)
 
     grp = df[df["role"] == "group"]
@@ -636,12 +680,12 @@ def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path) -> None:
     plt.close(fig)
 
 
-def plot_mismatch(mm: pd.DataFrame, out_path: Path) -> None:
+def plot_mismatch(mm: pd.DataFrame, out_path: Path, tag: str = "") -> None:
     """科を食い違わせた差の cos の行列。補正前（括弧 = cos_predicted）と補正後（括弧 = cos_predicted_own_after）。"""
     fams = [f for f in FAMILY_ORDER if f in set(mm["ebrains_family"])]
     look = mm.set_index(["ebrains_family", "patho2_family"])
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.8))
-    panels = [("cos", "cos_predicted", "before correction\ncos(mean EBRAINS A − mean patho2 B, Δ_paper)\n(predicted ‖Δ‖ / √(‖Δ‖² + ‖b_AB‖²))"),
+    panels = [("cos", "cos_predicted", "before correction" + tag + "\ncos(mean EBRAINS A − mean patho2 B, Δ_paper)\n(predicted ‖Δ‖ / √(‖Δ‖² + ‖b_AB‖²))"),
               ("cos_after", "cos_predicted_own_after", "after adding Δ_paper to every patho2 slide\n(predicted from B's residual shift r_B = Δ_B − Δ_paper;\nzero-order prediction = 0)")]
     for ax, (col, pcol, title) in zip(axes, panels):
         M = np.array([[look.loc[(a, b), col] for b in fams] for a in fams])
@@ -670,6 +714,8 @@ def plot_mismatch(mm: pd.DataFrame, out_path: Path) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--encoder", choices=["titan", "meanpool"], default="titan",
+                    help="スライド埋め込み。meanpool = CONCH のパッチ平均（出力は shift_transfer/meanpool/）")
     ap.add_argument("--reload", action="store_true", help="埋め込みのキャッシュを捨てて h5 から読み直す")
     ap.add_argument("--bootstrap", choices=["slides", "patients"], default="slides",
                     help="groups.csv の CI の再抽出の単位。patients は施設・群ごとに患者を再抽出し groups_patients.csv に書く（groups.csv は上書きしない）")
@@ -677,17 +723,24 @@ def main() -> None:
 
     cfg = load_config()
     out_dir = Path(cfg["output_dir"]) / "shift_transfer"
+    if args.encoder != "titan":
+        out_dir = out_dir / args.encoder
     out_dir.mkdir(parents=True, exist_ok=True)
+    tag = ENCODER_TAG[args.encoder]
+    embed = SlideEmbedder(cfg, args.encoder)
 
+    print(f"[encoder] {args.encoder} -> {out_dir}")
     print("[load] paper cohort")
-    paper = load_paper(cfg, out_dir, args.reload)
+    paper = load_paper(cfg, out_dir, args.reload, args.encoder)
     print("  ", paper.groupby("source").size().to_dict())
     print("[load] gliomas (Patho2Gliomas representatives × EBRAINS)")
-    glioma = load_glioma(cfg, out_dir, args.reload)
+    glioma = load_glioma(cfg, out_dir, args.reload, embed)
     print(glioma.groupby(["group", "source"]).agg(slides=("slide_id", "size"), patients=("patient", "nunique")).to_string())
     print("[load] EBRAINS IDH-wildtype (anaplastic) astrocytomas（組成の感度だけ）")
-    extra = load_extra(cfg, out_dir, args.reload)
+    extra = load_extra(cfg, out_dir, args.reload, embed)
     print("  ", extra.groupby("diagnosis").size().to_dict())
+    if args.encoder == "meanpool":
+        print(f"  meanpool: transfer_meanpool のキャッシュから {embed.n_cached} 枚、h5 から平均を取った {embed.n_computed} 枚")
 
     groups = build_groups(paper, glioma, cfg)
     df_groups, pairs = compute(groups, paper, cfg, args.bootstrap)
@@ -701,11 +754,11 @@ def main() -> None:
     df_groups.to_csv(out_dir / ("groups_patients.csv" if args.bootstrap == "patients" else "groups.csv"), index=False)
     pairs.to_csv(out_dir / "cos_matrix.csv", index=False)
     bio.to_csv(out_dir / "bio_control.csv", index=False)
-    plot(groups, pairs, out_dir / "shift_transfer.png")
+    plot(groups, pairs, out_dir / "shift_transfer.png", tag)
     arr.to_csv(out_dir / "arrows.csv", index=False)
-    plot_arrows(arr, arr_summary, out_dir / "arrows.png")
+    plot_arrows(arr, arr_summary, out_dir / "arrows.png", tag)
     mm.to_csv(out_dir / "mismatch_matrix.csv", index=False)
-    plot_mismatch(mm, out_dir / "mismatch_matrix.png")
+    plot_mismatch(mm, out_dir / "mismatch_matrix.png", tag)
     comp.to_csv(out_dir / "composition.csv", index=False)
 
     pd.set_option("display.width", 200)

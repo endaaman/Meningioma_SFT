@@ -1,4 +1,4 @@
-"""dispersion_ratio.py — 施設間の「ばらつきの比」は腫瘍の種類をまたいで共有されるか（Supplementary 用、TITAN）。
+"""dispersion_ratio.py — 施設間の「ばらつきの比」は腫瘍の種類をまたいで共有されるか（Supplementary 用、TITAN。--encoder meanpool で平均プーリング）。
 
 中心のずれ（平行移動 Δ）が腫瘍をまたいでほぼ同じ向き（cos 0.8–0.9、shift_transfer.py）なのに対し、ComBat・相似変換が使う
 「施設ごとのばらつきの比」が腫瘍をまたいで同じかを見る。比が腫瘍で違えば、ばらつきの比には施設の性質（色の幅など）と
@@ -11,17 +11,20 @@
     3. 科ごとの全体の倍率 s_f（affine_free と同じ RMS 比）と、次元ごとの比のばらつき（sd of r）
 
 入力: shift_transfer.py のキャッシュ（out/shift_transfer/{paper,glioma}_slides.csv / _embeddings.npy）。無ければ先に shift_transfer.py を回す。
-出力 (output_dir/dispersion_ratio/):
+    --encoder meanpool（CONCH v1.5 のパッチ埋め込みの単純平均、学習なしの集約器の対照）は shift_transfer.py --encoder meanpool の
+    キャッシュ（out/shift_transfer/meanpool/）。スライドの集合と並びは TITAN と同じなので、分割半分の乱数の分け方も同じ
+出力 (output_dir/dispersion_ratio/、--encoder meanpool は各ファイル名の末尾に _meanpool):
     corr_matrix.csv      — 科どうしの r の相関（上三角）と、分割半分の再現性（対角）、平均のずれの cos（下三角、参考）
     corr_matrix_corrected.csv — r の相関を分割半分の再現性で割った値（推定ノイズを差し引いた相関）
     summary.csv          — 科ごとの n、s_f、mean / sd of r、分割半分の再現性
     dispersion_ratio.png — a: 相関行列（r） b: 平均のずれの cos 行列 c: 科ごとの r のヒストグラム
 
 Usage:
-    uv run python dispersion_ratio.py
+    uv run python dispersion_ratio.py [--encoder titan|meanpool]
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -71,10 +74,19 @@ def split_half_reliability(E: np.ndarray, P: np.ndarray, rng: np.random.Generato
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--encoder", choices=["titan", "meanpool"], default="titan",
+                    help="スライド埋め込み。meanpool = CONCH のパッチ平均（shift_transfer.py --encoder meanpool のキャッシュ）")
+    args = ap.parse_args()
     cfg = load_config()
     cache = Path(cfg["output_dir"]) / "shift_transfer"
+    if args.encoder != "titan":
+        cache = cache / args.encoder
+    sfx = "" if args.encoder == "titan" else f"_{args.encoder}"   # TITAN は前と同じファイル名
+    tag = {"titan": "", "meanpool": " [mean-pooled CONCH v1.5]"}[args.encoder]
     out_dir = Path(cfg["output_dir"]) / "dispersion_ratio"
     out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[encoder] {args.encoder}  cache: {cache}")
     df = load_cache(cache)
     rng = np.random.default_rng(SEED)
 
@@ -101,7 +113,7 @@ def main() -> None:
             else:
                 C[i, j] = summary.loc[summary["family"] == a, "split_half_r"].item()
     corr = pd.DataFrame(C, index=FAMILIES, columns=FAMILIES)
-    corr.to_csv(out_dir / "corr_matrix.csv")
+    corr.to_csv(out_dir / f"corr_matrix{sfx}.csv")
     # 分割半分の再現性で割って、推定ノイズを差し引いた科どうしの相関（Spearman の減衰補正）。再現性が低い科（SFT など）では当てにならない
     rel = summary.set_index("family")["split_half_r"]
     Cc = np.full((n, n), np.nan)
@@ -110,8 +122,8 @@ def main() -> None:
             if i < j and rel[a] > 0 and rel[b] > 0:
                 Cc[i, j] = Cc[j, i] = C[i, j] / np.sqrt(rel[a] * rel[b])
     corr_c = pd.DataFrame(Cc, index=FAMILIES, columns=FAMILIES)
-    corr_c.to_csv(out_dir / "corr_matrix_corrected.csv")
-    summary.to_csv(out_dir / "summary.csv", index=False)
+    corr_c.to_csv(out_dir / f"corr_matrix_corrected{sfx}.csv")
+    summary.to_csv(out_dir / f"summary{sfx}.csv", index=False)
 
     off = [C[i, j] for i in range(n) for j in range(n) if i < j]
     print("[summary]\n" + summary.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
@@ -123,8 +135,8 @@ def main() -> None:
     print(corr_c.round(2).to_string())
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.6), gridspec_kw={"width_ratios": [1, 1, 1.3]}, constrained_layout=True)
-    for ax, title, M in ((axes[0], "per-dimension variance ratio: corr across families\n(diag: split-half reliability within family)", np.triu(C) + np.triu(C, 1).T),
-                         (axes[1], "mean shift Δ: cos across families", np.tril(C, -1) + np.tril(C, -1).T + np.eye(n))):
+    for ax, title, M in ((axes[0], "per-dimension variance ratio: corr across families" + tag + "\n(diag: split-half reliability within family)", np.triu(C) + np.triu(C, 1).T),
+                         (axes[1], "mean shift Δ: cos across families" + tag, np.tril(C, -1) + np.tril(C, -1).T + np.eye(n))):
         im = ax.imshow(M, cmap="RdYlBu_r", vmin=0, vmax=1)
         ax.set_xticks(range(n)); ax.set_yticks(range(n)); ax.set_xticklabels(FAMILIES, rotation=45, ha="right"); ax.set_yticklabels(FAMILIES)
         for i in range(n):
@@ -136,8 +148,8 @@ def main() -> None:
     for f in FAMILIES:
         ax.hist(r[f], bins=60, histtype="step", lw=1.3, label=f"{f} (s={summary.loc[summary['family'] == f, 'scale_s'].item():.2f})")
     ax.axvline(0, color="k", lw=0.8); ax.set_xlabel("log( var EBRAINS / var patho2 ) per dimension"); ax.set_ylabel("dimensions")
-    ax.set_title("dispersion ratio per dimension, by family", fontsize=9); ax.legend(fontsize=8)
-    fig.savefig(out_dir / "dispersion_ratio.png", dpi=150); plt.close(fig)
+    ax.set_title("dispersion ratio per dimension, by family" + tag, fontsize=9); ax.legend(fontsize=8)
+    fig.savefig(out_dir / f"dispersion_ratio{sfx}.png", dpi=150); plt.close(fig)
     print(f"\nsaved to {out_dir}")
 
 
