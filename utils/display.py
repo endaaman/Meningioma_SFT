@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 
 # 補正条件の色（全図で共通。施設色の青・赤と被らない Tol bright の灰・紫・水色）
 CONDITION_COLORS = {"original": "#BBBBBB", "centroid": "#AA3377", "gan": "#66CCEE", "macenko": "#009988",
-                    "combat": "#CCBB44", "combat_cov": "#E6DC99", "affine_free": "#228833", "affine_oracle": "#88BB88"}
+                    "combat": "#CCBB44", "combat_cov": "#E6DC99", "affine_free": "#228833", "affine_oracle": "#88BB88",
+                    "combat_recentred": "#997700"}   # combat_recentred は転移テスト（transfer_correction.py）だけ
 # 補正条件の集合（図表ごとにどちらを使うかを各 figs/*.py で明示する）。
 # 並びは全図表で共通: 補正なし → Macenko → GAN → ComBat → 平行移動（centroid。画像レベルの弱い順 → 埋め込みレベル、
 # 提案の平行移動を最後に。Macenko を GAN の前に置くのは ken 決定 2026-10-20）。
@@ -28,13 +29,17 @@ CONDITIONS_SUPP = [v for v in CONDITION_ORDER if v in CONDITIONS_FIG3 or v == "a
 #   combat_cov    = ComBat に組織型を共変量として渡したもの（評価施設のラベルを使う査読対応の参考値。
 #                   FULL / FIG3 / SUPP のどれにも入れない＝図表には出さない。結果は decisions.md に記録）
 #   macenko       = 色正規化（Macenko。画像レベル、GAN と同じ向き patho2 → EBRAINS、目標は EBRAINS 全体から 1 つ）
+#   combat_recentred = 転移テスト（transfer_correction.py）だけの変種: ComBat の次元ごとの倍率を推定元から移し、
+#                   中心は当て先の施設平均で取り直す（当て先の科のラベルが要る版）。論文の図表の条件集合には入れない
 CONDITION_LABELS = {"original": "No correction", "gan": "GAN", "macenko": "Macenko", "combat": "ComBat",
                     "combat_cov": "ComBat (histotype covariate)",
-                    "centroid": "Translation", "affine_free": "Similarity", "affine_oracle": "Similarity (oracle)"}
+                    "centroid": "Translation", "affine_free": "Similarity", "affine_oracle": "Similarity (oracle)",
+                    "combat_recentred": "ComBat (recentred)"}
 CONDITION_LABELS_SHORT = {**CONDITION_LABELS, "original": "None"}       # 軸の目盛りなど狭い所
 CONDITION_LABELS_JA = {"original": "なし", "gan": "GAN", "macenko": "色正規化（Macenko）", "combat": "ComBat",
                        "combat_cov": "ComBat（組織型を共変量）",
-                       "centroid": "平行移動", "affine_free": "相似変換", "affine_oracle": "相似変換（正しい倍率・参考）"}
+                       "centroid": "平行移動", "affine_free": "相似変換", "affine_oracle": "相似変換（正しい倍率・参考）",
+                       "combat_recentred": "ComBat（中心を当て先で取り直し）"}
 
 
 def order_conditions(variants) -> list[str]:
