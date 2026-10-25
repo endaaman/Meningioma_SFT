@@ -14,6 +14,8 @@ patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/P
 patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を目で選ぶツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶページ（serve: クリックごとに data/patho2_gliomas/representatives.csv が書かれる。html: サーバーなしの静的版）。HE 1 枚の症例は自動で選択済み、EXCLUDE で症例除外。解析はこの CSV を読む
 transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（論文コホート ＋ 院内代表 ＋ EBRAINS 対応診断、2,301 枚）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる
 transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（out/transfer/correction_{encoder}.*）
+prism_extract.py     # 第 2 のスライドエンコーダ: manifest の全スライドに Virchow（224 px / 0.5 mpp、concat 2560 次元）→ PRISM を足す。書き先は既存の h5（EBRAINS_embeddings / Patho2Gliomas_embeddings / 論文の original）の virchow_2560/…。既存はスキップ、ログ out/transfer/prism_log.csv
+atlas_retrieval.py   # 参照アトラス: EBRAINS 全体（5 枚以上の 78 診断）の診断ごとの重心で院内スライドを最近傍診断。補正なし / 論文の Δ / 他の科の Δ（全平均・科ごと）/ 自分の科の Δ と EBRAINS 内 LOO（out/atlas/）
 shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
@@ -105,6 +107,9 @@ uv run python -u patho2_gliomas_review.py thumbs           # HE 全部のサム�
 uv run python -u patho2_gliomas_review.py serve            # tmux の担当 window で。http://127.0.0.1:8765/ で代表を選ぶ → data/patho2_gliomas/representatives.csv
 uv run python transfer_manifest.py                         # 代表を選び終えてから。転移テストの全スライド一覧と埋め込みの揃い具合（out/transfer/manifest.csv）
 uv run python transfer_correction.py                       # transfer_manifest.py の後。3 法 × 推定元 × 当て先（--encoder prism は PRISM が揃ってから。埋め込みはキャッシュ、--reload で読み直し）
+uv run python -u prism_extract.py --dry-run                # Virchow → PRISM の対象と状態（manifest の h5_prism）
+uv run python -u prism_extract.py                          # tmux の担当 window で。EBRAINS → 院内の順に 2,301 枚（1〜3 分/枚、数日）。--sites / --families で絞れる
+uv run python atlas_retrieval.py                           # 参照アトラスへの最近傍診断（out/atlas/）。埋め込みはキャッシュ（--reload で読み直し）。--min-n で参照のクラスの最小枚数（既定以外は出力名に _min{n}）、--encoder prism は抽出後
 uv run python shift_transfer.py                            # 代表を選び終えてから。Δ の向きの群・科による違い（out/shift_transfer/）。埋め込みはキャッシュ（--reload で読み直し）
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、

@@ -390,7 +390,7 @@ transfer:
   manifest:   transfer/manifest.csv                       # output_dir 配下。全スライドの一覧（施設・科・群・患者・WSI・h5・埋め込みの有無）
   titan_key:  conch15_768/aggregates/titan/feature        # h5 の中の TITAN
   prism_key:  virchow_2560/aggregates/prism/feature       # h5 の中の PRISM（wsi-toolbox の prism プリセットが書く先）
-  prism_root: /mnt/server42/AI/Datasets/PRISM_embeddings  # Virchow → PRISM の h5 の木（<site>/<slide_id>.h5）。置き場は ken 確認待ち
+  # PRISM は既存の h5 に書く（ken 決定 2026-10-26）: EBRAINS → ebrains_embeddings.root の h5、院内グリオーマ → Patho2Gliomas_embeddings の h5、院内の論文コホート → 論文の original h5
   correction:                                             # transfer_correction.py（3 法 × 推定元 × 当て先）
     min_n:   5                                            # distortion の群: 当て先の両施設でこの例数以上の群（paper = 髄膜腫サブタイプ + SFT、glioma = ast / glm / odg、all = 5 科）
     methods: [centroid, affine_free, combat, combat_recentred]   # combat_recentred = ComBat の倍率だけ移し、中心は当て先の施設平均（科のラベルが要る版、Supplementary）
