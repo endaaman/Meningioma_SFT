@@ -384,3 +384,10 @@ shift_transfer:
     met: ["Metastatic tumours"]
   group_names: {ast: "Astrocytoma, IDH-mutant", glm: "Glioblastoma, IDH-wildtype", odg: "Oligodendroglioma", lym: "DLBCL", met: "Metastasis"}
   families:    {ast: glioma, glm: glioma, odg: glioma, lym: lymphoma, met: metastasis}
+
+# ---- transfer_manifest.py / transfer_correction.py（転移テスト: 3 法 × 推定元 × 当て先。論文コホート ＋ Patho2Gliomas の代表 ＋ EBRAINS の対応診断）----
+transfer:
+  manifest:   transfer/manifest.csv                       # output_dir 配下。全スライドの一覧（施設・科・群・患者・WSI・h5・埋め込みの有無）
+  titan_key:  conch15_768/aggregates/titan/feature        # h5 の中の TITAN
+  prism_key:  virchow_2560/aggregates/prism/feature       # h5 の中の PRISM（wsi-toolbox の prism プリセットが書く先）
+  prism_root: /mnt/server42/AI/Datasets/PRISM_embeddings  # Virchow → PRISM の h5 の木（<site>/<slide_id>.h5）。置き場は ken 確認待ち
