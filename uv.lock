@@ -3712,7 +3712,7 @@ wheels = [
 [[package]]
 name = "wsi-toolbox"
 version = "0.7.0"
-source = { git = "https://github.com/technoplasm/wsi-toolbox#2326e61d6be56093e90f1adb38db22d870bb9d54" }
+source = { git = "https://github.com/technoplasm/wsi-toolbox#f1337afaf0392be251f2b696fe76d05d48898378" }
 dependencies = [
     { name = "einops" },
     { name = "h5py" },

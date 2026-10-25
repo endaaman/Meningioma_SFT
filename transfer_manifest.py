@@ -106,8 +106,13 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     df = pd.DataFrame(paper_rows(cfg) + glioma_rows(cfg))
-    prism_root = Path(tcfg["prism_root"])
-    df["h5_prism"] = [str(prism_root / s / f"{i}.h5") for s, i in zip(df["site"], df["slide_id"])]
+    # PRISM（Virchow → PRISM）は既存の h5 に足す（ken 2026-10-26）: EBRAINS は EBRAINS_embeddings の h5（論文コホートの EBRAINS 分も
+    # 山田さんの original ではなくこちら）、院内は TITAN と同じ h5（グリオーマ = Patho2Gliomas_embeddings、論文コホート = original）
+    emb_root = Path(cfg["ebrains_embeddings"]["root"])
+    by_prefix: dict[str, str] = {}
+    for p in sorted(emb_root.rglob("*_hdf.h5"), key=lambda q: len(q.parts)):
+        by_prefix.setdefault(p.name[:8], str(p))
+    df["h5_prism"] = [by_prefix.get(i, "") if s == "ebrains" else h for s, i, h in zip(df["site"], df["slide_id"], df["h5_titan"])]
     print(f"checking {len(df)} h5 files ...")
     df["titan"] = [_has_key(p, tcfg["titan_key"]) for p in df["h5_titan"]]
     df["prism"] = [_has_key(p, tcfg["prism_key"]) for p in df["h5_prism"]]
