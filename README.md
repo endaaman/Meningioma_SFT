@@ -13,7 +13,7 @@ titan_batch.py       # 外部の h5 の木に TITAN を書く（EBRAINS 全体�
 patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor）の HE から CONCH v1.5（wsi-toolbox 0.7.0 の preset conch15、cls 1024 と proj 768 を 1 回で）+ TITAN を作り Patho2Gliomas_embeddings に置く（EBRAINS_embeddings と同じ構成）。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
 patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を目で選ぶツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶページ（serve: クリックごとに data/patho2_gliomas/representatives.csv が書かれる。html: サーバーなしの静的版）。HE 1 枚の症例は自動で選択済み、EXCLUDE で症例除外。解析はこの CSV を読む
 transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（論文コホート ＋ 院内代表 ＋ EBRAINS 対応診断、2,301 枚）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる
-transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（out/transfer/correction_{encoder}.*）
+transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（out/transfer/correction_{encoder}.*）
 shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）

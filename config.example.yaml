@@ -394,5 +394,5 @@ transfer:
   correction:                                             # transfer_correction.py（3 法 × 推定元 × 当て先）
     min_n:   5                                            # distortion の群: 当て先の両施設でこの例数以上の群（paper = 髄膜腫サブタイプ + SFT、glioma = ast / glm / odg、all = 5 科）
     methods: [centroid, affine_free, combat, combat_recentred]   # combat_recentred = ComBat の倍率だけ移し、中心は当て先の施設平均（科のラベルが要る版、Supplementary）
-    sources: [none, own, paper, meningioma, SFT, glioma, lymphoma, metastasis, others]   # none = 補正なし、own = 当て先自身で推定（上限）、others = 当て先の科以外の全部
+    sources: [none, own, paper, meningioma, SFT, glioma, lymphoma, metastasis, others, others_mean]   # none = 補正なし、own = 当て先自身で推定（上限）、others = 当て先の科以外の全部（まとめて当てはめ）、others_mean = 同じ科を科ごとに当てはめて平均（all は 5 科全部）
     targets: [paper, glioma, lymphoma, metastasis, all]   # paper = 髄膜腫 + SFT（論文のベンチ）、all = 5 科全部

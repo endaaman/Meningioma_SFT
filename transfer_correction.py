@@ -12,14 +12,31 @@
 科（manifest の family）: meningioma / SFT / glioma（ast・glm・odg）/ lymphoma / metastasis。
 当て先: paper（髄膜腫 + SFT。論文のベンチが使える）/ glioma / lymphoma / metastasis / all（5 科全部）。
 推定元: none（補正なし）/ own（当て先自身 = 上限）/ paper / meningioma / SFT / glioma / lymphoma / metastasis /
-        others（当て先の科以外の全部）。
+        others（当て先の科以外の全部をまとめて 1 回で当てはめ）/
+        others_mean（others と同じ科を科ごとに別々に当てはめ、パラメータを科ごとに等しい重みで平均。下の「others_mean」）。
     推定元を飛ばす規則（source_families）:
       - 推定元の科の集合が当て先と同じ → own と同じなので飛ばす（例: paper → paper、glioma → glioma）
       - 推定元が当て先の真部分集合（例: meningioma / SFT → paper）→ 推定に使ったスライドを評価に含む半分だけの
         in-sample になり、転移の問いにならないので飛ばす（部分抽出からの推定は shift_estimation.py が扱う）
       - ただし当て先 all は全部の科を含むので、科ごとの推定元と paper は残す（「1 つの科で推定した補正を全腫瘍の混合に
         当てる」。推定元のスライドは当て先に含まれる = 一部 in-sample）。others は空なので飛ばす
+      - others_mean は others と同じ科を使う。当て先 all だけは others が空なので 5 科全部を科ごとに当てはめて平均する
+        （= 科の構成をそろえた own。一部 in-sample は all の他の推定元と同じ）
     結果として推定元と当て先は all 以外では素（共通のスライドが無い）。
+
+others_mean（others の構成の問題への対処）: 科の構成が施設で違う（例 glioma: EBRAINS 807 / patho2 117、metastasis 47 / 84）ので、
+    まとめて当てはめた others の Δ には科どうしの差（長さ 10–16）が構成の差の重みで混ざる。科ごとに当てはめてから平均すると、
+    各科の中では両施設の対応がとれているのでこれが入らない。平均の取り方（各科 f の当てはめ = 科 f の両施設のスライドだけ）:
+      centroid          Δ = mean_f(Δ_f)、Δ_f = μ_E,f − μ_P,f
+      affine_free       x' = s·x + b と書き、s = mean_f(s_f)、b = mean_f(b_f)、b_f = μ_E,f − s_f·μ_P,f
+      combat            科 f の ComBat は次元ごとの 1 次式 x' = k_f·x + c_f（k_f = 1/√δ*_f、
+                        c_f = m_f − (m_f + γ*_f·σ_f)·k_f、m_f = stand.mean、σ_f = √var.pooled。共変量なしなので mod.mean = 0）。
+                        k = mean_f(k_f)、c = mean_f(c_f) を明示式で当てる。estimates の gamma.star / delta.star / stand.mean /
+                        var.pooled をそのまま平均する案は採らない: γ*_f・δ*_f は科ごとの標準化（m_f, σ_f）の座標で表されていて、
+                        科をまたいで足すと補正の平均にならない（科の平均 m_f どうしは 10–16 離れている）。データ空間の 1 次式で
+                        平均するのは affine_free の規則と同じ。この平均は 1 組の estimates で表せないので neuroCombatFromTraining
+                        は通さない（科ごとの 1 次式が FromTraining の出力と一致することは実行時に確かめて表示する）
+      combat_recentred  倍率 k = mean_f(k_f) だけを移し、中心は当て先の施設平均（他と同じ）
 
 3 法（論文と同じ定義。推定元の両施設の平均 μ_E, μ_P で当てはめ、当て先の patho2 の x に適用）:
     centroid         x' = x + (μ_E − μ_P)                                         （centroid.py）
@@ -42,7 +59,7 @@
     distortion     群の平均どうしの距離の比 d_patho2'(a, b) / d_ebrains(a, b) の群の組についての平均（1 = 歪みなし）。
                    群は当て先の両施設で min_n 例以上: paper = 髄膜腫サブタイプ + SFT、glioma = ast / glm / odg、all = 5 科
     scale / shift_norm  推定元で当てはめたパラメータ（affine_free: s、combat / combat_recentred: 次元ごとの倍率 1/√δ* の
-                   中央値、centroid: ‖μ_E − μ_P‖）
+                   中央値、centroid: ‖μ_E − μ_P‖。others_mean は平均した s・k・Δ）
     ベンチ:
       paper   pairs_adjacent（施設 × 組織型の平均の Ward 樹形図で同じ組織型の 2 施設が隣り合う数、13 組。dendrogram.py の
               group_means / raw_distance / ward_linkage / pair_stats をそのまま使う）、
@@ -105,7 +122,7 @@ TARGET_FAMILIES = {"paper": {"meningioma", "SFT"}, "glioma": {"glioma"}, "lympho
 NAMED_SOURCES = {"paper": {"meningioma", "SFT"}, "meningioma": {"meningioma"}, "SFT": {"SFT"}, "glioma": {"glioma"},
                  "lymphoma": {"lymphoma"}, "metastasis": {"metastasis"}}
 METHODS = ["centroid", "affine_free", "combat", "combat_recentred"]
-SOURCES = ["none", "own", "paper", "meningioma", "SFT", "glioma", "lymphoma", "metastasis", "others"]
+SOURCES = ["none", "own", "paper", "meningioma", "SFT", "glioma", "lymphoma", "metastasis", "others", "others_mean"]
 TARGETS = ["paper", "glioma", "lymphoma", "metastasis", "all"]
 GLIOMA_GROUPS = ["ast", "glm", "odg"]
 # 受け入れ確認で論文の variant と突き合わせる法（none = 補正なし = original）
@@ -160,6 +177,9 @@ def source_families(target: str, source: str) -> frozenset | None:
     if source == "others":
         rest = set(FAMILIES) - tf
         return frozenset(rest) if rest else None
+    if source == "others_mean":          # 科ごとに当てはめて平均する科の集合（all は others が空なので全科）
+        rest = set(FAMILIES) - tf
+        return frozenset(rest or tf)
     sf = NAMED_SOURCES[source]
     if sf == tf:
         return None                      # own と同じ
@@ -184,6 +204,28 @@ def fit_source(X: np.ndarray, site: np.ndarray, ref: str) -> dict:
             "n_e": int(e.sum()), "n_p": int(p.sum())}
 
 
+def combat_linear(fit: dict) -> tuple[np.ndarray, np.ndarray]:
+    """推定元の ComBat（patho2 側）を次元ごとの 1 次式 x' = k·x + c に書き直した (k, c)。"""
+    est = fit["est"]
+    m = np.asarray(est["stand.mean"])[:, 0]
+    sd = np.sqrt(np.asarray(est["var.pooled"])[:, 0])
+    g = np.asarray(est["gamma.star"])[fit["code_p"]]
+    k = fit["k"]
+    return k, m - (m + g * sd) * k
+
+
+def fit_mean(per_family: list[dict]) -> dict:
+    """科ごとの当てはめのパラメータを科ごとに等しい重みで平均する（others_mean。docstring の定義）。"""
+    lin = [combat_linear(f) for f in per_family]
+    return {"kind": "mean",
+            "delta": np.mean([f["mu_e"] - f["mu_p"] for f in per_family], axis=0),
+            "s": float(np.mean([f["s"] for f in per_family])),
+            "b": np.mean([f["mu_e"] - f["s"] * f["mu_p"] for f in per_family], axis=0),
+            "k": np.mean([k for k, _ in lin], axis=0), "c": np.mean([c for _, c in lin], axis=0),
+            "n_e": int(sum(f["n_e"] for f in per_family)), "n_p": int(sum(f["n_p"] for f in per_family)),
+            "parts": per_family}
+
+
 def combat_explicit(Xb: np.ndarray, est: dict, code: int) -> np.ndarray:
     """ComBat（パラメトリック、共変量なし）の適用を estimates から明示的に書いたもの（FromTraining の確認用）。"""
     m = np.asarray(est["stand.mean"])[:, 0]
@@ -203,6 +245,20 @@ def apply_method(method: str, fit: dict, Xt: np.ndarray, st: np.ndarray, ref: st
     Y = Xt.copy()
     p = st != ref
     oth = str(st[p][0])
+    if fit.get("kind") == "mean":       # others_mean: 平均したパラメータ（docstring の定義）
+        if method == "centroid":
+            Y[p] = Xt[p] + fit["delta"]
+            return Y, {"shift_norm": float(np.linalg.norm(fit["delta"]))}
+        if method == "affine_free":
+            Y[p] = fit["s"] * Xt[p] + fit["b"]
+            return Y, {"scale": fit["s"]}
+        if method == "combat":
+            for part in fit["parts"]:  # 科ごとの 1 次式が FromTraining の出力と一致するか
+                k, c = combat_linear(part)
+                d = float(np.abs(k * Xt[p] + c - combat_from_training(Xt[p], part, oth)).max())
+                checks["linear_vs_ft"] = max(checks.get("linear_vs_ft", 0.0), d)
+            Y[p] = fit["k"] * Xt[p] + fit["c"]
+            return Y, {"scale": float(np.median(fit["k"]))}
     if method == "centroid":
         Y[p] = Xt[p] + (fit["mu_e"] - fit["mu_p"])
         return Y, {"shift_norm": float(np.linalg.norm(fit["mu_e"] - fit["mu_p"]))}
@@ -404,7 +460,8 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
     L = [f"# 転移テスト: 3 法 × 推定元 × 当て先（{encoder}）", "",
          "`transfer_correction.py` が作る。定義はスクリプトの docstring。数値は当て先のスライド（patho2 だけ補正）。",
          "推定元を飛ばす規則: 当て先と同じ科の集合（= own）と、当て先の真部分集合（一部 in-sample）は飛ばす。"
-         "当て先 all だけは科ごとの推定元と paper を残す（推定元が当て先に含まれる）。", ""]
+         "当て先 all だけは科ごとの推定元と paper を残す（推定元が当て先に含まれる）。"
+         "others_mean = others と同じ科を科ごとに当てはめてパラメータを科ごとに等しい重みで平均（all は 5 科全部）。", ""]
     L += ["## 受け入れ確認（target = paper、source = own / none と論文の出力）", "",
           _md(acc[["method", "metric", "expected", "got", "diff", "ok", "reference"]], digits=4, index=False), ""]
     L += ["## ComBat の転移（neuroCombatFromTraining）の確認", "",
@@ -414,6 +471,8 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
           f"- FromTraining と明示式（estimates の gamma.star / delta.star / stand.mean / var.pooled）の一致（全適用の max |差|）: "
           f"{checks.get('ft_vs_explicit', float('nan')):.2e}",
           f"- 使ったもの: {'明示式（FromTraining が合わなかった）' if checks.get('use_explicit') else 'neuroCombatFromTraining（batch は整数の符号の文字列で渡す）'}",
+          f"- others_mean: 科ごとの ComBat を 1 次式 k·x + c に書き直したものと FromTraining の出力の一致（max |差|）: "
+          f"{checks.get('linear_vs_ft', float('nan')):.2e}。平均した (k, c) は 1 組の estimates で表せないので明示式で当てる",
           ""]
     L += ["## 推定元のパラメータ", "",
           "scale_affine = 相似変換の s（施設平均まわりの RMS 比）、k_combat_* = ComBat の次元ごとの倍率 1/√δ* の分布、"
@@ -515,6 +574,14 @@ def plot(res: pd.DataFrame, path: Path, methods: list[str], sources: list[str], 
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+def _fit_row(fit_rows: list[dict], cohort: str, f: dict) -> None:
+    delta = f["delta"] if f.get("kind") == "mean" else f["mu_e"] - f["mu_p"]
+    fit_rows.append({"cohort": cohort, "n_ebrains": f["n_e"], "n_patho2": f["n_p"],
+                     "shift_norm": float(np.linalg.norm(delta)), "scale_affine": f["s"],
+                     "k_combat_median": float(np.median(f["k"])), "k_combat_q05": float(np.quantile(f["k"], 0.05)),
+                     "k_combat_q95": float(np.quantile(f["k"], 0.95))})
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--encoder", choices=["titan", "prism"], default="titan", help="スライドエンコーダ（manifest の h5 と key）")
@@ -540,7 +607,15 @@ def main() -> None:
            "lisi_k": cfg.get("harmonization", {}).get("lisi_k", 30),
            "histotype_classes": apply_set(cfg, cfg.get("nc", {}).get("histotype_set", "main"))["lp_histotype"]["classes"]}
 
-    fits: dict[frozenset, dict] = {}
+    fits: dict = {}   # 推定元の科の集合（others_mean は ("mean", 科の集合)）→ 当てはめ
+
+    def get_fit(sf: frozenset) -> dict:
+        if sf not in fits:
+            sm = np.isin(fam, list(sf))
+            fits[sf] = fit_source(X[sm], site[sm], ref)
+            _fit_row(fit_rows, "+".join(x for x in FAMILIES if x in sf), fits[sf])
+        return fits[sf]
+
     checks: dict = {}
     rows: list[dict] = []
     own_paper: dict[str, tuple[np.ndarray, list[str]]] = {}
@@ -564,15 +639,14 @@ def main() -> None:
             sf = source_families(target, source)
             if sf is None:
                 continue
-            if sf not in fits:
-                sm = np.isin(fam, list(sf))
-                fits[sf] = fit_source(X[sm], site[sm], ref)
-                f = fits[sf]
-                fit_rows.append({"cohort": "+".join(x for x in FAMILIES if x in sf), "n_ebrains": f["n_e"], "n_patho2": f["n_p"],
-                                 "shift_norm": float(np.linalg.norm(f["mu_e"] - f["mu_p"])), "scale_affine": f["s"],
-                                 "k_combat_median": float(np.median(f["k"])), "k_combat_q05": float(np.quantile(f["k"], 0.05)),
-                                 "k_combat_q95": float(np.quantile(f["k"], 0.95))})
-            fit = fits[sf]
+            if source == "others_mean":
+                key = ("mean", sf)
+                if key not in fits:
+                    fits[key] = fit_mean([get_fit(frozenset({f})) for f in FAMILIES if f in sf])
+                    _fit_row(fit_rows, "mean(" + ", ".join(f for f in FAMILIES if f in sf) + ")", fits[key])
+                fit = fits[key]
+            else:
+                fit = get_fit(sf)
             for method in methods:
                 Y, par = apply_method(method, fit, Xt, st, ref, checks)
                 if source == "own" and method == "combat":   # 推定元 = 当て先: 直接の出力と比べる（並びは同じ）
@@ -589,7 +663,8 @@ def main() -> None:
                 print(f"  [{target} / {source} / {method}] residual {m['residual_norm']:.3f}  ASW {m['asw_site']:.4f}"
                       + (f"  distortion {m['distortion']:.3f}" if "distortion" in m else ""))
     print(f"  ComBat checks: own vs direct {checks.get('own_direct', np.nan):.2e}  reference unchanged {checks.get('ref_unchanged', np.nan):.2e}  "
-          f"FromTraining vs explicit {checks.get('ft_vs_explicit', np.nan):.2e}  -> "
+          f"FromTraining vs explicit {checks.get('ft_vs_explicit', np.nan):.2e}  "
+          f"per-family linear form vs FromTraining {checks.get('linear_vs_ft', np.nan):.2e}  -> "
           f"{'explicit' if checks.get('use_explicit') else 'neuroCombatFromTraining'}")
 
     res = pd.DataFrame(rows)[["encoder", "method", "source", "target", "metric", "value", "n_ebrains", "n_patho2",
