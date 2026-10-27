@@ -41,6 +41,18 @@ CONDITION_LABELS_JA = {"original": "なし", "gan": "GAN", "macenko": "色正規
                        "centroid": "平行移動", "affine_free": "相似変換", "affine_oracle": "相似変換（正しい倍率・参考）",
                        "combat_recentred": "ComBat（中心を当て先で取り直し）"}
 
+# スライドエンコーダ（encoder_comparison.py の列。「別系統のスライドエンコーダでも同じ」の比較）。
+# 並び: 学習なしの集約器の対照 → 論文の TITAN → 第 2 のエンコーダ PRISM。色は 3 つで全対の色覚の区別を満たす組
+# （エンコーダの色。補正条件の色 CONDITION_COLORS とは別の役目なので同じ図で混ぜない）
+ENCODER_ORDER = ["meanpool", "titan", "prism"]
+ENCODER_LABELS = {"meanpool": "Mean pooling", "titan": "TITAN", "prism": "PRISM"}
+ENCODER_LABELS_JA = {"meanpool": "平均プーリング", "titan": "TITAN", "prism": "PRISM"}
+ENCODER_COLORS = {"meanpool": "#1baf7a", "titan": "#2a78d6", "prism": "#eb6834"}
+ENCODER_MARKERS = {"meanpool": "s", "titan": "o", "prism": "D"}
+# 腫瘍の科（転移テストの 5 科。コード上の名前は shift_transfer / transfer_correction の family のまま）
+FAMILY_LABELS = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "lymphoma": "DLBCL", "metastasis": "Metastasis"}
+FAMILY_LABELS_JA = {"meningioma": "髄膜腫", "SFT": "SFT", "glioma": "グリオーマ", "lymphoma": "DLBCL", "metastasis": "転移"}
+
 
 def order_conditions(variants) -> list[str]:
     """variant のリストを CONDITION_ORDER の順に並べる（未知の variant は後ろに元の順で）。"""
