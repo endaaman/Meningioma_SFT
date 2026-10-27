@@ -1,27 +1,41 @@
-"""encoder_comparison.py — 同じ解析を 3 つのスライド埋め込み（平均プーリング / TITAN / PRISM）で回した出力を、1 つの表と図に並べる
-（v4 Fig 6「別系統のスライドエンコーダでも同じ」の材料）。
+"""encoder_comparison.py — 同じ解析を 4 つのスライド埋め込み（CONCH の平均 / TITAN / Virchow の平均 / PRISM）で回した出力を、
+1 つの表と図に並べる（v4 Fig 6「別系統のスライドエンコーダでも同じ」の材料）。
 
-計算はしない: 各解析スクリプトの出力を読んで並べるだけ（入力には書かない）。出力が無いエンコーダの列は空欄にし、summary.md に
-どのファイルが無かったかを書く（落ちない）。PRISM の出力が揃ってから回し直せば PRISM の列が埋まる。
+エンコーダ（列の並びは utils/display.py の ENCODER_ORDER）: パッチエンコーダごとに「パッチ埋め込みの単純平均（学習なしの集約器の対照）
+→ 学習した集約器」。CONCH v1.5 → meanpool（CONCH の平均）/ titan（TITAN、論文）、Virchow v1（concat 2560 次元）→ meanpool_virchow
+（Virchow の平均、transfer_meanpool.py build --source virchow）/ prism（PRISM）。
 
-読むもの（エンコーダごと。titan は既定の名前、meanpool / prism は各スクリプトの --encoder の出力名）:
-    幾何       shift_transfer.py       out/shift_transfer/{,meanpool/,prism/}{groups,cos_matrix,arrows,mismatch_matrix,bio_control}.csv
-                                       と埋め込みのキャッシュ {paper,glioma}_embeddings.npy（次元とノルムの中央値だけ）
+計算は軽いものだけ（幾何のブロックの先頭の「施設差の大きさ」、下記）。ほかは各解析スクリプトの出力を読んで並べるだけ（入力には書かない）。
+出力が無いエンコーダの列は空欄にし、summary.md にどのファイルが無かったかを書く（落ちない）。出力が揃ってから回し直せばその列が埋まる。
+
+読むもの（エンコーダごと。titan は既定の名前、meanpool / meanpool_virchow / prism は各スクリプトの --encoder の出力名）:
+    幾何       shift_transfer.py       out/shift_transfer/{,meanpool/,meanpool_virchow/,prism/}{groups,cos_matrix,arrows,mismatch_matrix,
+                                       bio_control}.csv と埋め込みのキャッシュ {paper,glioma}_embeddings.npy（次元とノルムの中央値だけ）
+    施設差の大きさ transfer_manifest.py ほか  out/transfer/manifest.csv（family / site）と転移テストの埋め込みのキャッシュ
+                                       out/transfer/embeddings_{encoder}.npy（manifest の並び。embeddings_{encoder}_slides.csv か _ids.csv の
+                                       site / slide_id で manifest と照合し、合わなければその列は空欄）
     転移       transfer_correction.py  out/transfer/correction_{encoder}.csv
-    ばらつきの比 dispersion_ratio.py   out/dispersion_ratio/{corr_matrix,corr_matrix_corrected,summary}{,_meanpool,_prism}.csv
-    アトラス   atlas_retrieval.py      out/atlas/retrieval_{encoder}.csv と _summary.md（参照の診断数・枚数）。meanpool は無い。
+    ばらつきの比 dispersion_ratio.py   out/dispersion_ratio/{corr_matrix,corr_matrix_corrected,summary}{,_meanpool,_meanpool_virchow,_prism}.csv
+    アトラス   atlas_retrieval.py      out/atlas/retrieval_{encoder}.csv と _summary.md（参照の診断数・枚数）。meanpool / meanpool_virchow は
+                                       回していない（空欄）。
                                        PRISM のアトラスは PRISM を抽出した EBRAINS（転移テストの manifest の分）だけなので、参照を
                                        そろえた比較の行も出す: TITAN は retrieval_titan_on_prism.csv（TITAN のアトラスを同じ EBRAINS に絞る）、
                                        PRISM は retrieval_prism.csv のまま
     例数       transfer_sample_size.py out/transfer_sample_size/n_curve_summary.csv（titan）、<encoder>/n_curve_summary.csv
-                                       か n_curve_summary_<encoder>.csv（他。meanpool は無い）
+                                       か n_curve_summary_<encoder>.csv（他。meanpool / meanpool_virchow は無い）
 
-尺度: スライド埋め込みのノルムと次元がエンコーダで違う（TITAN・meanpool 768 次元、PRISM 1280 次元）ので、長さ・残差は比で出す
-（‖Δ_g‖ / ‖Δ_paper‖、残差 / 補正なしの残差）。絶対値は「参考」の行に残す。
+尺度: スライド埋め込みのノルムと次元がエンコーダで違う（TITAN・CONCH の平均 768 次元、PRISM 1280 次元、Virchow の平均 2560 次元）ので、
+長さ・残差は比で出す（‖Δ_g‖ / ‖Δ_paper‖、残差 / 補正なしの残差、施設差 / 群内 RMS）。絶対値は「参考」の行に残す。
 
 表（行 = 指標、列 = エンコーダ）:
     0 参考          次元、スライド埋め込みのノルムの中央値（転移テストの 2,301 枚 = shift_transfer のキャッシュ）、‖Δ_paper‖ とその比
-    1 幾何          群ごとの cos vs Δ_paper（ノイズ補正。括弧は生の cos と 95% ブートストラップ区間）: 髄膜腫サブタイプ（中央値 [範囲]）/
+    1 幾何          施設差の大きさ（ここだけ計算する。転移テストの全スライド = manifest、科は family 列、施設は site 列）:
+                      論文コホート = family ∈ {meningioma, SFT}。Δ_S = mean(EBRAINS の S) − mean(patho2 の S)（S = 論文コホート / 科 f）。
+                      群内 RMS = patho2 の論文コホートの各スライドとその重心の距離の RMS = sqrt(mean ‖x − x̄‖²)（エンコーダの尺度の物差し）。
+                      施設差の相対的な大きさ = ‖Δ_paper‖ / 群内 RMS。Δ_f の分解（5 科）: u = Δ_paper / ‖Δ_paper‖ として
+                      平行成分 Δ_f·u と直交成分 sqrt(‖Δ_f‖² − (Δ_f·u)²)、どちらも群内 RMS で割る。ノイズ補正はしない（生の平均の差）。
+                      髄膜腫・SFT は Δ_paper に含まれる（in-sample）。
+                    群ごとの cos vs Δ_paper（ノイズ補正。括弧は生の cos と 95% ブートストラップ区間）: 髄膜腫サブタイプ（中央値 [範囲]）/
                     SFT / グリオーマ 3 群とまとめ / DLBCL / 転移。群どうしの cos（ノイズ補正）の中央値: 同じ科の組 vs 科をまたぐ組。
                     矢印の図（Δ_paper × 群間変動の PC1 の平面）の 12 群の角度・長さの比（平面内 length_2d / ‖Δ_paper‖）、
                     全次元の ‖Δ_g‖ / ‖Δ_paper‖（ノイズ補正）と角度（ノイズ補正）、髄膜腫–グリオーマの全次元の角度
@@ -40,12 +54,14 @@
                     残差の比の床（全枚数）、n = 20 の残差の比
 
 出力 (output_dir/encoder_comparison/):
-    comparison.csv          1 行 = 表の 1 行。列: block, metric, cell, method, note、エンコーダごとの表示（meanpool / titan / prism）と
+    comparison.csv          1 行 = 表の 1 行。列: block, metric, cell, method, note、エンコーダごとの表示（meanpool / titan /
+                            meanpool_virchow / prism）と
                             主の数値（{encoder}_value: 1 つの値はその値、平均 ± SD は平均、中央値 [範囲] は中央値、範囲は最小、
                             「a → b → c」は b、「k/N」は k / N）
     summary.md              入力ファイルの有無と更新時刻、ブロックごとの表（転移はセル × 法をエンコーダの内側に）、平行移動が最小でないセル
-    encoder_comparison.png  a 群ごとの cos vs Δ_paper（生の cos と 95% 区間、白抜き = ノイズ補正）/ b 転移の残差の比（セル × 3 法）/
-                            c ばらつきの比: 科をまたぐ相関 vs 2 科の再現性の幾何平均（対角線 = 完全に共有）/ d アトラスの top-1
+    encoder_comparison.png  a 群ごとの cos vs Δ_paper（生の cos と 95% 区間、白抜き = ノイズ補正）/ b 転移の残差の比（セル × 3 法。
+                            右下にエンコーダごとの ‖Δ_paper‖ / 群内 RMS）/ c ばらつきの比: 科をまたぐ相関 vs 2 科の再現性の
+                            幾何平均（対角線 = 完全に共有）/ d アトラスの top-1（出力のあるエンコーダだけ）
 
 Usage:
     uv run python encoder_comparison.py
@@ -78,6 +94,8 @@ RELIABLE = ["meningioma", "glioma", "metastasis"]              # 分割半分の
 ATLAS_ROWS = FAMILIES + ["overall"]
 ATLAS_CHAIN = ["none", "paper", "family"]
 SS = dict(source="paper", variant="patho2", target="glioma", n_mid=20)
+PAPER_FAMILIES = ("meningioma", "SFT")                         # 論文コホート（施設差の大きさの Δ_paper と群内 RMS）
+MANIFEST = "transfer/manifest.csv"                              # config の transfer.manifest の既定（transfer_correction.py と同じ）
 SRC_JA = {"paper": "論文コホート", "own": "own", "none": "補正なし", "others": "others（まとめ）",
           "others_mean": "others_mean（科ごと平均）", **FAMILY_LABELS_JA}
 SRC_EN = {"paper": "Paper cohort", "own": "own", "others": "others", "others_mean": "others (per-family mean)", **FAMILY_LABELS}
@@ -90,8 +108,8 @@ Val = tuple[float, str]
 
 # ── 入力 ──────────────────────────────────────────────────────────────────────
 
-def input_paths(out: Path, enc: str) -> dict[str, list[Path]]:
-    """名前 → 候補のパス（先に見つかったものを使う）。"""
+def input_paths(out: Path, enc: str, manifest: str = MANIFEST) -> dict[str, list[Path]]:
+    """名前 → 候補のパス（先に見つかったものを使う）。manifest は output_dir からの相対（config の transfer.manifest）。"""
     st = out / "shift_transfer" if enc == "titan" else out / "shift_transfer" / enc
     sfx = "" if enc == "titan" else f"_{enc}"
     dr, at, ss = out / "dispersion_ratio", out / "atlas", out / "transfer_sample_size"
@@ -100,6 +118,8 @@ def input_paths(out: Path, enc: str) -> dict[str, list[Path]]:
         "groups": [st / "groups.csv"], "cos_matrix": [st / "cos_matrix.csv"], "arrows": [st / "arrows.csv"],
         "mismatch": [st / "mismatch_matrix.csv"], "bio": [st / "bio_control.csv"],
         "emb_paper": [st / "paper_embeddings.npy"], "emb_glioma": [st / "glioma_embeddings.npy"],
+        "manifest": [out / manifest], "emb_all": [out / "transfer" / f"embeddings_{enc}.npy"],
+        "emb_ids": [out / "transfer" / f"embeddings_{enc}_slides.csv", out / "transfer" / f"embeddings_{enc}_ids.csv"],
         "transfer": [out / "transfer" / f"correction_{enc}.csv"],
         "disp_corr": [dr / f"corr_matrix{sfx}.csv"], "disp_corr_c": [dr / f"corr_matrix_corrected{sfx}.csv"],
         "disp_summary": [dr / f"summary{sfx}.csv"],
@@ -110,7 +130,9 @@ def input_paths(out: Path, enc: str) -> dict[str, list[Path]]:
     }
 
 
-def _read(path: Path):
+def _read(path: Path, name: str):
+    if name in ("manifest", "emb_ids"):
+        return pd.read_csv(path, dtype={"slide_id": str, "patient": str})   # transfer_correction / transfer_meanpool と同じ読み方
     if path.suffix == ".npy":
         return np.load(path, mmap_mode="r")
     if path.suffix == ".md":
@@ -125,18 +147,18 @@ def _read(path: Path):
 class Inputs:
     """エンコーダ 1 つの入力。無い・読めないファイルは None（理由は status）。"""
 
-    def __init__(self, out: Path, enc: str):
+    def __init__(self, out: Path, enc: str, manifest: str = MANIFEST):
         self.enc = enc
         self.data: dict[str, object] = {}
         self.status: dict[str, str] = {}
-        for name, cands in input_paths(out, enc).items():
+        for name, cands in input_paths(out, enc, manifest).items():
             self.data[name] = None
             hit = next((p for p in cands if p.exists()), None)
             if hit is None:
                 self.status[name] = "無し: " + " / ".join(str(p.relative_to(out)) for p in cands)
                 continue
             try:
-                self.data[name] = _read(hit)
+                self.data[name] = _read(hit, name)
                 mtime = datetime.fromtimestamp(hit.stat().st_mtime).strftime("%m-%d %H:%M")
                 self.status[name] = f"{hit.relative_to(out)}（{mtime}）"
             except Exception as err:   # 書きかけなど。落とさずに空欄にする
@@ -307,6 +329,40 @@ def reach_n(c: pd.DataFrame, full: float) -> Val:
     return float(n), f"{n}" + ("（全枚数）" if first == len(ok) - 1 else "")
 
 
+def site_gap(X, ids: pd.DataFrame, man: pd.DataFrame, ref: str) -> dict:
+    """施設差の大きさ（docstring の 1 幾何の先頭）。X は転移テストの埋め込みのキャッシュ（manifest の並び）。
+
+    返り値: dp_norm = ‖Δ_paper‖、rms = 群内 RMS（施設 ref でない側の論文コホート）、ratio = ‖Δ_paper‖ / rms、
+    par / orth = 科ごとの Δ_f の平行成分・直交成分 / rms。並びが manifest と合わなければ ValueError（その列は空欄）。"""
+    key = ["site", "slide_id"]
+    if len(X) != len(man) or not ids[key].reset_index(drop=True).equals(man[key].reset_index(drop=True)):
+        raise ValueError(f"埋め込みのキャッシュ（{len(X)} 行）の並びが manifest（{len(man)} 行）と合わない")
+    X = np.asarray(X, dtype=np.float64)
+    fam, site = man["family"].astype(str).to_numpy(), man["site"].astype(str).to_numpy()
+    others = sorted(set(site) - {ref})
+    if len(others) != 1:
+        raise ValueError(f"施設が reference {ref!r} ともう 1 つでない: {sorted(set(site))}")
+    e, p = site == ref, site == others[0]
+
+    def delta(m: np.ndarray) -> np.ndarray:
+        if not (m & e).any() or not (m & p).any():
+            raise ValueError("片方の施設にスライドが無い群がある")
+        return X[m & e].mean(0) - X[m & p].mean(0)
+    paper = np.isin(fam, PAPER_FAMILIES)
+    dp = delta(paper)
+    P = X[paper & p]
+    rms = float(np.sqrt(np.mean(np.sum((P - P.mean(0)) ** 2, axis=1))))
+    u = dp / np.linalg.norm(dp)
+    par, orth = {}, {}
+    for f in FAMILIES:
+        d = delta(fam == f)
+        a = float(d @ u)
+        par[f] = a / rms
+        orth[f] = float(np.sqrt(max(float(d @ d) - a * a, 0.0))) / rms
+    return dict(dp_norm=float(np.linalg.norm(dp)), rms=rms, ratio=float(np.linalg.norm(dp)) / rms, par=par, orth=orth,
+                n_paper_p=int(P.shape[0]))
+
+
 # ── ブロック ──────────────────────────────────────────────────────────────────
 
 def block_reference(T: Table) -> None:
@@ -325,6 +381,33 @@ def block_reference(T: Table) -> None:
         X = np.concatenate([np.asarray(p, dtype=np.float64), np.asarray(gl, dtype=np.float64)])
         return one(_group(g, "Paper cohort")["shift_norm"] / np.median(np.linalg.norm(X, axis=1)), 3)
     T.add(b, "‖Δ_paper‖ / ノルムの中央値", T.each(["groups", "emb_paper", "emb_glioma"], rel))
+
+
+def block_site_gap(T: Table, cfg: dict) -> dict[str, dict | None]:
+    """幾何のブロックの先頭: 施設差の相対的な大きさと Δ_f の分解（ここだけ計算する）。"""
+    b = "1 幾何"
+    gap = T.each(["emb_all", "emb_ids", "manifest"], lambda X, ids, man: site_gap(X, ids, man, cfg["reference"]))
+    T.add(b, "施設差の相対的な大きさ ‖Δ_paper‖ / 群内 RMS",
+          {e: (g["ratio"], f"{g['ratio']:.3f}（{g['dp_norm']:.3f} / {g['rms']:.3f}）") if g else None for e, g in gap.items()},
+          note="括弧は ‖Δ_paper‖ / 群内 RMS。群内 RMS = patho2 の論文コホートの sqrt(mean ‖x − x̄‖²)。"
+               "out/transfer/manifest.csv と embeddings_{encoder}.npy から計算")
+    for part, label, note in [("par", "Δ_f の Δ_paper 方向の成分 / 群内 RMS", "Δ_f·u（u = Δ_paper / ‖Δ_paper‖）。髄膜腫・SFT は Δ_paper に含まれる"),
+                              ("orth", "Δ_f の直交成分 / 群内 RMS", "sqrt(‖Δ_f‖² − (Δ_f·u)²)")]:
+        for f in FAMILIES:
+            T.add(b, label, {e: one(g[part][f], 3) if g else None for e, g in gap.items()}, cell=FAMILY_LABELS_JA[f], note=note)
+    # 確認: manifest から取った ‖Δ_paper‖ が shift_transfer の groups.csv の Paper cohort と同じか（同じスライド・同じ埋め込みのはず）
+    for e, g in gap.items():
+        grp = T.inputs[e].data["groups"]
+        if not g or grp is None:
+            continue
+        try:
+            ref_norm = float(_group(grp, "Paper cohort")["shift_norm"])
+        except KeyError as err:
+            T.warnings.append(f"{e}: groups.csv → {err}")
+            continue
+        if not np.isclose(g["dp_norm"], ref_norm, rtol=1e-5, atol=0):
+            T.warnings.append(f"{e}: manifest からの ‖Δ_paper‖ {g['dp_norm']:.6f} が groups.csv の {ref_norm:.6f} と合わない")
+    return gap
 
 
 def block_geometry(T: Table, cfg: dict) -> None:
@@ -519,9 +602,12 @@ def _md(header: list[str], rows: list[list[str]]) -> list[str]:
 def write_summary(path: Path, df: pd.DataFrame, inputs: dict[str, Inputs], exceptions: dict[str, list[dict]],
                   warnings: list[str]) -> None:
     encs = ENCODER_ORDER
-    L = ["# 同じ解析を 3 つのスライド埋め込みで（平均プーリング / TITAN / PRISM）", "",
+    L = [f"# 同じ解析を {len(encs)} つのスライド埋め込みで（{' / '.join(ENCODER_LABELS_JA[e] for e in encs)}）", "",
          "`encoder_comparison.py` が作る。各解析スクリプトの出力を読んで並べるだけ（定義はスクリプトの docstring）。"
-         "長さ・残差はエンコーダで尺度が違うので比で出し、絶対値は「参考」の行。空欄 = その出力が無い（下の表）。", ""]
+         "ただし「1 幾何」の先頭の施設差の大きさ（‖Δ_paper‖ / 群内 RMS と Δ_f の分解）だけは転移テストの埋め込みのキャッシュから計算する。"
+         "長さ・残差はエンコーダで尺度が違うので比で出し、絶対値は「参考」の行。空欄 = その出力が無い（下の表）。", "",
+         "エンコーダ: CONCH の平均 = CONCH v1.5 のパッチ埋め込みの単純平均（TITAN の集約器の対照）、"
+         "Virchow の平均 = Virchow v1 のパッチ特徴（concat 2560 次元）の単純平均（PRISM の集約器の対照）。", ""]
     names = list(input_paths(Path("."), "titan"))
     L += ["## 入力", ""] + _md(["入力"] + [ENCODER_LABELS_JA[e] for e in encs],
                               [[n] + [inputs[e].status[n] for e in encs] for n in names])
@@ -578,6 +664,10 @@ def write_summary(path: Path, df: pd.DataFrame, inputs: dict[str, Inputs], excep
             f"（{' / '.join(f'{x[m]:.3f}' for m in METHODS)}、rel {x['rel']:+.1%}）" for x in exc))
     L += ["", "（残差の並びは 平行移動 / 相似変換 / ComBat）", "",
           "## 注", "",
+          "- 施設差の大きさ: 論文コホート = manifest の family ∈ {meningioma, SFT}。Δ_S = mean(EBRAINS の S) − mean(patho2 の S)。"
+          "群内 RMS = patho2 の論文コホートの各スライドとその重心の距離の RMS = sqrt(mean ‖x − x̄‖²)（エンコーダの尺度の物差し）。"
+          "Δ_f の分解は u = Δ_paper / ‖Δ_paper‖ への平行成分 Δ_f·u と直交成分 sqrt(‖Δ_f‖² − (Δ_f·u)²) を群内 RMS で割ったもの。"
+          "ノイズ補正はしない（生の平均の差。直交成分には群の例数による推定の揺らぎが乗る）。髄膜腫・SFT は Δ_paper に含まれる。",
           "- 幾何の 12 群 = 髄膜腫サブタイプ（両施設で 20 例以上）・SFT・グリオーマ 3 群・DLBCL・転移（素な群）。"
           "cos のノイズ補正は shift_transfer.py の tr V を差し引く版。論文コホートの部分集合は leave-group-out の Δ_paper と比べる。",
           "- 転移の own（論文コホート）は当て先自身で推定した補正（上限）。ComBat は own でも残差が 0 にならない（次元ごとの尺度も合わせるため）。",
@@ -609,7 +699,7 @@ def _offsets(n: int, width: float = 0.56) -> np.ndarray:
     return np.linspace(-width / 2, width / 2, n) if n > 1 else np.zeros(1)
 
 
-def plot(path: Path, inputs: dict[str, Inputs]) -> None:
+def plot(path: Path, inputs: dict[str, Inputs], gap: dict[str, dict | None]) -> None:
     plt.rcParams.update({"font.size": 8})
     fig, axes = plt.subplots(2, 2, figsize=(14, 11), constrained_layout=True,
                              gridspec_kw={"height_ratios": [1.15, 1]})
@@ -638,8 +728,10 @@ def plot(path: Path, inputs: dict[str, Inputs]) -> None:
         g = g[g["group"].isin(order)]
         y = np.array([ypos[n] for n in g["group"]]) + off[e]
         c, mk = ENCODER_COLORS[e], ENCODER_MARKERS[e]
-        ax.errorbar(g["cos_vs_paper"], y, xerr=[g["cos_vs_paper"] - g["cos_lo_vs_paper"], g["cos_hi_vs_paper"] - g["cos_vs_paper"]],
-                    fmt=mk, ms=5, color=c, ecolor=c, elinewidth=1.2, capsize=0, zorder=3)
+        # 区間は点と別に引く（パーセンタイルのブートストラップは cos を下に偏らせるので、生の cos が上限の外に出る群がある。
+        # Virchow の平均の SFT・微小嚢胞性。errorbar は負の幅を受け付けない）
+        ax.hlines(y, g["cos_lo_vs_paper"], g["cos_hi_vs_paper"], color=c, lw=1.2, zorder=3)
+        ax.plot(g["cos_vs_paper"], y, mk, ms=5, color=c, ls="none", zorder=3)
         ax.scatter(g["cos_corrected_vs_paper"], y, marker=mk, s=26, facecolors="white", edgecolors=c, linewidths=1.2, zorder=4)
     for i in range(1, len(order)):
         if fam_of[order[i]] != fam_of[order[i - 1]]:
@@ -688,6 +780,17 @@ def plot(path: Path, inputs: dict[str, Inputs]) -> None:
     ax.set_xlabel("residual site gap after correction / before   (‖μ_E − μ_P'‖ / ‖μ_E − μ_P‖)")
     _style(ax)
     _panel(ax, "b", "Transfer: residual ratio (source → target) × method")
+    # 施設差の相対的な大きさ（‖Δ_paper‖ / 群内 RMS）を小さく併記（own の行の右の空き）。文字は墨、エンコーダは横の印で
+    lines = [(e, g["ratio"]) for e, g in gap.items() if g]
+    if lines:
+        x0, y0, dy = 0.60, 0.03, 0.03
+        for k, (e, r) in enumerate(reversed(lines)):
+            yy = y0 + k * dy
+            ax.scatter([x0 + 0.008], [yy + 0.007], transform=ax.transAxes, marker=ENCODER_MARKERS[e], s=20,
+                       color=ENCODER_COLORS[e], edgecolors="white", linewidths=0.4, zorder=6, clip_on=False)
+            ax.text(x0 + 0.025, yy, f"{ENCODER_LABELS[e]}  {r:.2f}", transform=ax.transAxes, fontsize=7, color=INK)
+        ax.text(x0, y0 + len(lines) * dy + 0.004, "site gap ‖Δ_paper‖ / within-site RMS\n(RMS over the patho2 paper cohort)",
+                transform=ax.transAxes, fontsize=7, color=MUTED, va="bottom")
 
     # c: ばらつきの比
     ax = axes[1, 0]
@@ -716,10 +819,11 @@ def plot(path: Path, inputs: dict[str, Inputs]) -> None:
 
     # d: アトラスの top-1
     ax = axes[1, 1]
-    series = [("titan", "atlas", "-", ENCODER_LABELS["titan"] + " (full EBRAINS atlas)"),
+    series = [("meanpool", "atlas", "-", ENCODER_LABELS["meanpool"]),
+              ("titan", "atlas", "-", ENCODER_LABELS["titan"] + " (full EBRAINS atlas)"),
               ("titan", "atlas_same", ":", ENCODER_LABELS["titan"] + " (atlas restricted to PRISM's EBRAINS slides)"),
-              ("prism", "atlas", "-", ENCODER_LABELS["prism"]),
-              ("meanpool", "atlas", "-", ENCODER_LABELS["meanpool"])]
+              ("meanpool_virchow", "atlas", "-", ENCODER_LABELS["meanpool_virchow"]),
+              ("prism", "atlas", "-", ENCODER_LABELS["prism"])]
     present = [k for k, (e, key, _, _) in enumerate(series) if have[e].data[key] is not None]   # 出力のある系列だけで横に並べる
     so = dict(zip(present, _offsets(len(present), 0.66)))
     for k, (e, key, ls, _) in enumerate(series):
@@ -753,15 +857,19 @@ def plot(path: Path, inputs: dict[str, Inputs]) -> None:
              Line2D([], [], marker="o", ls="none", color=INK, label="+ Δ_paper"),
              Line2D([], [], marker="_", ls="none", color=INK, ms=10, mew=1.6, label="+ own-family Δ"),
              Line2D([], [], marker="x", ls="none", color=MUTED, label="EBRAINS leave-one-out")]
-    leg_d += [Line2D([], [], color=ENCODER_COLORS[e], ls=ls, marker=ENCODER_MARKERS[e], label=lab
-                     + ("" if have[e].data[key] is not None else " — no output")) for e, key, ls, lab in series]
+    leg_d += [Line2D([], [], color=ENCODER_COLORS[e], ls=ls, marker=ENCODER_MARKERS[e], label=lab)
+              for k, (e, key, ls, lab) in enumerate(series) if k in present]
+    absent = list(dict.fromkeys(ENCODER_LABELS[e] for k, (e, _, _, _) in enumerate(series) if k not in present))
+    if absent:   # 出力の無いエンコーダは描かない（凡例に 1 行で書く）
+        leg_d.append(Line2D([], [], ls="none", label="not run: " + ", ".join(absent)))
     ax.legend(handles=leg_d, fontsize=6.5, loc="lower left", ncol=2, frameon=False)
 
     handles = [Line2D([], [], marker=ENCODER_MARKERS[e], ls="none", color=ENCODER_COLORS[e], ms=6,
                       label=ENCODER_LABELS[e] + ("" if any(have[e].data[k] is not None for k in ("groups", "transfer", "disp_corr"))
                                                  else " — no output yet")) for e in ENCODER_ORDER]
     fig.legend(handles=handles, loc="upper center", ncol=len(handles), frameon=False, fontsize=9, bbox_to_anchor=(0.5, 1.035))
-    fig.suptitle("Same analyses with three slide encoders", fontsize=11, y=1.06)
+    fig.suptitle("Same analyses with four slide encoders (CONCH v1.5 patches → mean / TITAN, Virchow v1 patches → mean / PRISM)",
+                 fontsize=11, y=1.06)
     fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
@@ -773,13 +881,15 @@ def main() -> None:
     out = Path(cfg["output_dir"])
     out_dir = out / "encoder_comparison"
     out_dir.mkdir(parents=True, exist_ok=True)
-    inputs = {e: Inputs(out, e) for e in ENCODER_ORDER}
+    manifest = cfg.get("transfer", {}).get("manifest", MANIFEST)
+    inputs = {e: Inputs(out, e, manifest) for e in ENCODER_ORDER}
     for e in ENCODER_ORDER:
         miss = inputs[e].missing
         print(f"[{e}] 入力 {len(inputs[e].data) - len(miss)}/{len(inputs[e].data)}" + (f"、無い: {', '.join(miss)}" if miss else ""))
 
     T = Table(inputs)
     block_reference(T)
+    gap = block_site_gap(T, cfg)
     block_geometry(T, cfg)
     exceptions = block_transfer(T)
     block_dispersion(T)
@@ -788,7 +898,7 @@ def main() -> None:
     df = T.frame()
     df.to_csv(out_dir / "comparison.csv", index=False)
     write_summary(out_dir / "summary.md", df, inputs, exceptions, T.warnings)
-    plot(out_dir / "encoder_comparison.png", inputs)
+    plot(out_dir / "encoder_comparison.png", inputs, gap)
     for w in T.warnings:
         print("  WARN", w)
     print(f"saved: {out_dir}/comparison.csv ({len(df)} 行), summary.md, encoder_comparison.png")

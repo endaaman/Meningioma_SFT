@@ -42,13 +42,16 @@ CONDITION_LABELS_JA = {"original": "なし", "gan": "GAN", "macenko": "色正規
                        "combat_recentred": "ComBat（中心を当て先で取り直し）"}
 
 # スライドエンコーダ（encoder_comparison.py の列。「別系統のスライドエンコーダでも同じ」の比較）。
-# 並び: 学習なしの集約器の対照 → 論文の TITAN → 第 2 のエンコーダ PRISM。色は 3 つで全対の色覚の区別を満たす組
+# 並び: パッチエンコーダごとに「パッチ埋め込みの単純平均（学習なしの集約器の対照）→ 学習した集約器」が隣り合う
+# （CONCH v1.5: 平均 = meanpool → TITAN、Virchow v1（concat 2560 次元）: 平均 = meanpool_virchow → PRISM）。
+# 平均は 2 つあるので表示名にパッチエンコーダを付ける（CONCH の平均 / Virchow の平均）。
+# 色は 4 つで全対の色覚の区別（2 型色覚の模擬で ΔE ≥ 9、通常の色覚で ≥ 24）を満たす組。CONCH の 2 つは寒色、Virchow の 2 つは暖色
 # （エンコーダの色。補正条件の色 CONDITION_COLORS とは別の役目なので同じ図で混ぜない）
-ENCODER_ORDER = ["meanpool", "titan", "prism"]
-ENCODER_LABELS = {"meanpool": "Mean pooling", "titan": "TITAN", "prism": "PRISM"}
-ENCODER_LABELS_JA = {"meanpool": "平均プーリング", "titan": "TITAN", "prism": "PRISM"}
-ENCODER_COLORS = {"meanpool": "#1baf7a", "titan": "#2a78d6", "prism": "#eb6834"}
-ENCODER_MARKERS = {"meanpool": "s", "titan": "o", "prism": "D"}
+ENCODER_ORDER = ["meanpool", "titan", "meanpool_virchow", "prism"]
+ENCODER_LABELS = {"meanpool": "CONCH mean", "titan": "TITAN", "meanpool_virchow": "Virchow mean", "prism": "PRISM"}
+ENCODER_LABELS_JA = {"meanpool": "CONCH の平均", "titan": "TITAN", "meanpool_virchow": "Virchow の平均", "prism": "PRISM"}
+ENCODER_COLORS = {"meanpool": "#1baf7a", "titan": "#2a78d6", "meanpool_virchow": "#882255", "prism": "#eb6834"}
+ENCODER_MARKERS = {"meanpool": "s", "titan": "o", "meanpool_virchow": "^", "prism": "D"}
 # 腫瘍の科（転移テストの 5 科。コード上の名前は shift_transfer / transfer_correction の family のまま）
 FAMILY_LABELS = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "lymphoma": "DLBCL", "metastasis": "Metastasis"}
 FAMILY_LABELS_JA = {"meningioma": "髄膜腫", "SFT": "SFT", "glioma": "グリオーマ", "lymphoma": "DLBCL", "metastasis": "転移"}
