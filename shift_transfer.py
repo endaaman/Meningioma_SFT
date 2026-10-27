@@ -55,9 +55,16 @@
               EBRAINS の IDH 野生型星細胞腫 66 枚）は h5 に prism_key があれば読み、無ければ落とす（PRISM は manifest の
               2,301 枚だけに抽出したので、今は全部落ちる）。その変種（composition.csv の (c) / (c')）は NaN の行になる。
               出力は同じファイル名で output_dir/shift_transfer/prism/ に書く。--reload は embeddings_prism.npy も読み直す
+    meanpool_virchow  PRISM の集約器の対照: Virchow v1 のパッチ特徴（virchow_2560/features、concat 2560 次元）の単純平均。
+              transfer_meanpool.py build --source virchow のキャッシュ（out/transfer/embeddings_meanpool_virchow.npy）を
+              (施設, slide_id) で引く。論文コホートの並びとラベルは prism と同じく TITAN の load_data(cfg, "original") から取り、
+              埋め込みだけ差し替える（スライドの集合と並びは TITAN と同じ）。キャッシュに無いスライド（組成の感度の
+              IDH 野生型星細胞腫）は h5 に virchow_2560/features があれば平均を取り、無ければ落とす（prism と同じく今は全部落ちる。
+              composition.csv の (c) / (c') は NaN の行）。出力は output_dir/shift_transfer/meanpool_virchow/。
+              矢印の図の余白は prism と同じく ‖Δ_paper‖ / ARROWS_UNIT_TITAN で伸縮する
 
 Usage:
-    uv run python shift_transfer.py [--encoder titan|meanpool|prism] [--reload] [--bootstrap slides|patients]
+    uv run python shift_transfer.py [--encoder titan|meanpool|prism|meanpool_virchow] [--reload] [--bootstrap slides|patients]
 """
 from __future__ import annotations
 
@@ -84,7 +91,9 @@ FAMILY_COLOR = {"meningioma": "#4c72b0", "SFT": "#000000", "glioma": "#dd8452", 
 # 組成の感度で glm に足す EBRAINS の診断名（config の ebrains_groups には入れていない = 本解析の glm には入らない）
 COMPOSITION_EXTRA = ["Anaplastic astrocytoma, IDH-wildtype", "Diffuse astrocytoma, IDH-wildtype"]
 GBM_IDHMUT = "Glioblastoma, IDH-mutant"   # WHO 2016 では膠芽腫、CNS5 では星細胞腫 IDH 変異型 grade 4（config では ast に入れている）
-ENCODER_TAG = {"titan": "", "meanpool": "  [mean-pooled CONCH v1.5]", "prism": "  [PRISM]"}   # 図の題に付ける（TITAN は付けない = 前の図と同じ）
+ENCODER_TAG = {"titan": "", "meanpool": "  [mean-pooled CONCH v1.5]", "prism": "  [PRISM]",
+               "meanpool_virchow": "  [mean-pooled Virchow v1]"}   # 図の題に付ける（TITAN は付けない = 前の図と同じ）
+SWAP_PAPER = ("prism", "meanpool_virchow")   # 論文コホートを TITAN の並びのまま埋め込みだけキャッシュから差し替えるエンコーダ
 EXTRA_COLS = ["slide_id", "source", "group", "patient", "diagnosis", "embedding"]   # _ebrains_rows の列（組成の感度の行が 0 枚のとき）
 ARROWS_UNIT_TITAN = 5.4743   # TITAN の ‖Δ_paper‖。矢印の図の余白・ラベルの間隔はこの長さで決めてある（prism はこの比で伸縮する）
 
@@ -101,7 +110,9 @@ class SlideEmbedder:
     meanpool: transfer_meanpool.py のキャッシュに (施設, slide_id) があればそれを引き（h5 は開かない）、無ければ
               {tile_model}/{keys.tile_features} のパッチ方向の平均を取る（meanpool._mean_features、float64 → float32）。
     prism:    transfer_correction.load_embeddings の manifest 全スライドの PRISM（h5_prism の transfer.prism_key、
-              out/transfer/embeddings_prism.npy）を (施設, slide_id) で引く。無ければ渡された h5 の prism_key を読む（無ければ None）。"""
+              out/transfer/embeddings_prism.npy）を (施設, slide_id) で引く。無ければ渡された h5 の prism_key を読む（無ければ None）。
+    meanpool_virchow: transfer_meanpool.py --source virchow のキャッシュを (施設, slide_id) で引き、無ければ渡された h5 の
+              virchow_2560/features の平均を取る（meanpool と同じ _mean_features。キーが無ければ None）。"""
 
     def __init__(self, cfg: dict, encoder: str, reload: bool = False):
         self.cfg, self.encoder = cfg, encoder
@@ -113,6 +124,14 @@ class SlideEmbedder:
             self._mean_features = _mean_features
             man, X, _ = load_cache(cfg)
             self.cache = {(s, i): X[k].astype(np.float32) for k, (s, i) in enumerate(zip(man["site"], man["slide_id"]))}
+        elif encoder == "meanpool_virchow":
+            from meanpool import _mean_features
+            from transfer_meanpool import load_cache
+            self._mean_features = _mean_features
+            man, X, _ = load_cache(cfg, "virchow")
+            if man.duplicated(["site", "slide_id"]).any():
+                raise SystemExit("[meanpool_virchow] manifest の (site, slide_id) が一意でない")
+            self.cache = {(s, i): X[k].astype(np.float32) for k, (s, i) in enumerate(zip(man["site"], man["slide_id"]))}
         elif encoder == "prism":
             from transfer_correction import load_embeddings
             man, X = load_embeddings(cfg, "prism", Path(cfg["output_dir"]) / "transfer", reload)
@@ -123,6 +142,8 @@ class SlideEmbedder:
     def key(self, tile_model: str) -> str:
         if self.encoder == "prism":
             return self.cfg["transfer"]["prism_key"]
+        if self.encoder == "meanpool_virchow":   # Virchow のタイル特徴（PRISM が読んだもの）。tile_model（CONCH）は使わない
+            return f"{self.cfg['transfer']['prism_key'].split('/')[0]}/{self.cfg['keys']['tile_features']}"
         return f"{tile_model}/{self.cfg['keys']['slide_feature' if self.encoder == 'titan' else 'tile_features']}"
 
     def lookup(self, site: str, slide_id: str) -> np.ndarray:
@@ -134,7 +155,7 @@ class SlideEmbedder:
 
     def __call__(self, path, key: str, site: str, slide_id: str) -> np.ndarray | None:
         """埋め込み。h5 に key が無ければ None。"""
-        if self.encoder in ("meanpool", "prism") and (site, slide_id) in self.cache:
+        if self.encoder in ("meanpool", "prism", "meanpool_virchow") and (site, slide_id) in self.cache:
             self.n_cached += 1
             return self.cache[(site, slide_id)]
         with h5py.File(path, "r") as f:
@@ -163,14 +184,14 @@ def _write_cache(df: pd.DataFrame, csv_path: Path, npy_path: Path) -> None:
 
 
 def load_paper(cfg: dict, out_dir: Path, reload: bool, encoder: str = "titan", embed: SlideEmbedder | None = None) -> pd.DataFrame:
-    """論文のコホート（embedding.*.original の TITAN、meanpool は meanpool.py の平均、prism は TITAN と同じ並びで
-    embed のキャッシュの PRISM に差し替え）。列: slide_id, source, subtype, patient, embedding。"""
+    """論文のコホート（embedding.*.original の TITAN、meanpool は meanpool.py の平均、prism / meanpool_virchow は TITAN と同じ並びで
+    embed のキャッシュの PRISM / Virchow の平均に差し替え）。列: slide_id, source, subtype, patient, embedding。"""
     csv_path, npy_path = out_dir / "paper_slides.csv", out_dir / "paper_embeddings.npy"
     if not reload and (df := _read_cache(csv_path, npy_path)) is not None:
         return df
     df = load_data(cfg, "original", aggregator="mean" if encoder == "meanpool" else "titan").rename(columns={"case_id": "slide_id"})
-    if encoder == "prism":   # 並びとラベルは TITAN の load_data のまま、埋め込みだけ manifest の h5_prism の PRISM に
-        embed = embed or SlideEmbedder(cfg, "prism")
+    if encoder in SWAP_PAPER:   # 並びとラベルは TITAN の load_data のまま、埋め込みだけ manifest の h5_prism の PRISM / Virchow の平均に
+        embed = embed or SlideEmbedder(cfg, encoder)
         df["embedding"] = [embed.lookup(s, i) for s, i in zip(df["source"], df["slide_id"])]
     df["patient"] = df["slide_id"]
     for site in SITES:
@@ -247,7 +268,7 @@ def load_extra(cfg: dict, out_dir: Path, reload: bool, embed: SlideEmbedder | No
     if not reload and (df := _read_cache(csv_path, npy_path)) is not None:
         return df
     rows = _ebrains_rows(cfg, {d: "glm_extra" for d in COMPOSITION_EXTRA}, embed)
-    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=EXTRA_COLS)   # prism は今 0 枚（manifest の外なので抽出していない）
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=EXTRA_COLS)   # prism / meanpool_virchow は今 0 枚（manifest の外なので Virchow を抽出していない）
     _write_cache(df, csv_path, npy_path)
     return df
 
@@ -550,7 +571,7 @@ def composition(paper: pd.DataFrame, glioma: pd.DataFrame, extra: pd.DataFrame, 
     """組成の感度: グリオーマの群の EBRAINS 側の組成を変えた変種ごとの cos vs Δ_paper（生・ノイズ補正）。院内（patho2）側は変えない。
     参照は Paper cohort（論文の全例）と Meningioma (all)。CI は 95% ブートストラップをスライド単位と患者単位の両方で（乱数は compute と別の列なので、
     baseline の CI は groups.csv と小数 2–3 桁目で違う。点推定は同じ）。
-    extra（IDH 野生型星細胞腫）が 0 枚のとき（prism）は、それを使う変種を NaN の行にする（乱数は消費しない）。"""
+    extra（IDH 野生型星細胞腫）が 0 枚のとき（prism / meanpool_virchow）は、それを使う変種を NaN の行にする（乱数は消費しない）。"""
     st = cfg["shift_transfer"]
     rng = np.random.default_rng(int(st.get("seed", 42)) + 1)
     n_boot = int(st.get("n_boot", 1000))
@@ -581,7 +602,7 @@ def composition(paper: pd.DataFrame, glioma: pd.DataFrame, extra: pd.DataFrame, 
     for pg, name, m, uses_extra in variants:
         e = eb[m.values]
         p = pt[pt["group"].isin(["ast", "glm", "odg"])] if pg == "glioma (all)" else pt[pt["group"] == pg]
-        if uses_extra and extra.empty:   # 埋め込みが無い（prism）。baseline と同じ値を (c) として出さない
+        if uses_extra and extra.empty:   # 埋め込みが無い（prism / meanpool_virchow）。baseline と同じ値を (c) として出さない
             rows.append(dict(patho2_group=pg if pg == "glioma (all)" else gname.get(pg, pg), variant=name,
                              ebrains_diagnoses="(not available: no embeddings for " + " / ".join(COMPOSITION_EXTRA) + ")",
                              ebrains_grades="", n_ebrains=0, n_pat_ebrains=0, n_patho2=len(p)))
@@ -676,7 +697,7 @@ def _spread(y: np.ndarray, gap: float, n_iter: int = 500) -> np.ndarray:
 
 def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "", u: float = 1.0) -> None:
     """a: 両施設の重心と patho2 → EBRAINS の矢印（平行四辺形）。b: 同じ矢印を原点から並べたもの（平行・同じ長さかを見る）。両方とも縦横同じ縮尺。
-    u = 余白・ラベルの間隔の倍率（L2 の単位で書いた定数に掛ける。TITAN・meanpool は 1 = 前の図と同じ、prism は ‖Δ_paper‖ / ARROWS_UNIT_TITAN）。"""
+    u = 余白・ラベルの間隔の倍率（L2 の単位で書いた定数に掛ける。TITAN・meanpool は 1 = 前の図と同じ、prism・meanpool_virchow は ‖Δ_paper‖ / ARROWS_UNIT_TITAN）。"""
     from matplotlib.lines import Line2D
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(14, 7.4), gridspec_kw={"width_ratios": [1.0, 1.15]})
     xs = np.r_[df["x_patho2"].values, df["x_ebrains"].values]
@@ -754,8 +775,9 @@ def plot_mismatch(mm: pd.DataFrame, out_path: Path, tag: str = "") -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--encoder", choices=["titan", "meanpool", "prism"], default="titan",
-                    help="スライド埋め込み。meanpool = CONCH のパッチ平均、prism = Virchow → PRISM（出力は shift_transfer/<encoder>/）")
+    ap.add_argument("--encoder", choices=["titan", "meanpool", "prism", "meanpool_virchow"], default="titan",
+                    help="スライド埋め込み。meanpool = CONCH のパッチ平均、prism = Virchow → PRISM、"
+                         "meanpool_virchow = Virchow のパッチ平均（出力は shift_transfer/<encoder>/）")
     ap.add_argument("--reload", action="store_true", help="埋め込みのキャッシュを捨てて h5 から読み直す")
     ap.add_argument("--bootstrap", choices=["slides", "patients"], default="slides",
                     help="groups.csv の CI の再抽出の単位。patients は施設・群ごとに患者を再抽出し groups_patients.csv に書く（groups.csv は上書きしない）")
@@ -783,6 +805,9 @@ def main() -> None:
     if args.encoder == "prism":
         print(f"  prism: embeddings_prism から引いた {embed.n_cached} 枚、h5 から読んだ {embed.n_computed} 枚"
               f"（shift_transfer/prism/ のキャッシュを使ったときは 0）。次元 {len(paper['embedding'].iloc[0])}")
+    if args.encoder == "meanpool_virchow":
+        print(f"  meanpool_virchow: transfer_meanpool --source virchow のキャッシュから {embed.n_cached} 枚、h5 から平均を取った "
+              f"{embed.n_computed} 枚（shift_transfer/meanpool_virchow/ のキャッシュを使ったときは 0）。次元 {len(paper['embedding'].iloc[0])}")
 
     groups = build_groups(paper, glioma, cfg)
     df_groups, pairs = compute(groups, paper, cfg, args.bootstrap)
@@ -799,7 +824,7 @@ def main() -> None:
     plot(groups, pairs, out_dir / "shift_transfer.png", tag)
     arr.to_csv(out_dir / "arrows.csv", index=False)
     plot_arrows(arr, arr_summary, out_dir / "arrows.png", tag,
-                u=arr_summary["paper_norm"] / ARROWS_UNIT_TITAN if args.encoder == "prism" else 1.0)
+                u=arr_summary["paper_norm"] / ARROWS_UNIT_TITAN if args.encoder in SWAP_PAPER else 1.0)
     mm.to_csv(out_dir / "mismatch_matrix.csv", index=False)
     plot_mismatch(mm, out_dir / "mismatch_matrix.png", tag)
     comp.to_csv(out_dir / "composition.csv", index=False)

@@ -1,10 +1,10 @@
-"""dispersion_ratio.py — 施設間の「ばらつきの比」は腫瘍の種類をまたいで共有されるか（Supplementary 用、TITAN。--encoder meanpool で平均プーリング、--encoder prism で PRISM）。
+"""dispersion_ratio.py — 施設間の「ばらつきの比」は腫瘍の種類をまたいで共有されるか（Supplementary 用、TITAN。--encoder meanpool で平均プーリング、--encoder prism で PRISM、--encoder meanpool_virchow で Virchow のパッチ平均）。
 
 中心のずれ（平行移動 Δ）が腫瘍をまたいでほぼ同じ向き（cos 0.8–0.9、shift_transfer.py）なのに対し、ComBat・相似変換が使う
 「施設ごとのばらつきの比」が腫瘍をまたいで同じかを見る。比が腫瘍で違えば、ばらつきの比には施設の性質（色の幅など）と
 コホートの中身の多様さ（腫瘍の性質）が混ざっていて、別の腫瘍に移せない（= 転移テストで倍率が移らなかった理由）。
 
-科 f ごとに、次元 d の分散比  r_f,d = log( var_EBRAINS(f, d) / var_patho2(f, d) )  を全次元分（TITAN・meanpool 768、PRISM 1280）出し、
+科 f ごとに、次元 d の分散比  r_f,d = log( var_EBRAINS(f, d) / var_patho2(f, d) )  を全次元分（TITAN・meanpool 768、PRISM 1280、meanpool_virchow 2560）出し、
     1. 科どうしの r の相関（Pearson、全次元）  ← 平均のずれの cos（shift_transfer の cos 行列）と並べる
     2. 科の中の分割半分の再現性（施設ごとに無作為に半分に分け、r を 2 つ作って相関。何度か繰り返して中央値）
        ← 科どうしの相関がこれより十分低ければ、違いはノイズではなく腫瘍による
@@ -15,14 +15,16 @@
     キャッシュ（out/shift_transfer/meanpool/）。スライドの集合と並びは TITAN と同じなので、分割半分の乱数の分け方も同じ
     --encoder prism（Virchow v1 → PRISM、1280 次元）は shift_transfer.py --encoder prism のキャッシュ（out/shift_transfer/prism/）。
     スライドの集合と並びは TITAN と同じ
-出力 (output_dir/dispersion_ratio/、--encoder meanpool / prism は各ファイル名の末尾に _meanpool / _prism):
+    --encoder meanpool_virchow（Virchow v1 のパッチ特徴 concat 2560 次元の単純平均、PRISM の集約器の対照）は
+    shift_transfer.py --encoder meanpool_virchow のキャッシュ（out/shift_transfer/meanpool_virchow/）。スライドの集合と並びは TITAN と同じ
+出力 (output_dir/dispersion_ratio/、--encoder meanpool / prism / meanpool_virchow は各ファイル名の末尾に _meanpool / _prism / _meanpool_virchow):
     corr_matrix.csv      — 科どうしの r の相関（上三角）と、分割半分の再現性（対角）、平均のずれの cos（下三角、参考）
     corr_matrix_corrected.csv — r の相関を分割半分の再現性で割った値（推定ノイズを差し引いた相関）
     summary.csv          — 科ごとの n、s_f、mean / sd of r、分割半分の再現性
     dispersion_ratio.png — a: 相関行列（r） b: 平均のずれの cos 行列 c: 科ごとの r のヒストグラム
 
 Usage:
-    uv run python dispersion_ratio.py [--encoder titan|meanpool|prism]
+    uv run python dispersion_ratio.py [--encoder titan|meanpool|prism|meanpool_virchow]
 """
 from __future__ import annotations
 
@@ -77,15 +79,17 @@ def split_half_reliability(E: np.ndarray, P: np.ndarray, rng: np.random.Generato
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--encoder", choices=["titan", "meanpool", "prism"], default="titan",
-                    help="スライド埋め込み。meanpool = CONCH のパッチ平均、prism = Virchow → PRISM（shift_transfer.py --encoder <encoder> のキャッシュ）")
+    ap.add_argument("--encoder", choices=["titan", "meanpool", "prism", "meanpool_virchow"], default="titan",
+                    help="スライド埋め込み。meanpool = CONCH のパッチ平均、prism = Virchow → PRISM、meanpool_virchow = Virchow のパッチ平均"
+                         "（shift_transfer.py --encoder <encoder> のキャッシュ）")
     args = ap.parse_args()
     cfg = load_config()
     cache = Path(cfg["output_dir"]) / "shift_transfer"
     if args.encoder != "titan":
         cache = cache / args.encoder
     sfx = "" if args.encoder == "titan" else f"_{args.encoder}"   # TITAN は前と同じファイル名
-    tag = {"titan": "", "meanpool": " [mean-pooled CONCH v1.5]", "prism": " [PRISM]"}[args.encoder]
+    tag = {"titan": "", "meanpool": " [mean-pooled CONCH v1.5]", "prism": " [PRISM]",
+           "meanpool_virchow": " [mean-pooled Virchow v1]"}[args.encoder]
     out_dir = Path(cfg["output_dir"]) / "dispersion_ratio"
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[encoder] {args.encoder}  cache: {cache}")

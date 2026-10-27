@@ -11,6 +11,8 @@
     --encoder meanpool（学習なしの集約器の対照: CONCH v1.5 のパッチ埋め込みの単純平均、meanpool.py と同じ定義）は
     transfer_meanpool.py が作るキャッシュ（out/transfer/embeddings_meanpool.npy ＋ embeddings_meanpool_ids.csv）を読むだけ
     （無ければ止まる。作り直しは transfer_meanpool.py build --reload）。
+    --encoder meanpool_virchow（PRISM の集約器の対照: Virchow v1 のパッチ特徴 virchow_2560/features、concat 2560 次元の単純平均）は
+    transfer_meanpool.py build --source virchow のキャッシュ（out/transfer/embeddings_meanpool_virchow.npy ＋ _ids.csv）を読むだけ。
 
 科（manifest の family）: meningioma / SFT / glioma（ast・glm・odg）/ lymphoma / metastasis。
 当て先: paper（髄膜腫 + SFT。論文のベンチが使える）/ glioma / lymphoma / metastasis / all（5 科全部）。
@@ -83,6 +85,7 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
     prism は論文の出力が無いので、同じ PRISM を別の経路で読んだ出力との一致を見る（acceptance_prism）: 補正なしの残差と own の
     ‖Δ‖ = shift_transfer.py --encoder prism の groups.csv の shift_norm（paper / glioma / lymphoma / metastasis）、単独の科を
     推定元にした相似変換の s = dispersion_ratio.py --encoder prism の scale_s、own の平行移動の残差 = 0。無いファイルの項目は飛ばす。
+    meanpool_virchow も論文の出力が無いので prism と同じ形（shift_transfer.py / dispersion_ratio.py --encoder meanpool_virchow の出力）。
 
 出力 (output_dir/transfer/):
     correction_{encoder}.csv          縦長: encoder, method, source, target, metric, value, n_ebrains, n_patho2（当て先）,
@@ -93,7 +96,7 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
     embeddings_{encoder}.npy / embeddings_{encoder}_slides.csv   埋め込みのキャッシュ
 
 Usage:
-    uv run python transfer_correction.py [--encoder titan|prism|meanpool] [--reload]
+    uv run python transfer_correction.py [--encoder titan|prism|meanpool|meanpool_virchow] [--reload]
 """
 from __future__ import annotations
 
@@ -146,12 +149,13 @@ def _read_h5(path: str, key: str) -> np.ndarray:
 
 def load_embeddings(cfg: dict, encoder: str, out_dir: Path, reload: bool) -> tuple[pd.DataFrame, np.ndarray]:
     """manifest の全スライドの埋め込み（manifest の並び、float64）。必要なスライドに埋め込みが無ければ止まる。"""
-    if encoder == "meanpool":           # transfer_meanpool.py のキャッシュ（並びの確認もそちら）
+    if encoder in ("meanpool", "meanpool_virchow"):   # transfer_meanpool.py のキャッシュ（並びの確認もそちら）
         from transfer_meanpool import load_cache
+        src, opt = ("conch", "") if encoder == "meanpool" else ("virchow", " --source virchow")
         if reload:
-            print("  （--reload は meanpool には効かない。作り直すなら transfer_meanpool.py build --reload）")
-        man, X, ids = load_cache(cfg)
-        print(f"  cache: {out_dir / 'embeddings_meanpool.npy'}  {X.shape}  " + str(ids["source"].value_counts().to_dict()))
+            print(f"  （--reload は {encoder} には効かない。作り直すなら transfer_meanpool.py build{opt} --reload）")
+        man, X, ids = load_cache(cfg, src)
+        print(f"  cache: {out_dir / f'embeddings_{encoder}.npy'}  {X.shape}  " + str(ids["source"].value_counts().to_dict()))
         return man, X
     tcfg = cfg["transfer"]
     man = pd.read_csv(Path(cfg["output_dir"]) / tcfg.get("manifest", "transfer/manifest.csv"),
@@ -362,8 +366,8 @@ def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarr
                encoder: str = "titan") -> pd.DataFrame:
     """source = own（と none）・target = paper の値を論文の出力と突き合わせる（meanpool は論文の平均プーリングの対照の出力と、
     prism は論文の出力が無いので acceptance_prism）。"""
-    if encoder == "prism":
-        return acceptance_prism(res, cfg)
+    if encoder in ("prism", "meanpool_virchow"):
+        return acceptance_prism(res, cfg, encoder)
     out = Path(cfg["output_dir"])
     if encoder == "meanpool":           # meanpool.py analyze / nc.py --aggregator mean の出力。harmonization・dendrogram・affine は無い
         harm, dg, sc = None, None, None
@@ -439,8 +443,9 @@ def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarr
     return pd.DataFrame(rows)
 
 
-def acceptance_prism(res: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+def acceptance_prism(res: pd.DataFrame, cfg: dict, encoder: str = "prism") -> pd.DataFrame:
     """prism の確認: 論文の PRISM の出力は無いので、同じ PRISM（manifest の h5_prism）を別の経路で読んだ出力と突き合わせる。
+    encoder = meanpool_virchow も同じ形（shift_transfer/meanpool_virchow/groups.csv、dispersion_ratio/summary_meanpool_virchow.csv）。
     shift_transfer.py --encoder prism（out/shift_transfer/prism/groups.csv、論文コホートは load_data の並び）の shift_norm と
     補正なしの残差・own の ‖Δ‖、dispersion_ratio.py --encoder prism（out/dispersion_ratio/summary_prism.csv）の scale_s と
     単独の科を推定元にした相似変換の s。own の平行移動の残差は定義で 0。無いファイルの項目は飛ばす。"""
@@ -460,18 +465,19 @@ def acceptance_prism(res: pd.DataFrame, cfg: dict) -> pd.DataFrame:
                      "metric": f"{metric}（{source} → {target or d['target'].iloc[0]}）", "expected": float(expected), "got": g,
                      "diff": g - float(expected), "ok": abs(g - float(expected)) <= tol, "reference": ref})
 
-    grp = _read(out / "shift_transfer" / "prism" / "groups.csv", "group")
+    grp_ref, disp_ref = f"shift_transfer/{encoder}/groups.csv", f"dispersion_ratio/summary_{encoder}.csv"
+    grp = _read(out / grp_ref, "group")
     if grp is not None:
         for target, gname in (("paper", "Paper cohort"), ("glioma", "Glioma (all)"),
                               ("lymphoma", names.get("lym", "lym")), ("metastasis", names.get("met", "met"))):
             if gname in grp.index:
-                add("centroid", "none", target, "residual_norm", grp.loc[gname, "shift_norm"], 1e-4, "shift_transfer/prism/groups.csv")
-                add("centroid", "own", target, "shift_norm", grp.loc[gname, "shift_norm"], 1e-4, "shift_transfer/prism/groups.csv")
-    disp = _read(out / "dispersion_ratio" / "summary_prism.csv", "family")
+                add("centroid", "none", target, "residual_norm", grp.loc[gname, "shift_norm"], 1e-4, grp_ref)
+                add("centroid", "own", target, "shift_norm", grp.loc[gname, "shift_norm"], 1e-4, grp_ref)
+    disp = _read(out / disp_ref, "family")
     if disp is not None:
         for f in FAMILIES:
             if f in disp.index:   # 推定元のパラメータは当て先によらないので、最初の当て先の行
-                add("affine_free", f, None, "scale", disp.loc[f, "scale_s"], 1e-6, "dispersion_ratio/summary_prism.csv")
+                add("affine_free", f, None, "scale", disp.loc[f, "scale_s"], 1e-6, disp_ref)
     for target in TARGETS:
         add("centroid", "own", target, "residual_norm", 0.0, 1e-6, "定義（own の平行移動）")
     return pd.DataFrame(rows, columns=cols)
@@ -531,7 +537,9 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
          "当て先 all だけは科ごとの推定元と paper を残す（推定元が当て先に含まれる）。"
          "others_mean = others と同じ科を科ごとに当てはめてパラメータを科ごとに等しい重みで平均（all は 5 科全部）。", ""]
     L += [{"meanpool": "## 受け入れ確認（target = paper、source = own / none と論文の平均プーリングの対照の出力 out/meanpool/）",
-           "prism": "## 受け入れ確認（prism: 論文の出力は無いので、shift_transfer.py / dispersion_ratio.py --encoder prism の出力との一致）"}
+           "prism": "## 受け入れ確認（prism: 論文の出力は無いので、shift_transfer.py / dispersion_ratio.py --encoder prism の出力との一致）",
+           "meanpool_virchow": "## 受け入れ確認（meanpool_virchow: 論文の出力は無いので、shift_transfer.py / dispersion_ratio.py "
+                               "--encoder meanpool_virchow の出力との一致）"}
           .get(encoder, "## 受け入れ確認（target = paper、source = own / none と論文の出力）"), "",
           _md(acc[["method", "metric", "expected", "got", "diff", "ok", "reference"]], digits=4, index=False), ""]
     L += ["## ComBat の転移（neuroCombatFromTraining）の確認", "",
@@ -654,8 +662,9 @@ def _fit_row(fit_rows: list[dict], cohort: str, f: dict) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--encoder", choices=["titan", "prism", "meanpool"], default="titan",
-                    help="スライドエンコーダ（manifest の h5 と key）。meanpool = CONCH のパッチ平均（transfer_meanpool.py のキャッシュ）")
+    ap.add_argument("--encoder", choices=["titan", "prism", "meanpool", "meanpool_virchow"], default="titan",
+                    help="スライドエンコーダ（manifest の h5 と key）。meanpool = CONCH のパッチ平均、meanpool_virchow = Virchow のパッチ平均"
+                         "（transfer_meanpool.py のキャッシュ）")
     ap.add_argument("--reload", action="store_true", help="埋め込みのキャッシュを捨てて h5 から読み直す")
     args = ap.parse_args()
     cfg = load_config()
