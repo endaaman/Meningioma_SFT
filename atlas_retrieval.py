@@ -1,10 +1,10 @@
-"""atlas_retrieval.py — EBRAINS 全体を参照アトラスにした院内スライドの最近傍診断（計画の「参照アトラス」の図）。
+"""atlas_retrieval.py — EBRAINS 全体を参照コホートにした院内スライドの最近傍診断（計画の「参照コホートへの診断名の検索」の図）。
 
 問い: 院内（patho2）のスライドを、公開コホート EBRAINS 全体の診断ごとの重心（約 130 診断のうち --min-n 枚以上のもの）に
 最近傍重心法で当てると、どこまで診断名が当たるか。論文の平行移動 Δ（髄膜腫 / SFT だけで推定）を足すと、髄膜腫以外の
 腫瘍（グリオーマ・リンパ腫・転移）でもどれだけ良くなるか。
 
-参照（アトラス）: ebrains_embeddings.root の全 h5（uuid で重複を除き浅い方を優先。入れ子の「… 1p/19q codeleted」が 7 uuid を
+参照（EBRAINS 全体）: ebrains_embeddings.root の全 h5（uuid で重複を除き浅い方を優先。入れ子の「… 1p/19q codeleted」が 7 uuid を
     重複させている）× shift_transfer.ebrains_annotation（annotation.csv）。control = 1 は除き、diagnosis をクラスにする。
     埋め込みのキーが無い h5 は飛ばす。--min-n 枚以上のクラスだけ残す（落ちたクラスは summary に列挙）。
 問い合わせ（patho2）: transfer.manifest（transfer_manifest.py）の site = patho2 の全行
@@ -38,7 +38,7 @@ EBRAINS 内の基準（施設差なしの上限）: 問い合わせのラベル�
 検索と指標:
     nc_euclid（主）: 診断ごとの重心（スライド平均）へのユークリッド距離で全診断を並べる。
     nc_cosine（副）: 同じ重心への cos 距離。
-    knn5（副）: アトラスのスライドのうちユークリッド距離で最も近い 5 枚の多数決（同数は近い方）。top-5 = その 5 枚の診断。
+    knn5（副）: 参照のスライドのうちユークリッド距離で最も近い 5 枚の多数決（同数は近い方）。top-5 = その 5 枚の診断。
     top1 / top5    上位 k の中に正解の集合の診断があるか（scorable の行だけ）
     mean_rank      正解の診断の最良順位（1 始まり）の平均（nc_* だけ。knn5 は 5 枚の外の順位が無いので出さない）
     family_top1 / family_top1_broad   top-1 の診断の科が問い合わせの科と一致するか（全行）
@@ -64,9 +64,9 @@ EBRAINS 内の基準（施設差なしの上限）: 問い合わせのラベル�
 
 Usage:
     uv run python atlas_retrieval.py [--reload] [--min-n 5] [--encoder titan] [--atlas-slides prism]
-    （--encoder prism は transfer.prism_key を同じ h5 から読む。アトラスは PRISM のある EBRAINS のスライドだけになる。
+    （--encoder prism は transfer.prism_key を同じ h5 から読む。参照は PRISM のある EBRAINS のスライドだけになる。
     PRISM は転移テストの manifest の 2,301 枚にしか抽出していないので、今は EBRAINS 1,464 枚・診断はその科のものだけ。
-    TITAN と同じ参照で比べるには --encoder titan --atlas-slides prism: TITAN のアトラスを atlas_prism_slides.csv の
+    TITAN と同じ参照で比べるには --encoder titan --atlas-slides prism: TITAN の参照を atlas_prism_slides.csv の
     uuid に絞る（先に --encoder prism を回してキャッシュを作る）。問い合わせ・Δ の推定は絞らない（manifest の全部）。）
 """
 from __future__ import annotations
@@ -87,7 +87,7 @@ import pandas as pd
 
 from utils.loader import load_config
 
-ENCODERS = {  # encoder → (manifest の h5 の列, config transfer.* のキーの名前)。アトラスも同じキーを EBRAINS_embeddings の h5 から読む
+ENCODERS = {  # encoder → (manifest の h5 の列, config transfer.* のキーの名前)。参照も同じキーを EBRAINS_embeddings の h5 から読む
     "titan": ("h5_titan", "titan_key"),
     "prism": ("h5_prism", "prism_key"),
 }
@@ -333,7 +333,7 @@ def corr_mask(labels: np.ndarray, classes: list[str], correct: dict[str, list[st
 
 def loo_distances(R: np.ndarray, y_idx: np.ndarray, patient: np.ndarray, sel: np.ndarray, C: np.ndarray, n_c: np.ndarray,
                   metric: str, by_patient: bool) -> np.ndarray:
-    """アトラスのスライド sel を、自分（by_patient なら同じ患者の全スライド）を抜いた重心に当てたときの距離（sel × クラス）。"""
+    """参照のスライド sel を、自分（by_patient なら同じ患者の全スライド）を抜いた重心に当てたときの距離（sel × クラス）。"""
     S = C * n_c[:, None]
     D = _dist(R[sel], C, metric)
     if not by_patient:
@@ -345,7 +345,7 @@ def loo_distances(R: np.ndarray, y_idx: np.ndarray, patient: np.ndarray, sel: np
         return D
     pos_of = {j: k for k, j in enumerate(sel)}
     for p in np.unique(patient[sel]):
-        js = np.where(patient == p)[0]                      # その患者のアトラス上の全スライド
+        js = np.where(patient == p)[0]                      # 参照にあるその患者の全スライド
         rows = [pos_of[j] for j in js if j in pos_of]       # そのうち評価するスライド
         for c in np.unique(y_idx[js]):
             jc = js[y_idx[js] == c]
@@ -507,10 +507,10 @@ def write_summary(path: Path, enc: str, args, info: dict, classes: list[str], n_
                   conf: pd.DataFrame, top1c: pd.DataFrame, emb_check: dict) -> None:
     cols = [c for c in AGG_ORDER if c in set(res["query_family"])]
     rows_order = CONDITIONS + BASELINES
-    L = [f"# 参照アトラス: EBRAINS 全体への最近傍診断（{enc}）", "",
+    L = [f"# 参照コホートへの診断名の検索: EBRAINS 全体への最近傍診断（{enc}）", "",
          "`atlas_retrieval.py` の出力。主 = nc_euclid（診断ごとの重心へのユークリッド距離）。条件の定義は docstring。", ""]
     if info.get("restricted_to"):
-        L += [f"**アトラスを {info['restricted_to']} のアトラスのスライド（atlas_{info['restricted_to']}_slides.csv の uuid）に絞った版**"
+        L += [f"**参照を {info['restricted_to']} の参照のスライド（atlas_{info['restricted_to']}_slides.csv の uuid）に絞った版**"
               f"（{info['n_loaded']} → {info['n_after_restrict']} 枚。--atlas-slides {info['restricted_to']}）。"
               "問い合わせと Δ の推定は絞っていない。下の h5 の本数などは絞る前の値。", ""]
     L += ["## 参照（EBRAINS）", "",
@@ -519,11 +519,11 @@ def write_summary(path: Path, enc: str, args, info: dict, classes: list[str], n_
          f"、読めた {info['n_loaded']} 枚（annotation に無い uuid の h5 {len(info['uuids_without_annotation'])} 本）。",
          f"- --min-n {args.min_n}: 残ったクラス **{len(classes)} 診断 / {int(n_c.sum())} 枚**。落ちたクラス {len(dropped)} 診断 / {int(dropped.sum())} 枚:",
          "  " + "; ".join(f"{d} ({n})" for d, n in dropped.items()),
-         f"- 論文の EBRAINS 側（original h5）とアトラス（EBRAINS_embeddings）の同じスライドの埋め込み: {emb_check['n']} 枚、"
+         f"- 論文の EBRAINS 側（original h5）と参照（EBRAINS_embeddings）の同じスライドの埋め込み: {emb_check['n']} 枚、"
          f"最小 cos {emb_check['min_cos']:.6f}、最大 |差| {emb_check['max_abs']:.2e}。", "",
          "## ラベルの対応（正解の集合）", ""]
     mt = pd.DataFrame([{"label": lab, "n_patho2": int(q_counts.get(lab, 0)),
-                        "correct (in atlas)": "; ".join(f"{d} ({int(n_c[classes.index(d)])})" for d in correct[lab]) or "—",
+                        "correct (in reference)": "; ".join(f"{d} ({int(n_c[classes.index(d)])})" for d in correct[lab]) or "—",
                         "dropped (< min-n)": "; ".join(d for d in mapping[lab] if d not in correct[lab]) or ""}
                        for lab in q_counts.index])
     L += ["NOS meningioma は名前に meningioma を含む診断の全部。scorable でないラベル（正解の集合が空）は診断名の指標から外す。", "",
@@ -554,7 +554,7 @@ def write_summary(path: Path, enc: str, args, info: dict, classes: list[str], n_
         lt.index.name = metric
         L += [_md(lt), ""]
     L += ["## グリオーマの 3 群の混同（nc_euclid）", "",
-          "full = アトラス全体の top-1 の診断の群（other glioma = broad だけに入る診断、non-glioma = それ以外）。"
+          "full = 参照全体の top-1 の診断の群（other glioma = broad だけに入る診断、non-glioma = それ以外）。"
           "restricted = ast・glm・odg の集合の診断の重心だけに絞った 3 択。bal_acc = 3 群の recall の平均。", ""]
     for scope in ("full", "restricted"):
         for cond in CONDITIONS + ["ebrains_loo"]:
@@ -612,7 +612,7 @@ def plot(res: pd.DataFrame, path: Path, enc: str, conds: list[str], ceiling: str
     order = [k for k, t in enumerate(lab) if t != COND_LABEL[ceiling]] + [k for k, t in enumerate(lab) if t == COND_LABEL[ceiling]]
     h, lab = [h[k] for k in order], [lab[k] for k in order]
     fig.legend(h, lab, loc="lower center", ncol=len(lab), fontsize=9, frameon=False, bbox_to_anchor=(0.5, -0.01))
-    fig.suptitle(f"Nearest-centroid diagnosis of in-house slides against the EBRAINS atlas ({enc.upper()}{note})", fontsize=12)
+    fig.suptitle(f"Nearest-centroid diagnosis of in-house slides against the EBRAINS reference cohort ({enc.upper()}{note})", fontsize=12)
     fig.tight_layout(rect=(0, 0.07, 1, 0.97))
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -626,7 +626,7 @@ def main() -> None:
     ap.add_argument("--min-n", type=int, default=MIN_N_DEFAULT, help=f"参照に残す診断の最小枚数（既定 {MIN_N_DEFAULT}）")
     ap.add_argument("--encoder", choices=sorted(ENCODERS), default="titan")
     ap.add_argument("--atlas-slides", choices=sorted(ENCODERS), default=None,
-                    help="アトラスをこの encoder のアトラスのキャッシュ（atlas_<enc>_slides.csv）にあるスライドに絞る"
+                    help="参照をこの encoder の参照のキャッシュ（atlas_<enc>_slides.csv）にあるスライドに絞る"
                          "（TITAN と PRISM を同じ参照で比べる用。出力名は <encoder>_on_<atlas-slides>）")
     args = ap.parse_args()
     enc = args.encoder
@@ -640,19 +640,19 @@ def main() -> None:
     base = enc if restrict is None else f"{enc}_on_{restrict}"
     tag = base if args.min_n == MIN_N_DEFAULT else f"{base}_min{args.min_n}"   # 出力名（キャッシュは encoder ごとに共通）
 
-    print("[load] atlas (EBRAINS_embeddings × annotation.csv)")
+    print("[load] reference cohort (EBRAINS_embeddings × annotation.csv)")
     atlas, A, info = load_atlas(cfg, key, out_dir, enc, args.reload)
-    if restrict is not None:   # 別の encoder のアトラスと同じスライドに絞る（並びは自分のキャッシュのまま）
+    if restrict is not None:   # 別の encoder の参照と同じスライドに絞る（並びは自分のキャッシュのまま）
         other_csv = out_dir / f"atlas_{restrict}_slides.csv"
         if not other_csv.exists():
             raise SystemExit(f"{other_csv} が無い。先に --encoder {restrict} を回すこと")
         keep_u = set(pd.read_csv(other_csv, dtype={"uuid": str})["uuid"])
         km = atlas["uuid"].isin(keep_u).to_numpy()
         if km.sum() != len(keep_u):
-            print(f"  WARN {restrict} のアトラス {len(keep_u)} 枚のうち {int(km.sum())} 枚しか {enc} のアトラスに無い")
+            print(f"  WARN {restrict} の参照 {len(keep_u)} 枚のうち {int(km.sum())} 枚しか {enc} の参照に無い")
         info = {**info, "restricted_to": restrict, "n_after_restrict": int(km.sum())}
         atlas, A = atlas[km].reset_index(drop=True), A[km]
-        print(f"  restricted to the {restrict} atlas slides: {info['n_loaded']} → {info['n_after_restrict']}")
+        print(f"  restricted to the {restrict} reference slides: {info['n_loaded']} → {info['n_after_restrict']}")
     print("[load] manifest (Δ の推定と patho2 の問い合わせ)")
     man, M = load_manifest(cfg, h5_col, key, out_dir, enc, args.reload)
 
@@ -695,7 +695,7 @@ def main() -> None:
     q_counts = q_counts.reindex(sorted(q_counts.index, key=lambda lab: (FAMILIES.index(q.loc[q["label"] == lab, "family"].iat[0]), lab)))
     print(f"  queries: {len(q)} patho2 slides; not scorable: {q.loc[~q['scorable'], 'label'].value_counts().to_dict()}")
 
-    # 論文の EBRAINS 側（original h5）とアトラスの同じスライドの一致
+    # 論文の EBRAINS 側（original h5）と参照の同じスライドの一致
     eb = man[(man["site"] == "ebrains")].reset_index()
     apos = dict(zip(atlas["slide_id"], range(len(atlas))))
     pairs = [(i, apos[s]) for i, s in zip(eb["index"], eb["slide_id"]) if s in apos]
@@ -784,7 +784,7 @@ def main() -> None:
     write_summary(out_dir / f"retrieval_{tag}_summary.md", enc, args, info, classes, n_c, dropped, mapping, correct,
                   q_counts, deltas, res_df, conf, top1c, emb_check)
     plot(res_df, out_dir / f"retrieval_{tag}.png", enc, ["none", "paper", "others_bal", "family"], "ebrains_loo",
-         note="" if restrict is None else f", atlas restricted to the {restrict.upper()} slides")
+         note="" if restrict is None else f", reference restricted to the {restrict.upper()} slides")
 
     pd.set_option("display.width", 220)
     cols = [c for c in AGG_ORDER if c in set(res_df["query_family"])]

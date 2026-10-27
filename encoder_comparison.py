@@ -16,10 +16,10 @@
                                        site / slide_id で manifest と照合し、合わなければその列は空欄）
     転移       transfer_correction.py  out/transfer/correction_{encoder}.csv
     ばらつきの比 dispersion_ratio.py   out/dispersion_ratio/{corr_matrix,corr_matrix_corrected,summary}{,_meanpool,_meanpool_virchow,_prism}.csv
-    アトラス   atlas_retrieval.py      out/atlas/retrieval_{encoder}.csv と _summary.md（参照の診断数・枚数）。meanpool / meanpool_virchow は
+    検索       atlas_retrieval.py      out/atlas/retrieval_{encoder}.csv と _summary.md（参照の診断数・枚数）。meanpool / meanpool_virchow は
                                        回していない（空欄）。
-                                       PRISM のアトラスは PRISM を抽出した EBRAINS（転移テストの manifest の分）だけなので、参照を
-                                       そろえた比較の行も出す: TITAN は retrieval_titan_on_prism.csv（TITAN のアトラスを同じ EBRAINS に絞る）、
+                                       PRISM の参照は PRISM を抽出した EBRAINS（転移テストの manifest の分）だけなので、参照を
+                                       そろえた比較の行も出す: TITAN は retrieval_titan_on_prism.csv（TITAN の参照を同じ EBRAINS に絞る）、
                                        PRISM は retrieval_prism.csv のまま
     例数       transfer_sample_size.py out/transfer_sample_size/n_curve_summary.csv（titan）、<encoder>/n_curve_summary.csv
                                        か n_curve_summary_<encoder>.csv（他。meanpool / meanpool_virchow は無い）
@@ -47,8 +47,8 @@
                     髄膜腫ベンチ（当て先 paper: 隣接ペア /13、patho2 の SFT−髄膜腫距離 / EBRAINS の同じ距離）、残差の絶対値（参考）
     3 ばらつきの比  科をまたぐ次元ごとの分散比の相関（10 組の中央値 [範囲]）、分割半分の再現性（髄膜腫 / グリオーマ / 転移）、
                     再現性で割った相関（髄膜腫–グリオーマと、3 科の 3 組の範囲）、EBRAINS が広い次元の割合（5 科の範囲）
-    4 アトラス      最近傍重心法（nc_euclid）の診断名の top-1、科ごとと全体: 補正なし → Δ_paper → 自分の科の Δ（括弧は EBRAINS LOO）。
-                    4a は各エンコーダのアトラス（参照の診断数が違う）、4b は参照をそろえた比較
+    4 検索          参照コホート（EBRAINS）への最近傍重心法（nc_euclid）の診断名の top-1、科ごとと全体: 補正なし → Δ_paper →
+                    自分の科の Δ（括弧は EBRAINS LOO）。4a は各エンコーダの参照（診断数が違う）、4b は参照をそろえた比較
     5 例数          推定元 論文コホート（patho2 だけ n 枚、EBRAINS は全部）→ 当て先グリオーマ: 残差の中央値がその n 以上の格子の
                     すべてで全枚数の値の 10% 以内に入る最小の n（transfer_sample_size.py の reach_n の value と同じ規則）、
                     残差の比の床（全枚数）、n = 20 の残差の比
@@ -61,7 +61,7 @@
     summary.md              入力ファイルの有無と更新時刻、ブロックごとの表（転移はセル × 法をエンコーダの内側に）、平行移動が最小でないセル
     encoder_comparison.png  a 群ごとの cos vs Δ_paper（生の cos と 95% 区間、白抜き = ノイズ補正）/ b 転移の残差の比（セル × 3 法。
                             右下にエンコーダごとの ‖Δ_paper‖ / 群内 RMS）/ c ばらつきの比: 科をまたぐ相関 vs 2 科の再現性の
-                            幾何平均（対角線 = 完全に共有）/ d アトラスの top-1（出力のあるエンコーダだけ）
+                            幾何平均（対角線 = 完全に共有）/ d 参照コホートへの診断名の検索の top-1（出力のあるエンコーダだけ）
 
 Usage:
     uv run python encoder_comparison.py
@@ -101,6 +101,8 @@ SRC_JA = {"paper": "論文コホート", "own": "own", "none": "補正なし", "
 SRC_EN = {"paper": "Paper cohort", "own": "own", "others": "others", "others_mean": "others (per-family mean)", **FAMILY_LABELS}
 ATLAS_JA = {**FAMILY_LABELS_JA, "overall": "全体"}
 ATLAS_EN = {**FAMILY_LABELS, "overall": "Overall"}
+INPUT_LABELS = {"atlas": "retrieval", "atlas_md": "retrieval_md",           # 入力の表示名（キーはそのまま。出力の retrieval_* に合わせる）
+                "atlas_same": "retrieval_same", "atlas_same_md": "retrieval_same_md"}
 INK, MUTED, GRID = "#222222", "#6b6b6b", "#e6e6e6"
 
 Val = tuple[float, str]
@@ -291,7 +293,7 @@ def _atlas(df: pd.DataFrame, cond: str, fam: str) -> float:
     r = df[(df["retrieval"] == "nc_euclid") & (df["metric"] == "top1") & (df["query_label"] == "(all)")
            & (df["condition"] == cond) & (df["query_family"] == fam)]
     if r.empty:
-        raise KeyError(f"atlas {cond} / {fam} が無い")
+        raise KeyError(f"検索の {cond} / {fam} が無い")
     return float(r["value"].iloc[0])
 
 
@@ -566,8 +568,8 @@ def block_dispersion(T: Table) -> None:
 
 
 def block_atlas(T: Table) -> None:
-    for b, key, md in [("4a アトラス（各エンコーダの参照）", "atlas", "atlas_md"),
-                       ("4b アトラス（参照を PRISM のある EBRAINS にそろえる）", "atlas_same", "atlas_same_md")]:
+    for b, key, md in [("4a 参照コホートへの診断名の検索（各エンコーダの参照）", "atlas", "atlas_md"),
+                       ("4b 参照コホートへの診断名の検索（参照を PRISM のある EBRAINS にそろえる）", "atlas_same", "atlas_same_md")]:
         T.add(b, "参照（診断数 / 枚数）", T.each([md], _atlas_ref))
         for fam in ATLAS_ROWS:
             f = (lambda fm: lambda df: chain([_atlas(df, c, fm) for c in ATLAS_CHAIN], 3, f"（LOO {_atlas(df, 'ebrains_loo', fm):.3f}）"))(fam)
@@ -610,11 +612,11 @@ def write_summary(path: Path, df: pd.DataFrame, inputs: dict[str, Inputs], excep
          "Virchow の平均 = Virchow v1 のパッチ特徴（concat 2560 次元）の単純平均（PRISM の集約器の対照）。", ""]
     names = list(input_paths(Path("."), "titan"))
     L += ["## 入力", ""] + _md(["入力"] + [ENCODER_LABELS_JA[e] for e in encs],
-                              [[n] + [inputs[e].status[n] for e in encs] for n in names])
+                              [[INPUT_LABELS.get(n, n)] + [inputs[e].status[n] for e in encs] for n in names])
     for e in encs:
         miss = inputs[e].missing
         if miss:
-            L.append(f"- **{ENCODER_LABELS_JA[e]} で無い・読めない入力**: " + "、".join(miss))
+            L.append(f"- **{ENCODER_LABELS_JA[e]} で無い・読めない入力**: " + "、".join(INPUT_LABELS.get(n, n) for n in miss))
     L.append("")
     if warnings:
         L += ["## 警告（値が作れなかった行）", ""] + [f"- {w}" for w in warnings] + [""]
@@ -671,8 +673,8 @@ def write_summary(path: Path, df: pd.DataFrame, inputs: dict[str, Inputs], excep
           "- 幾何の 12 群 = 髄膜腫サブタイプ（両施設で 20 例以上）・SFT・グリオーマ 3 群・DLBCL・転移（素な群）。"
           "cos のノイズ補正は shift_transfer.py の tr V を差し引く版。論文コホートの部分集合は leave-group-out の Δ_paper と比べる。",
           "- 転移の own（論文コホート）は当て先自身で推定した補正（上限）。ComBat は own でも残差が 0 にならない（次元ごとの尺度も合わせるため）。",
-          "- アトラスの PRISM は PRISM を抽出した EBRAINS（転移テストの manifest の分）だけが参照なので、全体の EBRAINS を使う TITAN（4a）"
-          "とは参照の診断数が違う。エンコーダどうしは 4b（TITAN のアトラスを同じスライドに絞った retrieval_titan_on_prism）で比べる。",
+          "- 参照コホートへの診断名の検索では、PRISM は PRISM を抽出した EBRAINS（転移テストの manifest の分）だけが参照なので、全体の EBRAINS を使う TITAN（4a）"
+          "とは参照の診断数が違う。エンコーダどうしは 4b（TITAN の参照を同じスライドに絞った retrieval_titan_on_prism）で比べる。",
           "- 例数の n は transfer_sample_size.py の summary.md の「残差 value」と同じ規則（その n 以上のすべての格子で中央値が全枚数の値の 10% 以内）。",
           ""]
     path.write_text("\n".join(L))
@@ -817,11 +819,11 @@ def plot(path: Path, inputs: dict[str, Inputs], gap: dict[str, dict | None]) -> 
     ax.grid(axis="y", color=GRID, lw=0.6)
     _panel(ax, "c", "Dispersion ratio: shared across tumour families? (10 family pairs)")
 
-    # d: アトラスの top-1
+    # d: 参照コホートへの診断名の検索の top-1
     ax = axes[1, 1]
     series = [("meanpool", "atlas", "-", ENCODER_LABELS["meanpool"]),
-              ("titan", "atlas", "-", ENCODER_LABELS["titan"] + " (full EBRAINS atlas)"),
-              ("titan", "atlas_same", ":", ENCODER_LABELS["titan"] + " (atlas restricted to PRISM's EBRAINS slides)"),
+              ("titan", "atlas", "-", ENCODER_LABELS["titan"] + " (full EBRAINS reference)"),
+              ("titan", "atlas_same", ":", ENCODER_LABELS["titan"] + " (reference restricted to PRISM's EBRAINS slides)"),
               ("meanpool_virchow", "atlas", "-", ENCODER_LABELS["meanpool_virchow"]),
               ("prism", "atlas", "-", ENCODER_LABELS["prism"])]
     present = [k for k, (e, key, _, _) in enumerate(series) if have[e].data[key] is not None]   # 出力のある系列だけで横に並べる
@@ -852,7 +854,7 @@ def plot(path: Path, inputs: dict[str, Inputs], gap: dict[str, dict | None]) -> 
     _style(ax)
     ax.grid(axis="x", visible=False)
     ax.grid(axis="y", color=GRID, lw=0.6)
-    _panel(ax, "d", "Reference atlas: in-house slides → EBRAINS diagnoses")
+    _panel(ax, "d", "Diagnosis retrieval: in-house slides → EBRAINS reference cohort")
     leg_d = [Line2D([], [], marker="o", ls="none", mfc="white", mec=INK, label="no correction"),
              Line2D([], [], marker="o", ls="none", color=INK, label="+ Δ_paper"),
              Line2D([], [], marker="_", ls="none", color=INK, ms=10, mew=1.6, label="+ own-family Δ"),
@@ -885,7 +887,7 @@ def main() -> None:
     inputs = {e: Inputs(out, e, manifest) for e in ENCODER_ORDER}
     for e in ENCODER_ORDER:
         miss = inputs[e].missing
-        print(f"[{e}] 入力 {len(inputs[e].data) - len(miss)}/{len(inputs[e].data)}" + (f"、無い: {', '.join(miss)}" if miss else ""))
+        print(f"[{e}] 入力 {len(inputs[e].data) - len(miss)}/{len(inputs[e].data)}" + (f"、無い: {', '.join(INPUT_LABELS.get(n, n) for n in miss)}" if miss else ""))
 
     T = Table(inputs)
     block_reference(T)
