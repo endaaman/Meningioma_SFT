@@ -15,9 +15,9 @@ patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE
 transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（論文コホート ＋ 院内代表 ＋ EBRAINS 対応診断、2,301 枚）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる
 transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（--encoder titan|prism|meanpool、out/transfer/correction_{encoder}.*）
 prism_extract.py     # 第 2 のスライドエンコーダ: manifest の全スライドに Virchow（224 px / 0.5 mpp、concat 2560 次元）→ PRISM を足す。書き先は既存の h5（EBRAINS_embeddings / Patho2Gliomas_embeddings / 論文の original）の virchow_2560/…。既存はスキップ、ログ out/transfer/prism_log.csv
-atlas_retrieval.py   # 参照アトラス: EBRAINS 全体（5 枚以上の 78 診断）の診断ごとの重心で院内スライドを最近傍診断。補正なし / 論文の Δ / 他の科の Δ（全平均・科ごと）/ 自分の科の Δ と EBRAINS 内 LOO（out/atlas/）
-dispersion_ratio.py  # Supplementary 用: 施設間の「ばらつきの比」（次元ごとの分散比）は腫瘍をまたいで共有されるか。科どうしの相関 vs 分割半分の再現性、平均のずれの cos と並べる（out/dispersion_ratio/）。shift_transfer.py のキャッシュを読む。--encoder meanpool は *_meanpool
-shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）。--encoder meanpool は out/shift_transfer/meanpool/
+atlas_retrieval.py   # 参照アトラス: EBRAINS 全体（5 枚以上の 78 診断）の診断ごとの重心で院内スライドを最近傍診断。補正なし / 論文の Δ / 他の科の Δ（全平均・科ごと）/ 自分の科の Δ と EBRAINS 内 LOO（out/atlas/）。--encoder prism は参照が PRISM のある EBRAINS 1,464 枚・22 診断に縮む。TITAN を同じ参照で比べるには --atlas-slides prism（出力 *_titan_on_prism*）
+dispersion_ratio.py  # Supplementary 用: 施設間の「ばらつきの比」（次元ごとの分散比）は腫瘍をまたいで共有されるか。科どうしの相関 vs 分割半分の再現性、平均のずれの cos と並べる（out/dispersion_ratio/）。shift_transfer.py のキャッシュを読む。--encoder meanpool / prism は *_meanpool / *_prism
+shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）。--encoder meanpool は out/shift_transfer/meanpool/、--encoder prism は out/shift_transfer/prism/（embeddings_prism.npy を引く。組成の感度の IDH 野生型星細胞腫 66 枚は manifest 外で PRISM が無いので NaN）
 transfer_meanpool.py # 転移テストの全スライドの平均プーリング埋め込み（CONCH v1.5 パッチ平均、meanpool.py と同じ定義。論文コホートは既存の meanpool h5、グリオーマ側は h5 の features から計算）→ out/transfer/embeddings_meanpool.npy。shift_transfer / transfer_correction / dispersion_ratio の --encoder meanpool が読む（集約器の対照）
 transfer_umap.py     # 全 2,301 枚（5 科 × 2 施設）の UMAP: 補正なしで 1 回当てはめ、Δ_paper / 自分の科の Δ で補正した院内を transform で写す（補正なし / +Δ_paper / +own と科ごとの小図）。768 次元での院内の 15 近傍に占める EBRAINS の割合を併記（out/transfer_umap/）
 transfer_sample_size.py # 別の腫瘍に移せる Δ に要る枚数と種類数（平行移動のみ）: 推定元の院内 n 枚（200 回）→ 他の科の残差・施設 ASW・NC BA・対と、全枚数の 10% 以内に入る n。当て先以外の k 科の科ごと平均 vs まとめ（out/transfer_sample_size/）。Fig S4 の作り直し
@@ -125,6 +125,14 @@ uv run python transfer_sample_size.py                      # 同。枚数 n・�
 uv run python transfer_color.py build --workers 4           # transfer_manifest.py の後。全スライドの色（h5 のパッチ画素か元 WSI。NFS を読むので 4 並列まで、途中から再開できる。約 4 時間）
 uv run python transfer_color.py analyze                     # build と transfer_correction.py（埋め込みのキャッシュ）の後（out/transfer_color/）
 uv run python shift_time.py                                # 論文には出さない。院内の Δ の経年安定性（out/shift_time/、--plot-only で図だけ）
+# PRISM 側（prism_extract.py が全部終わってから。順番どおりに）
+uv run python transfer_manifest.py                         # 流し直す（prism 列が True になる）
+uv run python shift_transfer.py --encoder prism            # --bootstrap patients も。embeddings_prism.npy のキャッシュを作る（out/shift_transfer/prism/）
+uv run python dispersion_ratio.py --encoder prism          # *_prism
+uv run python transfer_correction.py --encoder prism       # 上 2 本の後（受け入れ確認がその出力を読む）
+uv run python atlas_retrieval.py --encoder prism           # --min-n 20 も。参照は PRISM のある 22 診断に縮む
+uv run python atlas_retrieval.py --atlas-slides prism      # TITAN を同じ 22 診断の参照で（*_titan_on_prism*）
+uv run python transfer_sample_size.py --encoder prism      # 約 20 分（out/transfer_sample_size/prism/）
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
 # ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる
