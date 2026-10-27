@@ -13,16 +13,16 @@ titan_batch.py       # 外部の h5 の木に TITAN を書く（EBRAINS 全体�
 patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor）の HE から CONCH v1.5（wsi-toolbox 0.7.0 の preset conch15、cls 1024 と proj 768 を 1 回で）+ TITAN を作り Patho2Gliomas_embeddings に置く（EBRAINS_embeddings と同じ構成）。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
 patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を目で選ぶツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶページ（serve: クリックごとに data/patho2_gliomas/representatives.csv が書かれる。html: サーバーなしの静的版）。HE 1 枚の症例は自動で選択済み、EXCLUDE で症例除外。解析はこの CSV を読む
 transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（論文コホート ＋ 院内代表 ＋ EBRAINS 対応診断、2,301 枚）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる
-transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（--encoder titan|prism|meanpool、out/transfer/correction_{encoder}.*）
+transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（--encoder titan|prism|meanpool|meanpool_virchow、out/transfer/correction_{encoder}.*）
 prism_extract.py     # 第 2 のスライドエンコーダ: manifest の全スライドに Virchow（224 px / 0.5 mpp、concat 2560 次元）→ PRISM を足す。書き先は既存の h5（EBRAINS_embeddings / Patho2Gliomas_embeddings / 論文の original）の virchow_2560/…。既存はスキップ、ログ out/transfer/prism_log.csv
 atlas_retrieval.py   # 参照アトラス: EBRAINS 全体（5 枚以上の 78 診断）の診断ごとの重心で院内スライドを最近傍診断。補正なし / 論文の Δ / 他の科の Δ（全平均・科ごと）/ 自分の科の Δ と EBRAINS 内 LOO（out/atlas/）。--encoder prism は参照が PRISM のある EBRAINS 1,464 枚・22 診断に縮む。TITAN を同じ参照で比べるには --atlas-slides prism（出力 *_titan_on_prism*）
-dispersion_ratio.py  # Supplementary 用: 施設間の「ばらつきの比」（次元ごとの分散比）は腫瘍をまたいで共有されるか。科どうしの相関 vs 分割半分の再現性、平均のずれの cos と並べる（out/dispersion_ratio/）。shift_transfer.py のキャッシュを読む。--encoder meanpool / prism は *_meanpool / *_prism
-shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）。--encoder meanpool は out/shift_transfer/meanpool/、--encoder prism は out/shift_transfer/prism/（embeddings_prism.npy を引く。組成の感度の IDH 野生型星細胞腫 66 枚は manifest 外で PRISM が無いので NaN）
-transfer_meanpool.py # 転移テストの全スライドの平均プーリング埋め込み（CONCH v1.5 パッチ平均、meanpool.py と同じ定義。論文コホートは既存の meanpool h5、グリオーマ側は h5 の features から計算）→ out/transfer/embeddings_meanpool.npy。shift_transfer / transfer_correction / dispersion_ratio の --encoder meanpool が読む（集約器の対照）
+dispersion_ratio.py  # Supplementary 用: 施設間の「ばらつきの比」（次元ごとの分散比）は腫瘍をまたいで共有されるか。科どうしの相関 vs 分割半分の再現性、平均のずれの cos と並べる（out/dispersion_ratio/）。shift_transfer.py のキャッシュを読む。--encoder meanpool / prism / meanpool_virchow は *_meanpool / *_prism / *_meanpool_virchow
+shift_transfer.py    # 転移テストの予備解析: 論文コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）。--encoder meanpool は out/shift_transfer/meanpool/、--encoder prism は out/shift_transfer/prism/（embeddings_prism.npy を引く。組成の感度の IDH 野生型星細胞腫 66 枚は manifest 外で PRISM が無いので NaN）。--encoder meanpool_virchow は out/shift_transfer/meanpool_virchow/（Virchow のパッチ平均、embeddings_meanpool_virchow.npy を引く。同じく 66 枚は NaN）
+transfer_meanpool.py # 転移テストの全スライドの平均プーリング埋め込み（CONCH v1.5 パッチ平均、meanpool.py と同じ定義。論文コホートは既存の meanpool h5、グリオーマ側は h5 の features から計算）→ out/transfer/embeddings_meanpool.npy。shift_transfer / transfer_correction / dispersion_ratio の --encoder meanpool が読む（集約器の対照）。--source virchow は Virchow のタイル特徴（h5_prism の virchow_2560/features、2560 次元）の平均 → embeddings_meanpool_virchow.npy（PRISM の集約器の対照、--encoder meanpool_virchow が読む。NFS を読むので --workers 4 まで、途中から再開できる、約 1.5 時間）
 transfer_umap.py     # 全 2,301 枚（5 科 × 2 施設）の UMAP: 補正なしで 1 回当てはめ、Δ_paper / 自分の科の Δ で補正した院内を transform で写す（補正なし / +Δ_paper / +own と科ごとの小図）。768 次元での院内の 15 近傍に占める EBRAINS の割合を併記（out/transfer_umap/）
 transfer_sample_size.py # 別の腫瘍に移せる Δ に要る枚数と種類数（平行移動のみ）: 推定元の院内 n 枚（200 回）→ 他の科の残差・施設 ASW・NC BA・対と、全枚数の 10% 以内に入る n。当て先以外の k 科の科ごと平均 vs まとめ（out/transfer_sample_size/）。Fig S4 の作り直し
 transfer_color.py    # 転移テストの全 2,301 枚の色（32 パッチの L*a*b*・H/E とスライド内のばらつき）と、科ごとの色の幅の比 vs 埋め込みの倍率 s（色を除いた s も）、施設軸 Δ_paper への射影の H 応答・平均色で説明できる施設差（out/transfer_color/）。build（WSI を読む、長い）→ analyze
-encoder_comparison.py # 同じ解析を 3 つのスライド埋め込み（平均プーリング / TITAN / PRISM）で並べた表と図（各解析の出力を読むだけ。out/encoder_comparison/）。v4 Fig 6 の材料。出力の無いエンコーダの列は空欄
+encoder_comparison.py # 同じ解析を 4 つのスライド埋め込み（CONCH の平均 / TITAN / Virchow の平均 / PRISM。パッチ平均 → 集約器 が隣り合う並び）で並べた表と図（各解析の出力を読むだけ。ただし施設差の相対的な大きさ ‖Δ_paper‖ / 群内 RMS と Δ_f の分解は転移テストの埋め込みキャッシュ out/transfer/embeddings_{encoder}.npy から計算。out/encoder_comparison/）。v4 Fig 6 の材料。出力の無いエンコーダの列は空欄
 shift_time.py        # 論文には出さない（記録のみ）: 院内の Δ は年をまたいで安定か。受付年ごとの Δ の cos・長さ、同じ枚数・同じ組成の帰無、並べ替え検定（out/shift_time/）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
@@ -134,7 +134,11 @@ uv run python transfer_correction.py --encoder prism       # 上 2 本の後（�
 uv run python atlas_retrieval.py --encoder prism           # --min-n 20 も。参照は PRISM のある 22 診断に縮む
 uv run python atlas_retrieval.py --atlas-slides prism      # TITAN を同じ 22 診断の参照で（*_titan_on_prism*）
 uv run python transfer_sample_size.py --encoder prism      # 約 20 分（out/transfer_sample_size/prism/）
-uv run python encoder_comparison.py                        # 各 --encoder の解析（shift_transfer / transfer_correction / dispersion_ratio / atlas_retrieval（--atlas-slides prism も）/ transfer_sample_size）の後。3 エンコーダの横並び（out/encoder_comparison/）
+uv run python -u transfer_meanpool.py build --source virchow --workers 4   # Virchow のパッチ平均（PRISM の集約器の対照）→ embeddings_meanpool_virchow.npy。prism_extract.py の後。4 並列まで、途中から再開できる、約 1.5 時間
+uv run python shift_transfer.py --encoder meanpool_virchow # --bootstrap patients も（out/shift_transfer/meanpool_virchow/）
+uv run python dispersion_ratio.py --encoder meanpool_virchow   # *_meanpool_virchow
+uv run python transfer_correction.py --encoder meanpool_virchow # 上 2 本の後（受け入れ確認がその出力を読む）
+uv run python encoder_comparison.py                        # 各 --encoder の解析（shift_transfer / transfer_correction / dispersion_ratio / atlas_retrieval（--atlas-slides prism も）/ transfer_sample_size）の後。4 エンコーダの横並び（out/encoder_comparison/）。atlas_retrieval / transfer_sample_size は CONCH の平均・Virchow の平均では回していないので空欄
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
 # ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる
