@@ -101,7 +101,9 @@ FAMILY_COLOR = {"meningioma": "#4c72b0", "SFT": "#000000", "glioma": "#dd8452", 
                 "metastasis": "#c44e52", "paper": "#4c72b0"}       # shift_transfer.FAMILY_COLOR と同じ（paper は髄膜腫の色）
 MARKER = {"paper": "o", "meningioma": "o", "SFT": "v", "glioma": "s", "lymphoma": "^", "metastasis": "D"}
 INK, MUTED = "#222222", "#777777"
-# summary.md の「読み」。数値を見て書いた文章（2026-10-26 の TITAN の実行、200 回）。数値や設定を変えたら見直す
+# summary.md の「読み」。数値を見て書いた文章（2026-10-26 の TITAN の実行、200 回）。数値や設定を変えたら見直す。
+# TITAN の数値の文章なので、他の encoder の summary.md には入れない（READING_OTHER）
+READING_OTHER = "（{encoder} の読みは未記入。この節の文章は TITAN の数値で書いたもので、titan の summary.md にだけ入れる）"
 READING = """
 - A. 論文コホート（髄膜腫 + SFT）から別の腫瘍へ（patho2 だけ n 枚、EBRAINS は全部）: 残差の比は n = 20 で全枚数の値の 10% 以内
   （グリオーマ 0.549 [0.501, 0.593] vs 全 577 枚 0.502、DLBCL 0.607 vs 0.556、転移 0.535 vs 0.496）。上側 2.5% 点まで入るのは
@@ -526,7 +528,7 @@ def write_summary(path: Path, ncs: pd.DataFrame, kc: pd.DataFrame, kcs: pd.DataF
                 cells += [mm(m, "ba_E2P", 3), mm(p, "ba_E2P", 3)]
             L.append("| " + " | ".join(cells) + " |")
         L.append("")
-    L += ["## 読み", "", READING.strip(), ""]
+    L += ["## 読み", "", READING.strip() if encoder == "titan" else READING_OTHER.format(encoder=encoder), ""]
     if acc is not None and len(acc):
         L += ["## 受け入れ確認（transfer_correction の method = centroid の行と、許容 1e-6）", "",
               "| part | 当て先 | transfer_correction の source | 指標 | 期待 | 得た値 | 差 | |", "|---|---|---|---|---|---|---|---|"]

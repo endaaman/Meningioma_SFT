@@ -80,6 +80,9 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
     out/dendrogram/pairs.csv、out/affine/scale.csv、out/nc/*/bootstrap.csv）と、論文の補正済み h5（embedding.patho2.*）を再現するか。
     meanpool は論文の平均プーリングの対照の出力（out/meanpool/summary.csv の none / centroid / combat、out/meanpool/nc/*/bootstrap.csv）と、
     meanpool.py の補正済み h5（{meanpool.root}/{centroid,combat}）と突き合わせる（相似変換は meanpool.py に無いので確認しない）。
+    prism は論文の出力が無いので、同じ PRISM を別の経路で読んだ出力との一致を見る（acceptance_prism）: 補正なしの残差と own の
+    ‖Δ‖ = shift_transfer.py --encoder prism の groups.csv の shift_norm（paper / glioma / lymphoma / metastasis）、単独の科を
+    推定元にした相似変換の s = dispersion_ratio.py --encoder prism の scale_s、own の平行移動の残差 = 0。無いファイルの項目は飛ばす。
 
 出力 (output_dir/transfer/):
     correction_{encoder}.csv          縦長: encoder, method, source, target, metric, value, n_ebrains, n_patho2（当て先）,
@@ -357,7 +360,10 @@ def _read(path: Path, index: str) -> pd.DataFrame | None:
 
 def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarray, np.ndarray]],
                encoder: str = "titan") -> pd.DataFrame:
-    """source = own（と none）・target = paper の値を論文の出力と突き合わせる（meanpool は論文の平均プーリングの対照の出力と）。"""
+    """source = own（と none）・target = paper の値を論文の出力と突き合わせる（meanpool は論文の平均プーリングの対照の出力と、
+    prism は論文の出力が無いので acceptance_prism）。"""
+    if encoder == "prism":
+        return acceptance_prism(res, cfg)
     out = Path(cfg["output_dir"])
     if encoder == "meanpool":           # meanpool.py analyze / nc.py --aggregator mean の出力。harmonization・dendrogram・affine は無い
         harm, dg, sc = None, None, None
@@ -433,6 +439,44 @@ def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarr
     return pd.DataFrame(rows)
 
 
+def acceptance_prism(res: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """prism の確認: 論文の PRISM の出力は無いので、同じ PRISM（manifest の h5_prism）を別の経路で読んだ出力と突き合わせる。
+    shift_transfer.py --encoder prism（out/shift_transfer/prism/groups.csv、論文コホートは load_data の並び）の shift_norm と
+    補正なしの残差・own の ‖Δ‖、dispersion_ratio.py --encoder prism（out/dispersion_ratio/summary_prism.csv）の scale_s と
+    単独の科を推定元にした相似変換の s。own の平行移動の残差は定義で 0。無いファイルの項目は飛ばす。"""
+    out = Path(cfg["output_dir"])
+    names = cfg["shift_transfer"].get("group_names", {})
+    cols = ["method", "metric", "expected", "got", "diff", "ok", "reference"]
+    rows = []
+
+    def add(method: str, source: str, target: str | None, metric: str, expected: float, tol: float, ref: str) -> None:
+        d = res[(res["method"] == method) & (res["source"] == source) & (res["metric"] == metric)]
+        if target is not None:
+            d = d[d["target"] == target]
+        if d.empty:
+            return
+        g = float(d["value"].iloc[0])
+        rows.append({"method": "none" if source == "none" else method,
+                     "metric": f"{metric}（{source} → {target or d['target'].iloc[0]}）", "expected": float(expected), "got": g,
+                     "diff": g - float(expected), "ok": abs(g - float(expected)) <= tol, "reference": ref})
+
+    grp = _read(out / "shift_transfer" / "prism" / "groups.csv", "group")
+    if grp is not None:
+        for target, gname in (("paper", "Paper cohort"), ("glioma", "Glioma (all)"),
+                              ("lymphoma", names.get("lym", "lym")), ("metastasis", names.get("met", "met"))):
+            if gname in grp.index:
+                add("centroid", "none", target, "residual_norm", grp.loc[gname, "shift_norm"], 1e-4, "shift_transfer/prism/groups.csv")
+                add("centroid", "own", target, "shift_norm", grp.loc[gname, "shift_norm"], 1e-4, "shift_transfer/prism/groups.csv")
+    disp = _read(out / "dispersion_ratio" / "summary_prism.csv", "family")
+    if disp is not None:
+        for f in FAMILIES:
+            if f in disp.index:   # 推定元のパラメータは当て先によらないので、最初の当て先の行
+                add("affine_free", f, None, "scale", disp.loc[f, "scale_s"], 1e-6, "dispersion_ratio/summary_prism.csv")
+    for target in TARGETS:
+        add("centroid", "own", target, "residual_norm", 0.0, 1e-6, "定義（own の平行移動）")
+    return pd.DataFrame(rows, columns=cols)
+
+
 # ── output ────────────────────────────────────────────────────────────────────
 
 def _fmt(v, digits: int = 3) -> str:
@@ -486,8 +530,9 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
          "推定元を飛ばす規則: 当て先と同じ科の集合（= own）と、当て先の真部分集合（一部 in-sample）は飛ばす。"
          "当て先 all だけは科ごとの推定元と paper を残す（推定元が当て先に含まれる）。"
          "others_mean = others と同じ科を科ごとに当てはめてパラメータを科ごとに等しい重みで平均（all は 5 科全部）。", ""]
-    L += ["## 受け入れ確認（target = paper、source = own / none と論文の出力）" if encoder != "meanpool" else
-          "## 受け入れ確認（target = paper、source = own / none と論文の平均プーリングの対照の出力 out/meanpool/）", "",
+    L += [{"meanpool": "## 受け入れ確認（target = paper、source = own / none と論文の平均プーリングの対照の出力 out/meanpool/）",
+           "prism": "## 受け入れ確認（prism: 論文の出力は無いので、shift_transfer.py / dispersion_ratio.py --encoder prism の出力との一致）"}
+          .get(encoder, "## 受け入れ確認（target = paper、source = own / none と論文の出力）"), "",
           _md(acc[["method", "metric", "expected", "got", "diff", "ok", "reference"]], digits=4, index=False), ""]
     L += ["## ComBat の転移（neuroCombatFromTraining）の確認", "",
           f"- own で FromTraining が neuroCombat の直接の出力を再現するか（patho2、当て先ごとの max |差| の最大）: "

@@ -60,10 +60,14 @@ EBRAINS 内の基準（施設差なしの上限）: 問い合わせのラベル�
     atlas_{enc}.npy / atlas_{enc}_slides.csv / atlas_{enc}_info.json、manifest_{enc}.npy / manifest_{enc}_slides.csv
                                  埋め込みのキャッシュ（--reload で読み直す。manifest の並びが変わったら自動で読み直す）
     --min-n が既定（5）以外のときは、キャッシュ以外の出力名の {enc} が {enc}_min{n} になる。
+    --atlas-slides <enc2> のときは {enc}_on_{enc2}（と _min{n}）になる。
 
 Usage:
-    uv run python atlas_retrieval.py [--reload] [--min-n 5] [--encoder titan]
-    （--encoder prism は transfer.prism_key を同じ h5 から読む。アトラスは PRISM のある EBRAINS のスライドだけになる）
+    uv run python atlas_retrieval.py [--reload] [--min-n 5] [--encoder titan] [--atlas-slides prism]
+    （--encoder prism は transfer.prism_key を同じ h5 から読む。アトラスは PRISM のある EBRAINS のスライドだけになる。
+    PRISM は転移テストの manifest の 2,301 枚にしか抽出していないので、今は EBRAINS 1,464 枚・診断はその科のものだけ。
+    TITAN と同じ参照で比べるには --encoder titan --atlas-slides prism: TITAN のアトラスを atlas_prism_slides.csv の
+    uuid に絞る（先に --encoder prism を回してキャッシュを作る）。問い合わせ・Δ の推定は絞らない（manifest の全部）。）
 """
 from __future__ import annotations
 
@@ -504,8 +508,12 @@ def write_summary(path: Path, enc: str, args, info: dict, classes: list[str], n_
     cols = [c for c in AGG_ORDER if c in set(res["query_family"])]
     rows_order = CONDITIONS + BASELINES
     L = [f"# 参照アトラス: EBRAINS 全体への最近傍診断（{enc}）", "",
-         "`atlas_retrieval.py` の出力。主 = nc_euclid（診断ごとの重心へのユークリッド距離）。条件の定義は docstring。", "",
-         "## 参照（EBRAINS）", "",
+         "`atlas_retrieval.py` の出力。主 = nc_euclid（診断ごとの重心へのユークリッド距離）。条件の定義は docstring。", ""]
+    if info.get("restricted_to"):
+        L += [f"**アトラスを {info['restricted_to']} のアトラスのスライド（atlas_{info['restricted_to']}_slides.csv の uuid）に絞った版**"
+              f"（{info['n_loaded']} → {info['n_after_restrict']} 枚。--atlas-slides {info['restricted_to']}）。"
+              "問い合わせと Δ の推定は絞っていない。下の h5 の本数などは絞る前の値。", ""]
+    L += ["## 参照（EBRAINS）", "",
          f"- h5 {info['n_files']} 本 / uuid {info['n_uuids_with_file']}（入れ子の重複を除く）。annotation.csv {info['n_annotation']} 行、"
          f"control {info['n_control']} を除いて {info['n_noncontrol']}。h5 が無い {len(info['no_file'])}、キーが無い {len(info['no_key'])}"
          f"、読めた {info['n_loaded']} 枚（annotation に無い uuid の h5 {len(info['uuids_without_annotation'])} 本）。",
@@ -572,7 +580,7 @@ def write_summary(path: Path, enc: str, args, info: dict, classes: list[str], n_
 
 # ── figure ────────────────────────────────────────────────────────────────────
 
-def plot(res: pd.DataFrame, path: Path, enc: str, conds: list[str], ceiling: str) -> None:
+def plot(res: pd.DataFrame, path: Path, enc: str, conds: list[str], ceiling: str, note: str = "") -> None:
     fams = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
     sub = res[(res["retrieval"] == "nc_euclid") & (res["query_label"] == "(all)")]
     panels = [("top1", "a  diagnosis top-1"), ("top5", "b  diagnosis top-5"), ("family_top1", "c  family top-1")]
@@ -604,7 +612,7 @@ def plot(res: pd.DataFrame, path: Path, enc: str, conds: list[str], ceiling: str
     order = [k for k, t in enumerate(lab) if t != COND_LABEL[ceiling]] + [k for k, t in enumerate(lab) if t == COND_LABEL[ceiling]]
     h, lab = [h[k] for k in order], [lab[k] for k in order]
     fig.legend(h, lab, loc="lower center", ncol=len(lab), fontsize=9, frameon=False, bbox_to_anchor=(0.5, -0.01))
-    fig.suptitle(f"Nearest-centroid diagnosis of in-house slides against the EBRAINS atlas ({enc.upper()})", fontsize=12)
+    fig.suptitle(f"Nearest-centroid diagnosis of in-house slides against the EBRAINS atlas ({enc.upper()}{note})", fontsize=12)
     fig.tight_layout(rect=(0, 0.07, 1, 0.97))
     fig.savefig(path, dpi=150)
     plt.close(fig)
@@ -617,6 +625,9 @@ def main() -> None:
     ap.add_argument("--reload", action="store_true", help="埋め込みのキャッシュを捨てて h5 から読み直す")
     ap.add_argument("--min-n", type=int, default=MIN_N_DEFAULT, help=f"参照に残す診断の最小枚数（既定 {MIN_N_DEFAULT}）")
     ap.add_argument("--encoder", choices=sorted(ENCODERS), default="titan")
+    ap.add_argument("--atlas-slides", choices=sorted(ENCODERS), default=None,
+                    help="アトラスをこの encoder のアトラスのキャッシュ（atlas_<enc>_slides.csv）にあるスライドに絞る"
+                         "（TITAN と PRISM を同じ参照で比べる用。出力名は <encoder>_on_<atlas-slides>）")
     args = ap.parse_args()
     enc = args.encoder
 
@@ -625,10 +636,23 @@ def main() -> None:
     key = cfg["transfer"][key_name]
     out_dir = Path(cfg["output_dir"]) / "atlas"
     out_dir.mkdir(parents=True, exist_ok=True)
-    tag = enc if args.min_n == MIN_N_DEFAULT else f"{enc}_min{args.min_n}"   # 出力名（キャッシュは encoder ごとに共通）
+    restrict = args.atlas_slides if args.atlas_slides not in (None, enc) else None
+    base = enc if restrict is None else f"{enc}_on_{restrict}"
+    tag = base if args.min_n == MIN_N_DEFAULT else f"{base}_min{args.min_n}"   # 出力名（キャッシュは encoder ごとに共通）
 
     print("[load] atlas (EBRAINS_embeddings × annotation.csv)")
     atlas, A, info = load_atlas(cfg, key, out_dir, enc, args.reload)
+    if restrict is not None:   # 別の encoder のアトラスと同じスライドに絞る（並びは自分のキャッシュのまま）
+        other_csv = out_dir / f"atlas_{restrict}_slides.csv"
+        if not other_csv.exists():
+            raise SystemExit(f"{other_csv} が無い。先に --encoder {restrict} を回すこと")
+        keep_u = set(pd.read_csv(other_csv, dtype={"uuid": str})["uuid"])
+        km = atlas["uuid"].isin(keep_u).to_numpy()
+        if km.sum() != len(keep_u):
+            print(f"  WARN {restrict} のアトラス {len(keep_u)} 枚のうち {int(km.sum())} 枚しか {enc} のアトラスに無い")
+        info = {**info, "restricted_to": restrict, "n_after_restrict": int(km.sum())}
+        atlas, A = atlas[km].reset_index(drop=True), A[km]
+        print(f"  restricted to the {restrict} atlas slides: {info['n_loaded']} → {info['n_after_restrict']}")
     print("[load] manifest (Δ の推定と patho2 の問い合わせ)")
     man, M = load_manifest(cfg, h5_col, key, out_dir, enc, args.reload)
 
@@ -759,7 +783,8 @@ def main() -> None:
     mtab.to_csv(out_dir / f"mapping_{tag}.csv", index=False)
     write_summary(out_dir / f"retrieval_{tag}_summary.md", enc, args, info, classes, n_c, dropped, mapping, correct,
                   q_counts, deltas, res_df, conf, top1c, emb_check)
-    plot(res_df, out_dir / f"retrieval_{tag}.png", enc, ["none", "paper", "others_bal", "family"], "ebrains_loo")
+    plot(res_df, out_dir / f"retrieval_{tag}.png", enc, ["none", "paper", "others_bal", "family"], "ebrains_loo",
+         note="" if restrict is None else f", atlas restricted to the {restrict.upper()} slides")
 
     pd.set_option("display.width", 220)
     cols = [c for c in AGG_ORDER if c in set(res_df["query_family"])]
