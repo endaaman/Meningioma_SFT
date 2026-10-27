@@ -65,6 +65,18 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
                    群は当て先の両施設で min_n 例以上: paper = 髄膜腫サブタイプ + SFT、glioma = ast / glm / odg、all = 5 科
     scale / shift_norm  推定元で当てはめたパラメータ（affine_free: s、combat / combat_recentred: 次元ごとの倍率 1/√δ* の
                    中央値、centroid: ‖μ_E − μ_P‖。others_mean は平均した s・k・Δ）
+    施設の見分けやすさ（査読者に一目で伝わる 2 指標。site_mixing。どちらも群ごとに計算して群の中央値、全次元・ユークリッド距離）:
+      group_gap_sd 同じ群の 2 施設の中心の距離 / 施設内の広がり: 群 g ごとに ‖μ_E,g − μ_P',g‖ / RMS_g、
+                   RMS_g = √((mean_E ‖x − μ_E,g‖² + mean_P ‖x' − μ_P',g‖²) / 2)（x' = 補正後の patho2。平行移動では RMS_g は
+                   変わらず、倍率つきの法では変わる）。0 = 中心が一致、1 = 施設内の広がりと同じだけずれている
+      knn_mix      近傍の混ざり: 群 g の patho2 のスライドそれぞれについて、同じ群の両施設のスライドをまとめた中で（自分を除く）
+                   最近傍 k = KNN_K（10。群の枚数 − 1 を超えない）枚に占める ebrains の割合を取り、群内で平均し、完全に混ざったときの
+                   期待値 n_E,g / (n_E,g + n_P,g − 1) で割る（1 = 施設の見分けがつかない、0 = 近傍が全部 patho2）。
+                   群が 11 枚以下（k = 群の枚数 − 1）の群は近傍が群の全部になるので定義で 1
+      群 = pairs_adjacent と同じ集合（両施設に 1 枚以上ある群。dendrogram.group_means と同じ集合・並び）: paper = 髄膜腫
+      サブタイプ + SFT の 13 組、glioma = ast / glm / odg、all = 5 科、lymphoma / metastasis は 1 群。
+      correction_{encoder}.csv には群の中央値（metric group_gap_sd / knn_mix）、群ごとの値は correction_{encoder}_groups.csv。
+      乱数は使わない（他の指標の値と乱数の消費順は変わらない）
     ベンチ:
       paper   pairs_adjacent（施設 × 組織型の平均の Ward 樹形図で同じ組織型の 2 施設が隣り合う数、13 組。dendrogram.py の
               group_means / raw_distance / ward_linkage / pair_stats をそのまま使う）、
@@ -91,8 +103,13 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
     correction_{encoder}.csv          縦長: encoder, method, source, target, metric, value, n_ebrains, n_patho2（当て先）,
                                       n_src_ebrains, n_src_patho2（推定元）。source = none は補正なしで、ピボットしやすいように
                                       各 method に同じ行を置く
-    correction_{encoder}_summary.md   受け入れ確認・ComBat の確認・推定元のパラメータ・当て先ごとのピボット（method × source）・ベンチ
-    correction_{encoder}.png          a: residual_norm、b: asw_site（当て先ごとのヒートマップ、行 = 推定元、列 = 法）、c: paper のベンチ
+    correction_{encoder}_groups.csv   施設の見分けやすさの群ごとの値（縦長）: encoder, method, source, target, group,
+                                      n_ebrains, n_patho2（群の枚数）, knn_k, metric（group_gap_sd / gap = ‖μ_E,g − μ_P',g‖ /
+                                      rms = RMS_g / knn_mix / knn_frac_ebrains = 期待値で割る前の割合）, value。source = none は各 method に同じ行
+    correction_{encoder}_summary.md   受け入れ確認・ComBat の確認・推定元のパラメータ・当て先ごとのピボット（method × source）・
+                                      施設の見分けやすさ（group_gap_sd・knn_mix）・ベンチ
+    correction_{encoder}.png          a: residual_norm、b: asw_site、c: group_gap_sd、d: knn_mix（当て先ごとのヒートマップ、行 = 推定元、
+                                      列 = 法）、e: paper のベンチ
     embeddings_{encoder}.npy / embeddings_{encoder}_slides.csv   埋め込みのキャッシュ
 
 Usage:
@@ -112,6 +129,7 @@ import h5py  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from scipy.spatial.distance import cdist  # noqa: E402
 from sklearn.metrics import balanced_accuracy_score  # noqa: E402
 
 np.int = int  # neuroCombat が numpy の旧い別名（np.int）を使うため、import より前に定義する（combat.py と同じ）
@@ -124,7 +142,7 @@ from harmonization import _reduce, _site_values  # noqa: E402
 from histotype_labels import apply_set  # noqa: E402
 from method_compare import shape_metrics  # noqa: E402
 from nc import _dist  # noqa: E402
-from utils.display import CONDITION_COLORS, CONDITION_LABELS_JA, CONDITION_LABELS_SHORT  # noqa: E402
+from utils.display import CONDITION_COLORS, CONDITION_LABELS_JA, CONDITION_LABELS_SHORT, ordered_subtypes  # noqa: E402
 from utils.loader import load_config, load_data  # noqa: E402
 
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
@@ -136,6 +154,9 @@ METHODS = ["centroid", "affine_free", "combat", "combat_recentred"]
 SOURCES = ["none", "own", "paper", "meningioma", "SFT", "glioma", "lymphoma", "metastasis", "others", "others_mean"]
 TARGETS = ["paper", "glioma", "lymphoma", "metastasis", "all"]
 GLIOMA_GROUPS = ["ast", "glm", "odg"]
+KNN_K = 10                       # knn_mix の近傍の枚数（群の枚数 − 1 を超えない）
+MIX_METRICS = ["group_gap_sd", "knn_mix"]                                        # correction_{encoder}.csv（群の中央値）
+GROUP_METRICS = ["group_gap_sd", "gap", "rms", "knn_mix", "knn_frac_ebrains"]   # correction_{encoder}_groups.csv（群ごと）
 # 受け入れ確認で論文の variant と突き合わせる法（none = 補正なし = original）
 PAPER_VARIANT = {"none": "original", "centroid": "centroid", "affine_free": "affine_free", "combat": "combat"}
 
@@ -356,6 +377,33 @@ def evaluate(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, target: str, cfg: d
     return out
 
 
+def site_mixing(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, ref: str, cfg: dict) -> tuple[dict, list[dict]]:
+    """施設の見分けやすさ（group_gap_sd・knn_mix、docstring の定義）の群の中央値と群ごとの値。群は pairs_adjacent と同じ
+    （dendrogram.group_means の集合と並び = 両施設にある群を ordered_subtypes の順）。乱数は使わない。"""
+    e = st == ref
+    per = []
+    for g in ordered_subtypes(set(lab[e]) & set(lab[~e]), cfg):
+        A, B = Y[(lab == g) & e], Y[(lab == g) & ~e]
+        n_e, n_p = len(A), len(B)
+        mu_e, mu_p = A.mean(0), B.mean(0)
+        gap = float(np.linalg.norm(mu_e - mu_p))
+        rms = float(np.sqrt((((A - mu_e) ** 2).sum(1).mean() + ((B - mu_p) ** 2).sum(1).mean()) / 2))
+        k = min(KNN_K, n_e + n_p - 1)
+        D = cdist(B, np.vstack([A, B]))                    # patho2 の各スライド → 群の全スライド（ebrains が先）
+        D[np.arange(n_p), n_e + np.arange(n_p)] = np.inf    # 自分を除く
+        frac = float((np.argsort(D, axis=1, kind="stable")[:, :k] < n_e).mean())
+        per.append({"group": g, "n_ebrains": n_e, "n_patho2": n_p, "knn_k": k,
+                    "group_gap_sd": gap / rms if rms > 0 else float("nan"), "gap": gap, "rms": rms,
+                    "knn_mix": frac / (n_e / (n_e + n_p - 1)), "knn_frac_ebrains": frac})
+    return {m: float(np.median([r[m] for r in per])) for m in MIX_METRICS}, per
+
+
+def _group_rows(encoder: str, method: str, source: str, target: str, per: list[dict]) -> list[dict]:
+    return [{"encoder": encoder, "method": method, "source": source, "target": target, "group": r["group"],
+             "n_ebrains": r["n_ebrains"], "n_patho2": r["n_patho2"], "knn_k": r["knn_k"], "metric": m, "value": r[m]}
+            for r in per for m in GROUP_METRICS]
+
+
 # ── acceptance ────────────────────────────────────────────────────────────────
 
 def _read(path: Path, index: str) -> pd.DataFrame | None:
@@ -530,8 +578,57 @@ def bench_table(res: pd.DataFrame, target: str, metrics: list[str], methods: lis
     return pd.DataFrame(rows).set_index("source")
 
 
+def mixing_section(res: pd.DataFrame, gres: pd.DataFrame, methods: list[str], sources: list[str], targets: list[str],
+                   min_n: int) -> list[str]:
+    """summary.md の「施設の見分けやすさ」: 当て先ごとの group_gap_sd・knn_mix（群の中央値、method × source）、
+    paper の両施設 min_n 枚以上の群だけの中央値（参考）、平行移動の群ごとの値（paper / glioma）。"""
+    L = ["## 施設の見分けやすさ（group_gap_sd・knn_mix）", "",
+         "group_gap_sd = 同じ群の 2 施設の中心の距離 / 施設内の広がり（‖μ_E,g − μ_P',g‖ / RMS_g、RMS_g = 両施設の群内の "
+         "RMS 距離の二乗平均の平方根。0 = 中心が一致、1 = 施設内の広がりと同じだけずれている）。"
+         f"knn_mix = 群 g の院内スライドの最近傍 {KNN_K} 枚（同じ群の両施設、自分を除く）に占める EBRAINS の割合 / "
+         "完全に混ざったときの期待値 n_E / (n_E + n_P − 1)（1 = 施設の見分けがつかない、0 = 近傍が全部院内）。"
+         "どちらも群ごとに計算して群の中央値。群は pairs_adjacent と同じ（両施設にある群: paper 13 組 = 髄膜腫サブタイプ + SFT、"
+         "glioma 3、all 5 科、lymphoma / metastasis は 1 群）。群が 11 枚以下の群は近傍が群の全部になり knn_mix は定義で 1。"
+         "群ごとの値は correction_{encoder}_groups.csv。", ""]
+    order = [t for t in ("paper", "glioma") if t in targets] + [t for t in targets if t not in ("paper", "glioma")]
+    for t in order:
+        n = res[res["target"] == t][["n_ebrains", "n_patho2"]].iloc[0]
+        L += [f"### 当て先 {t}（ebrains {int(n['n_ebrains'])} / patho2 {int(n['n_patho2'])}）", ""]
+        for metric in MIX_METRICS:
+            pv = pivot(res, t, metric, methods, sources)
+            if pv.size:
+                L += [_md(pv, digits=3), ""]
+    g = gres[gres["target"] == "paper"]
+    if len(g):
+        big = g[(g["n_ebrains"] >= min_n) & (g["n_patho2"] >= min_n)]
+        names = list(pd.unique(big["group"]))
+        L += [f"### 参考: 当て先 paper の両施設 {min_n} 枚以上の群（{len(names)} 組）だけの中央値", "",
+              "除いた群: " + ", ".join(f"{r.group}（{r.n_ebrains} / {r.n_patho2}）" for r in
+                                       g[~g["group"].isin(names)].drop_duplicates("group").itertuples()), ""]
+        med = big.groupby(["method", "source", "metric"], sort=False)["value"].median().reset_index()
+        med["target"] = "paper"
+        for metric in MIX_METRICS:
+            pv = pivot(med, "paper", metric, methods, sources)
+            if pv.size:
+                L += [_md(pv, digits=3), ""]
+    for t in ("paper", "glioma"):
+        g = gres[(gres["target"] == t) & (gres["method"] == "centroid")]
+        if g.empty:
+            continue
+        srcs = [s for s in sources if s in set(g["source"])]
+        w = g.pivot_table(index=["group", "n_ebrains", "n_patho2"], columns=["metric", "source"], values="value",
+                          aggfunc="first", sort=False)
+        tb = pd.DataFrame({s: [f"{_fmt(a, 2)} / {_fmt(b, 2)}" for a, b in
+                               zip(w[("group_gap_sd", s)], w[("knn_mix", s)])] for s in srcs},
+                          index=[f"{grp}（{ne} / {np_}）" for grp, ne, np_ in w.index])
+        tb.index.name = "群（E / P）"
+        L += [f"### 群ごと（平行移動、当て先 {t}）: group_gap_sd / knn_mix", "", _md(tb, index=True), ""]
+    return L
+
+
 def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd.DataFrame, checks: dict,
-                  encoder: str, methods: list[str], sources: list[str], targets: list[str], groups_used: dict) -> None:
+                  encoder: str, methods: list[str], sources: list[str], targets: list[str], groups_used: dict,
+                  gres: pd.DataFrame, min_n: int) -> None:
     L = [f"# 転移テスト: 3 法 × 推定元 × 当て先（{encoder}）", "",
          "`transfer_correction.py` が作る。定義はスクリプトの docstring。数値は当て先のスライド（patho2 だけ補正）。",
          "推定元を飛ばす規則: 当て先と同じ科の集合（= own）と、当て先の真部分集合（一部 in-sample）は飛ばす。"
@@ -566,6 +663,7 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
             pv = pivot(res, t, metric, methods, sources)
             if pv.size:
                 L += [f"### {metric}", "", _md(pv, digits=3), ""]
+    L += mixing_section(res, gres, methods, sources, targets, min_n)
     L += ["## ベンチ", "", "### paper（髄膜腫 + SFT）", "",
           "pairs = 隣接ペア（/13）、histo = 組織型 5 クラスの最近傍重心法の BA、sft = SFT vs 髄膜腫の BA、"
           "d_sft_P = patho2 内の SFT−髄膜腫の距離（EBRAINS = d_sft_E）、mismatch = 組織型間距離の施設差（中央値）。", ""]
@@ -590,9 +688,11 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
 
 
 def plot(res: pd.DataFrame, path: Path, methods: list[str], sources: list[str], targets: list[str], encoder: str) -> None:
-    fig = plt.figure(figsize=(4.0 * len(targets), 13.5))
-    gs = fig.add_gridspec(3, len(targets), height_ratios=[1, 1, 0.85], hspace=0.55, wspace=0.45, top=0.93, bottom=0.08)
-    for row, (metric, cmap, digits) in enumerate((("residual_norm", "Blues", 2), ("asw_site", "Purples", 3))):
+    heat = (("residual_norm", "Blues", 2), ("asw_site", "Purples", 3), ("group_gap_sd", "Oranges", 2), ("knn_mix", "Greens", 2))
+    fig = plt.figure(figsize=(4.0 * len(targets), 4.5 * len(heat) + 4.5))
+    gs = fig.add_gridspec(len(heat) + 1, len(targets), height_ratios=[1] * len(heat) + [0.85], hspace=0.55, wspace=0.45,
+                          top=0.95, bottom=0.05)
+    for row, (metric, cmap, digits) in enumerate(heat):
         vals = res[res["metric"] == metric]["value"]
         vmin, vmax = min(0.0, float(vals.min())), float(vals.max())
         for j, t in enumerate(targets):
@@ -609,9 +709,10 @@ def plot(res: pd.DataFrame, path: Path, methods: list[str], sources: list[str], 
             ax.set_yticks(range(pv.shape[0]))
             ax.set_yticklabels(pv.index, fontsize=8)
             n = d[["n_ebrains", "n_patho2"]].iloc[0]
-            ax.set_title(f"{'ab'[row]}  target: {t} (E {int(n['n_ebrains'])} / P {int(n['n_patho2'])})\n{metric}", fontsize=9, loc="left")
+            hint = {"group_gap_sd": " (0 = site centres coincide)", "knn_mix": f" ({KNN_K}-NN; 1 = sites indistinguishable)"}.get(metric, "")
+            ax.set_title(f"{'abcd'[row]}  target: {t} (E {int(n['n_ebrains'])} / P {int(n['n_patho2'])})\n{metric}{hint}", fontsize=9, loc="left")
             ax.tick_params(length=0)
-    # c: paper のベンチ（推定元ごとに法の棒。none は 1 本）
+    # e: paper のベンチ（推定元ごとに法の棒。none は 1 本）
     bench = [("pairs_adjacent", "adjacent pairs (/13)", None), ("nc_histotype_ba_E2P", "histotype BA  E→P", None),
              ("nc_histotype_ba_P2E", "histotype BA  P→E", None), ("nc_sft_ba_E2P", "SFT vs meningioma BA  E→P", None),
              ("sft_men_dist_patho2", "SFT–meningioma distance in patho2", "sft_men_dist_ebrains")]
@@ -619,7 +720,7 @@ def plot(res: pd.DataFrame, path: Path, methods: list[str], sources: list[str], 
     srcs = [s for s in sources if s in set(d["source"])]
     w = 0.8 / len(methods)
     for j, (metric, title, line) in enumerate(bench[: len(targets)]):
-        ax = fig.add_subplot(gs[2, j])
+        ax = fig.add_subplot(gs[len(heat), j])
         for i, s in enumerate(srcs):
             for k, m in enumerate(["centroid"] if s == "none" else methods):
                 v = d[(d["source"] == s) & (d["method"] == m) & (d["metric"] == metric)]["value"]
@@ -637,7 +738,7 @@ def plot(res: pd.DataFrame, path: Path, methods: list[str], sources: list[str], 
         ax.set_ylim(lo, hi + (0.6 if metric == "pairs_adjacent" else 0.08 * (hi - lo)))
         ax.set_xticks(range(len(srcs)))
         ax.set_xticklabels(srcs, rotation=35, ha="right", fontsize=8)
-        ax.set_title(f"{'c' if j == 0 else ''}  target: paper\n{title}", fontsize=9, loc="left")
+        ax.set_title(f"{'e' if j == 0 else ''}  target: paper\n{title}", fontsize=9, loc="left")
         ax.spines[["top", "right"]].set_visible(False)
         ax.tick_params(axis="y", labelsize=8)
     handles = [plt.Rectangle((0, 0), 1, 1, color=CONDITION_COLORS["original"])] + \
@@ -702,18 +803,24 @@ def main() -> None:
     own_paper: dict[str, tuple[np.ndarray, list[str]]] = {}
     groups_used: dict[str, list[str]] = {}
     fit_rows: list[dict] = []
+    group_rows: list[dict] = []   # site_mixing の群ごとの値（correction_{encoder}_groups.csv）
     for target in targets:
         tm = np.isin(fam, list(TARGET_FAMILIES[target]))
         Xt, st, lab = X[tm], site[tm], target_labels(man[tm], target)
         base = {"encoder": args.encoder, "target": target, "n_ebrains": int((st == ref).sum()), "n_patho2": int((st != ref).sum())}
         m0 = evaluate(Xt, st, lab, target, cfg, ctx)
+        x0, g0 = site_mixing(Xt, st, lab, ref, cfg)
+        if "pairs_n" in m0 and len(g0) != m0["pairs_n"]:
+            raise SystemExit(f"[{target}] site_mixing の群（{len(g0)}）が pairs_adjacent の群（{m0['pairs_n']}）と合わない")
         if target in ("paper", "glioma", "all"):
             e, p = st == ref, st != ref
             groups_used[target] = [g for g in pd.unique(lab) if ((lab == g) & e).sum() >= ctx["min_n"] and ((lab == g) & p).sum() >= ctx["min_n"]]
         for method in methods:   # none は method によらず同じ（各 method に同じ行を置く）
             rows += [{**base, "method": method, "source": "none", "metric": k, "value": v, "n_src_ebrains": 0, "n_src_patho2": 0}
-                     for k, v in m0.items()]
-        print(f"  [{target} / none] residual {m0['residual_norm']:.3f}  ASW {m0['asw_site']:.4f}")
+                     for k, v in {**m0, **x0}.items()]
+            group_rows += _group_rows(args.encoder, method, "none", target, g0)
+        print(f"  [{target} / none] residual {m0['residual_norm']:.3f}  ASW {m0['asw_site']:.4f}  "
+              f"gap/SD {x0['group_gap_sd']:.3f}  kNN mix {x0['knn_mix']:.3f}  ({len(g0)} groups)")
         for source in sources:
             if source == "none":
                 continue
@@ -738,11 +845,14 @@ def main() -> None:
                           f"（直接の出力の reference 不変 {ref_diff:.2e}）")
                 if source == "own" and target == "paper":
                     own_paper[method] = (Y[st != ref], man.loc[tm, "slide_id"].to_numpy()[st != ref].tolist())
-                m = {**evaluate(Y, st, lab, target, cfg, ctx), **par}
+                mx, gx = site_mixing(Y, st, lab, ref, cfg)
+                m = {**evaluate(Y, st, lab, target, cfg, ctx), **par, **mx}
                 rows += [{**base, "method": method, "source": source, "metric": k, "value": v,
                           "n_src_ebrains": fit["n_e"], "n_src_patho2": fit["n_p"]} for k, v in m.items()]
+                group_rows += _group_rows(args.encoder, method, source, target, gx)
                 print(f"  [{target} / {source} / {method}] residual {m['residual_norm']:.3f}  ASW {m['asw_site']:.4f}"
-                      + (f"  distortion {m['distortion']:.3f}" if "distortion" in m else ""))
+                      + (f"  distortion {m['distortion']:.3f}" if "distortion" in m else "")
+                      + f"  gap/SD {mx['group_gap_sd']:.3f}  kNN mix {mx['knn_mix']:.3f}")
     print(f"  ComBat checks: own vs direct {checks.get('own_direct', np.nan):.2e}  reference unchanged {checks.get('ref_unchanged', np.nan):.2e}  "
           f"FromTraining vs explicit {checks.get('ft_vs_explicit', np.nan):.2e}  "
           f"per-family linear form vs FromTraining {checks.get('linear_vs_ft', np.nan):.2e}  -> "
@@ -753,6 +863,11 @@ def main() -> None:
     csv = out_dir / f"correction_{args.encoder}.csv"
     res.to_csv(csv, index=False)
     print(f"  saved: {csv}")
+    gres = pd.DataFrame(group_rows)[["encoder", "method", "source", "target", "group", "n_ebrains", "n_patho2", "knn_k",
+                                     "metric", "value"]]
+    gcsv = out_dir / f"correction_{args.encoder}_groups.csv"
+    gres.to_csv(gcsv, index=False)
+    print(f"  saved: {gcsv}")
 
     acc = acceptance(res, cfg, own_paper, args.encoder)
     print("\n[acceptance: target = paper, source = own / none vs paper outputs]")
@@ -762,7 +877,7 @@ def main() -> None:
 
     fits_tbl = pd.DataFrame(fit_rows).set_index("cohort")
     write_summary(out_dir / f"correction_{args.encoder}_summary.md", res, acc, fits_tbl, checks, args.encoder,
-                  methods, sources, targets, groups_used)
+                  methods, sources, targets, groups_used, gres, ctx["min_n"])
     plot(res, out_dir / f"correction_{args.encoder}.png", methods, sources, targets, args.encoder)
 
 
