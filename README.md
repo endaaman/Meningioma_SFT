@@ -22,6 +22,7 @@ transfer_meanpool.py # 転移テストの全スライドの平均プーリング
 transfer_umap.py     # 全 2,301 枚（5 科 × 2 施設）の UMAP: 補正なしで 1 回当てはめ、Δ_paper / 自分の科の Δ で補正した院内を transform で写す（補正なし / +Δ_paper / +own と科ごとの小図）。768 次元での院内の 15 近傍に占める EBRAINS の割合を併記（out/transfer_umap/）
 transfer_sample_size.py # 別の腫瘍に移せる Δ に要る枚数と種類数（平行移動のみ）: 推定元の院内 n 枚（200 回）→ 他の科の残差・施設 ASW・NC BA・対と、全枚数の 10% 以内に入る n。当て先以外の k 科の科ごと平均 vs まとめ（out/transfer_sample_size/）。Fig S4 の作り直し
 transfer_color.py    # 転移テストの全 2,301 枚の色（32 パッチの L*a*b*・H/E とスライド内のばらつき）と、科ごとの色の幅の比 vs 埋め込みの倍率 s（色を除いた s も）、施設軸 Δ_paper への射影の H 応答・平均色で説明できる施設差（out/transfer_color/）。build（WSI を読む、長い）→ analyze
+encoder_comparison.py # 同じ解析を 3 つのスライド埋め込み（平均プーリング / TITAN / PRISM）で並べた表と図（各解析の出力を読むだけ。out/encoder_comparison/）。v4 Fig 6 の材料。出力の無いエンコーダの列は空欄
 shift_time.py        # 論文には出さない（記録のみ）: 院内の Δ は年をまたいで安定か。受付年ごとの Δ の cos・長さ、同じ枚数・同じ組成の帰無、並べ替え検定（out/shift_time/）
 centroid.py          # 重心補正（centroid shift）の可視化・評価
 combat.py            # ComBat（neuroCombat）による施設補正 → combat/。--covariates subtype で組織型を共変量にした combat_cov/（査読対応の参考）
@@ -133,6 +134,7 @@ uv run python transfer_correction.py --encoder prism       # 上 2 本の後（�
 uv run python atlas_retrieval.py --encoder prism           # --min-n 20 も。参照は PRISM のある 22 診断に縮む
 uv run python atlas_retrieval.py --atlas-slides prism      # TITAN を同じ 22 診断の参照で（*_titan_on_prism*）
 uv run python transfer_sample_size.py --encoder prism      # 約 20 分（out/transfer_sample_size/prism/）
+uv run python encoder_comparison.py                        # 各 --encoder の解析（shift_transfer / transfer_correction / dispersion_ratio / atlas_retrieval（--atlas-slides prism も）/ transfer_sample_size）の後。3 エンコーダの横並び（out/encoder_comparison/）
 
 # 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
 # ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる
