@@ -8,7 +8,7 @@
     重複させている）× shift_transfer.ebrains_annotation（annotation.csv）。control = 1 は除き、diagnosis をクラスにする。
     埋め込みのキーが無い h5 は飛ばす。--min-n 枚以上のクラスだけ残す（落ちたクラスは summary に列挙）。
 問い合わせ（patho2）: transfer.manifest（transfer_manifest.py）の site = patho2 の全行
-    = 論文コホートの patho2（label.patho2.subtype、577 枚。ラベルはこの CSV から取り、manifest と一致することを確かめる）
+    = 髄膜腫+SFT コホートの patho2（label.patho2.subtype、577 枚。ラベルはこの CSV から取り、manifest と一致することを確かめる）
     ＋ Patho2Gliomas の代表 HE（glioma = ast / glm / odg、lymphoma = lym、metastasis = met、260 枚）。
 
 正解の集合（手で書かない）:
@@ -25,7 +25,7 @@
 
 条件（patho2 の問い合わせに足すベクトル。推定に使うのは manifest の 2 施設のスライド = transfer_correction.py と同じ集合）:
     none        補正なし
-    paper       Δ_paper = mean(EBRAINS 論文コホート n551) − mean(patho2 論文コホート n577)。論文の centroid 補正（髄膜腫 + SFT）
+    paper       Δ_paper = mean(EBRAINS 髄膜腫+SFT コホート n551) − mean(patho2 髄膜腫+SFT コホート n577)。論文の centroid 補正（髄膜腫 + SFT）
     others      問い合わせの科以外の全部の科で推定（2 施設それぞれの全スライド平均の差。transfer_correction.py の others と同じ）
     others_bal  問い合わせの科以外の科ごとの Δ_f を重み n_E·n_P / (n_E + n_P) で平均したもの。2 施設で科の構成
                 （例: EBRAINS はグリオーマが多く patho2 は髄膜腫が多い）が違うと、素朴な others には科どうしの差（長さ 10–16）が
@@ -682,7 +682,7 @@ def main() -> None:
     sub_csv = pd.read_csv(cfg["label"]["patho2"]["subtype"], dtype=str).set_index("case_id")["subtype"]
     paper_q = q["family"].isin(["meningioma", "SFT"])
     if set(q.loc[paper_q, "slide_id"]) != set(sub_csv.index):
-        print(f"  WARN manifest の論文コホート（patho2 {int(paper_q.sum())}）と {cfg['label']['patho2']['subtype']}（{len(sub_csv)}）が一致しない")
+        print(f"  WARN manifest の髄膜腫+SFT コホート（patho2 {int(paper_q.sum())}）と {cfg['label']['patho2']['subtype']}（{len(sub_csv)}）が一致しない")
     q["label"] = np.where(paper_q, q["slide_id"].map(sub_csv).fillna(q["group"]), q["group"])
     if (q.loc[paper_q, "label"] != q.loc[paper_q, "group"]).any():
         print("  WARN manifest の group とラベル CSV の subtype が食い違う行がある（ラベル CSV を使う）")

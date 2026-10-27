@@ -105,7 +105,7 @@ INK, MUTED = "#222222", "#777777"
 # TITAN の数値の文章なので、他の encoder の summary.md には入れない（READING_OTHER）
 READING_OTHER = "（{encoder} の読みは未記入。この節の文章は TITAN の数値で書いたもので、titan の summary.md にだけ入れる）"
 READING = """
-- A. 論文コホート（髄膜腫 + SFT）から別の腫瘍へ（patho2 だけ n 枚、EBRAINS は全部）: 残差の比は n = 20 で全枚数の値の 10% 以内
+- A. 髄膜腫+SFT コホートから別の腫瘍へ（patho2 だけ n 枚、EBRAINS は全部）: 残差の比は n = 20 で全枚数の値の 10% 以内
   （グリオーマ 0.549 [0.501, 0.593] vs 全 577 枚 0.502、DLBCL 0.607 vs 0.556、転移 0.535 vs 0.496）。上側 2.5% 点まで入るのは
   グリオーマで n = 50、DLBCL・転移で n = 100。グリオーマの施設 ASW は n = 20 で 0.017 [0.008, 0.024]（補正なし 0.106、全枚数 0.009、
   own −0.035）で改善の 90% に届く。全枚数の値の 10% 以内（≤ 0.0098）に入るのは n = 200（0.0093）で、0 に近い値の 10% は厳しすぎる。
@@ -115,7 +115,7 @@ READING = """
   腫瘍をまたいでも成り立ち、その先は偏りが支配する。
 - 両施設から n 枚ずつ（EBRAINS 側も減らす）では要る枚数が約 2.5 倍: グリオーマの残差の 10% 以内は n = 50（上側 2.5% 点は 200）、
   ASW の 90% も n = 50。公開データを全部使える運用（Fig S4 と同じ）なら新施設側の 20 枚で足りる。
-- 単独の科から論文コホートへ（何枚のグリオーマで髄膜腫が直るか）: グリオーマ 20 枚（EBRAINS は 807 枚全部）で残差の比
+- 単独の科から髄膜腫+SFT コホートへ（何枚のグリオーマで髄膜腫が直るか）: グリオーマ 20 枚（EBRAINS は 807 枚全部）で残差の比
   0.699 [0.636, 0.818]、施設 ASW 0.074（補正なし 0.134、グリオーマ全 117 枚 0.063、own 0.009）、隣接ペア 8 [5, 8]（補正なし 4、own 11）。
   全枚数の 10% 以内は 50 枚（残差 3.58 vs 3.47、ASW 0.067 vs 0.063）。DLBCL は 20 枚で 0.660（全 59 枚 0.615）。
   転移は少ない枚数で効かない: 5 枚では中央値 1.001（補正なしと同じ）、20 枚で 0.766、全 84 枚で 0.693。転移は原発が雑多で科の中の
@@ -626,7 +626,7 @@ def plot(ncs: pd.DataFrame, kc: pd.DataFrame, kcs: pd.DataFrame, path: Path, enc
     # e・f: 単独の科 → paper
     singles = [s for s in ("glioma", "lymphoma", "metastasis") if s in set(ncs["source"])]
     for ax, metric, title in ((axes[1, 1], "residual_rel", "e  single other family → paper\nresidual site shift  " + RES_TEX),
-                              (axes[1, 2], "asw_site", "f  single other family → paper\nsite ASW on the paper cohort")):
+                              (axes[1, 2], "asw_site", "f  single other family → paper\nsite ASW on the meningioma + SFT cohort")):
         for s in singles:
             _plot_curve(ax, ncs, s, "paper", metric, s)
         _n_axis(ax)

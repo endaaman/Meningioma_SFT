@@ -3,11 +3,11 @@
 問い（ken の仮説 2026-10-26）: 施設間のばらつきの比（埋め込みの倍率 s = RMS(EBRAINS) / RMS(patho2)）が腫瘍の科で違うのは、
 EBRAINS の色の幅が patho2 より広く、それがコホートの中身の多様さと混ざるからではないか。中心のずれ（Δ）は科をまたいで共有される。
 → 科 × 施設ごとに色の統計を取り、(a) 科ごとの s、(b) 施設軸 Δ_paper への射影の色への応答、と突き合わせる。
-  stain_response.py は論文コホートだけだったので、それを 5 科に広げる。
+  stain_response.py は髄膜腫+SFT コホートだけだったので、それを 5 科に広げる。
 
 build（スライドごとの色）:
     out/transfer/manifest.csv の全スライドについて、h5（h5_titan）の conch15_768/coordinates から 32 パッチを無作為に取る
-    （paper_color.sample_indices と同じ: seed + crc32(slide_id)。論文コホートでは paper_color.py と同じパッチになる）。
+    （paper_color.sample_indices と同じ: seed + crc32(slide_id)。髄膜腫+SFT コホートでは paper_color.py と同じパッチになる）。
     画素は paper_patches.read_patches と同じ読み方（h5 に cache/512/patches があればそれ、無ければ元 WSI（manifest の wsi）から
     level_used・patch_size（≈ 0.45 mpp、512 px）で読む）。背景の規則は paper_color.py と同じ（stride 4 に間引き、R,G,B すべて
     > white_thr の画素を除く）。組織画素が MIN_TISSUE（25%）未満のパッチは捨て、残りの座標から引き直す（別の乱数列、
@@ -18,9 +18,9 @@ build（スライドごとの色）:
 
 analyze:
     埋め込みは transfer_correction.py のキャッシュ（out/transfer/embeddings_titan.npy、並びは embeddings_titan_slides.csv で
-    manifest と一致を確認）。Δ_paper = mean(EBRAINS の論文コホート) − mean(patho2 の論文コホート)（shift_transfer.py と同じ、
+    manifest と一致を確認）。Δ_paper = mean(EBRAINS の髄膜腫+SFT コホート) − mean(patho2 の髄膜腫+SFT コホート)（shift_transfer.py と同じ、
     |Δ_paper| = 5.474）、u = Δ_paper / |Δ_paper|。科は manifest の family（meningioma / SFT / glioma / lymphoma / metastasis）。
-    論文コホート（paper = meningioma + SFT）は参照の行として出す（5 科の相関には入れない）。
+    髄膜腫+SFT コホート（paper = meningioma + SFT）は参照の行として出す（5 科の相関には入れない）。
 
     1. 色の幅（family_color.csv）: 科 × 施設ごとの L, a, b, H, E のスライド間の平均と SD、施設平均色の ΔE76（Lab のユークリッド距離）、
        色の幅の比 sd_EBRAINS / sd_patho2（H, E, L と、3 次元の Lab の幅 = 施設平均色からの RMS 距離）、スライド内のばらつきの平均。
@@ -37,7 +37,7 @@ analyze:
        参考に科自身のずれの向き u_f（own）。
     3. 色で説明できる施設差（explained_by_family.csv）: 科ごとに stain_response.regression をそのまま当てる
        （s_raw = ⟨x − μ_{科, patho2}, u⟩ ~ site [+ 標準化した H, E, L, a, b]、site_gap_explained_by_colour = 1 − 調整後 / 調整前）。
-    受け入れ確認: 論文コホートの色が paper_color.py の slide_color.csv と一致するか（パッチを捨てなかったスライド）、
+    受け入れ確認: 髄膜腫+SFT コホートの色が paper_color.py の slide_color.csv と一致するか（パッチを捨てなかったスライド）、
     |Δ_paper| = 5.474、paper の行の相関・説明割合が stain_response の summary（TITAN）と同じ値になるか。
 
 出力 (output_dir/transfer_color/):
@@ -82,8 +82,8 @@ from utils.loader import load_config  # noqa: E402
 
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
 FAMILY_LABEL = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "lymphoma": "Lymphoma",
-                "metastasis": "Metastasis", "paper": "Paper cohort"}
-PAPER = {"meningioma", "SFT"}          # 論文コホート（Δ_paper の推定元）
+                "metastasis": "Metastasis", "paper": "Meningioma + SFT cohort"}
+PAPER = {"meningioma", "SFT"}          # 髄膜腫+SFT コホート（Δ_paper の推定元）
 SITES = ("ebrains", "patho2")
 SITE_LABEL = {"ebrains": "EBRAINS", "patho2": "patho2"}
 TILE_MODEL = "conch15_768"
@@ -396,7 +396,7 @@ def acceptance(cfg: dict, df: pd.DataFrame, delta_norm: float) -> list[str]:
     same = m[m["n_rejected"] == 0]
     diff = max(float((same[f] - same[f"{f}_ref"]).abs().max()) for f in COLOR5)
     px = int((same["n_pixels"] != same["n_pixels_ref"]).sum())
-    lines.append(f"- 論文コホートの色 vs paper_color.py（{ref.relative_to(cfg['output_dir'])}）: 突き合わせ {len(m)} 枚、"
+    lines.append(f"- 髄膜腫+SFT コホートの色 vs paper_color.py（{ref.relative_to(cfg['output_dir'])}）: 突き合わせ {len(m)} 枚、"
                  f"パッチを捨てなかった {len(same)} 枚で max |差| = {diff:.2e}、画素数の不一致 {px} 枚"
                  + (" OK" if diff < 1e-9 and px == 0 else " **NG**")
                  + f"（捨てたパッチがあるのは {int((m['n_rejected'] > 0).sum())} 枚）")
@@ -490,7 +490,7 @@ def write_summary(path: Path, fam: pd.DataFrame, xcorr: pd.DataFrame, corr: pd.D
     not_wider = [FAMILY_LABEL[f] for f in FAMILIES if f5.loc[f, "lab_spread_ratio"] < 1]
     read.append("- **色の幅（Lab の 3 次元の幅の比 EBRAINS / patho2）**: "
                 + ", ".join(f"{FAMILY_LABEL[f]} {f5.loc[f, 'lab_spread_ratio']:.2f}" for f in FAMILIES)
-                + f"（論文コホート {fam.set_index('family').loc['paper', 'lab_spread_ratio']:.2f}）。H の SD 比は "
+                + f"（髄膜腫+SFT コホート {fam.set_index('family').loc['paper', 'lab_spread_ratio']:.2f}）。H の SD 比は "
                 + ", ".join(f"{FAMILY_LABEL[f]} {f5.loc[f, 'sdratio_H']:.2f}" for f in FAMILIES) + "、IQR 比は "
                 + ", ".join(f"{FAMILY_LABEL[f]} {f5.loc[f, 'iqrratio_H']:.2f}" for f in FAMILIES)
                 + "（patho2 の H には極端に濃い少数のスライドがあり、SD 比はそれに引っ張られて小さく出る）。"
@@ -522,19 +522,19 @@ def write_summary(path: Path, fam: pd.DataFrame, xcorr: pd.DataFrame, corr: pd.D
                 + ", ".join(f"{FAMILY_LABEL[f]} {cpick(f, 'ebrains', 'H'):+.2f}" for f in FAMILIES)
                 + " / patho2 "
                 + ", ".join(f"{FAMILY_LABEL[f]} {cpick(f, 'patho2', 'H'):+.2f}" for f in FAMILIES)
-                + f"（論文コホート {cpick('paper', 'ebrains', 'H'):+.2f} / {cpick('paper', 'patho2', 'H'):+.2f}、"
+                + f"（髄膜腫+SFT コホート {cpick('paper', 'ebrains', 'H'):+.2f} / {cpick('paper', 'patho2', 'H'):+.2f}、"
                   "stain_response の TITAN within_subtype は +0.404 / +0.095 で再現）。L* は全科で負"
                   f"（両施設をまとめて {min(cpick(f, 'both', 'L') for f in FAMILIES):+.2f}〜{max(cpick(f, 'both', 'L') for f in FAMILIES):+.2f}）、"
                   "E はほぼ 0（リンパ腫だけ +0.3）。**「H が濃いほど EBRAINS 側に寄る」応答は腫瘍によらず共有される**。"
                   f"想定外: patho2 で応答が弱いのは髄膜腫（{cpick('meningioma', 'patho2', 'H'):+.2f}）だけで、"
                   f"patho2 のグリオーマ・リンパ腫・転移は {cpick('glioma', 'patho2', 'H'):+.2f} / "
                   f"{cpick('lymphoma', 'patho2', 'H'):+.2f} / {cpick('metastasis', 'patho2', 'H'):+.2f}。"
-                  "stain_response で「patho2 は応答が弱い」としたのは施設の性質ではなく、論文コホートの patho2 側"
+                  "stain_response で「patho2 は応答が弱い」としたのは施設の性質ではなく、髄膜腫+SFT コホートの patho2 側"
                   "（院内の WSI の置き場も Patho2Gliomas と別）に限った話の可能性がある。")
     read.append("- **施設差のうち平均色で説明できる割合（Δ_paper 軸、H,E,L,a,b）**: "
                 + ", ".join(f"{FAMILY_LABEL[c]} {ex[(ex.cohort == c) & (ex.axis == 'paper')].iloc[0]['site_gap_explained_by_colour']:.0%}"
                             for c in order)
-                + "（stain_response の論文コホート TITAN は 14%）。どの科でも施設差の大半は平均色の外にある。"
+                + "（stain_response の髄膜腫+SFT コホート TITAN は 14%）。どの科でも施設差の大半は平均色の外にある。"
                 + f"平均色の施設差 ΔE76 は科で {f5['dE76'].min():.1f}〜{f5['dE76'].max():.1f} と違うのに、Δ_paper 方向の施設差 ⟨Δ_f, u⟩ は "
                 f"{f5['shift_along_u'].min():.1f}〜{f5['shift_along_u'].max():.1f} で、ΔE76 と |Δ_f| の相関は r = {rd['pearson_r']:+.2f}（5 点）。")
     read.append("- 注意: 色はスライドあたり 32 パッチ（h5 の座標 = TITAN が見たパッチから無作為）の組織画素の平均で、"
@@ -545,7 +545,7 @@ def write_summary(path: Path, fam: pd.DataFrame, xcorr: pd.DataFrame, corr: pd.D
     body = [
         "# transfer_color — 転移テストの全スライドの色と、科ごとの色の幅・施設軸の H 応答（TITAN）",
         "",
-        "定義はスクリプトの docstring。Δ_paper = mean(EBRAINS 論文コホート) − mean(patho2 論文コホート)、u = Δ_paper/|Δ_paper|。"
+        "定義はスクリプトの docstring。Δ_paper = mean(EBRAINS 髄膜腫+SFT コホート) − mean(patho2 髄膜腫+SFT コホート)、u = Δ_paper/|Δ_paper|。"
         "p = ⟨x − μ_{科, 施設}, u⟩。s = RMS 比（affine.scale_free）。[ ] はスライド単位のブートストラップ 95% CI。",
         "",
         "## 受け入れ確認",
@@ -681,7 +681,7 @@ def analyze(cfg: dict, out_dir: Path) -> None:
     ok = df["H"].notna().to_numpy()
     site = df["site"].to_numpy()
     paper = df["in_paper"].to_numpy() & ok
-    # Δ_paper は色の有無によらず論文コホート全体で（shift_transfer.py と同じ定義）
+    # Δ_paper は色の有無によらず髄膜腫+SFT コホート全体で（shift_transfer.py と同じ定義）
     paper_all = df["in_paper"].to_numpy()
     delta_paper = X[paper_all & (site == "ebrains")].mean(0) - X[paper_all & (site == "patho2")].mean(0)
     dn = float(np.linalg.norm(delta_paper))

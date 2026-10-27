@@ -1,12 +1,12 @@
 """transfer_meanpool.py — 転移テストの全スライド（out/transfer/manifest.csv、2,301 枚）の平均プーリング埋め込み（学習なしの集約）。
 
 目的: 腫瘍の科をまたぐ解析（shift_transfer.py の共通の平行移動、transfer_correction.py の「平行移動は移り倍率は移らない」、
-dispersion_ratio.py の「ばらつきの比は腫瘍に固有」）が、TITAN の学習済み集約器に固有のものでないかを見る。論文コホートの対照
+dispersion_ratio.py の「ばらつきの比は腫瘍に固有」）が、TITAN の学習済み集約器に固有のものでないかを見る。髄膜腫+SFT コホートの対照
 （meanpool.py、Table S4・S5）と同じ定義を、グリオーマ側のスライドにも広げる。
 
 定義（meanpool.py と同じ）: CONCH v1.5 のパッチ埋め込み {tile_model}/features（768 次元）のパッチ方向の平均
     （float64 で計算、float32 で保存。計算は meanpool._mean_features をそのまま使う）。
-    論文コホート（科 meningioma / SFT）: meanpool.py が書いた既存の {meanpool.root}/original/<slide_id>.h5 の
+    髄膜腫+SFT コホート（科 meningioma / SFT）: meanpool.py が書いた既存の {meanpool.root}/original/<slide_id>.h5 の
         {tile_model}/{meanpool.slide_feature} を読む（計算し直さない。n_patches は attrs から）。
         定義が合っているかは --check 枚（既定 5、両施設から）について h5_titan（論文の original h5）の features から
         平均を取り直し、cos・max |差|・パッチ数の一致を表示する。
@@ -25,7 +25,7 @@ dispersion_ratio.py の「ばらつきの比は腫瘍に固有」）が、TITAN 
     定義: manifest の h5_prism の virchow_2560/features（224 px / 0.5 mpp のタイルごとの 2560 次元 = Virchow v1 の
         CLS 1280 ＋ パッチトークン平均 1280 の concat、float32。キーの接頭辞は transfer.prism_key の先頭 = PRISM が読んだもの）
         のタイル方向の平均。計算は CONCH と同じ meanpool._mean_features（ROWS_PER_READ 行ずつ読んで float64 で足し、
-        float32 で保存）。論文コホートにも既存の平均は無いので、全 2,301 枚を h5 から計算する。
+        float32 で保存）。髄膜腫+SFT コホートにも既存の平均は無いので、全 2,301 枚を h5 から計算する。
     NFS の読みはプロセス --workers 並列（既定 4、NFS を他と分け合うので 4 まで）。済んだスライドは途中経過
         （embeddings_meanpool_virchow.partial.npy ＋ _partial.csv、1 枚ごとに書く）に残し、止めても続きから再開する
         （--reload で途中経過も捨てる）。全部済んだら下の 2 ファイルに書き、途中経過を消す。
@@ -90,7 +90,7 @@ def load_cache(cfg: dict, source: str = "conch") -> tuple[pd.DataFrame, np.ndarr
 
 
 def _paper_h5(cfg: dict, site: str, slide_id: str) -> tuple[Path, str]:
-    """論文コホートの既存の平均プーリング h5 とキー（meanpool.py の _root / _slide_key と同じ）。"""
+    """髄膜腫+SFT コホートの既存の平均プーリング h5 とキー（meanpool.py の _root / _slide_key と同じ）。"""
     root = Path(cfg["meanpool"]["root"].format(site=site)) / "original"
     return root / f"{slide_id}.h5", f"{cfg['embedding'][site]['tile_model']}/{cfg['meanpool']['slide_feature']}"
 
@@ -112,7 +112,7 @@ def _compute(path: str, key: str) -> tuple[np.ndarray, int]:
 
 
 def check_definition(cfg: dict, man: pd.DataFrame, X: np.ndarray, n_patches: np.ndarray, n_check: int) -> pd.DataFrame:
-    """論文コホートの数枚で、既存の平均（meanpool.py）と h5_titan の features から取り直した平均を比べる。"""
+    """髄膜腫+SFT コホートの数枚で、既存の平均（meanpool.py）と h5_titan の features から取り直した平均を比べる。"""
     rng = np.random.default_rng(SEED)
     picks = []
     for k, site in enumerate(SITES):   # 両施設から（ebrains を先に、端数は ebrains に）
@@ -143,7 +143,7 @@ def build(cfg: dict, reload: bool, n_check: int) -> None:
         source = np.empty(len(man), dtype=object)
         todo = [i for i, f in enumerate(man["family"]) if f not in PAPER_FAMILIES]
         print(f"  {len(man)} slides: existing_h5 {len(man) - len(todo)}, computed {len(todo)}")
-        for i, r in enumerate(man.itertuples(index=False)):   # 論文コホート: 既存の h5（Sync 側、軽い）
+        for i, r in enumerate(man.itertuples(index=False)):   # 髄膜腫+SFT コホート: 既存の h5（Sync 側、軽い）
             if r.family not in PAPER_FAMILIES:
                 continue
             p, key = _paper_h5(cfg, r.site, r.slide_id)
@@ -177,7 +177,7 @@ def build(cfg: dict, reload: bool, n_check: int) -> None:
     if (ids["n_patches"] <= 0).any():
         print(f"  WARN n_patches <= 0: {int((ids['n_patches'] <= 0).sum())} 枚")
 
-    print(f"\n[check] 論文コホートの {n_check} 枚: 既存の平均（meanpool.py）vs h5_titan の features から取り直した平均")
+    print(f"\n[check] 髄膜腫+SFT コホートの {n_check} 枚: 既存の平均（meanpool.py）vs h5_titan の features から取り直した平均")
     chk = check_definition(cfg, man, X, ids["n_patches"].to_numpy(), n_check)
     print(chk.to_string(index=False, float_format=lambda v: f"{v:.8f}" if abs(v) < 1e-3 or v > 0.99 else f"{v:.4f}"))
     if (chk["cos"] < 0.999999).any() or (chk["n_patches_stored"] != chk["n_patches_recomputed"]).any():
@@ -331,7 +331,7 @@ def main() -> None:
     ap.add_argument("--source", choices=list(ENCODER_NAME), default="conch",
                     help="パッチ特徴: conch = CONCH v1.5（meanpool、既定）、virchow = Virchow v1 の concat 2560 次元（meanpool_virchow）")
     ap.add_argument("--reload", action="store_true", help="キャッシュを捨てて作り直す（virchow は途中経過も捨てる）")
-    ap.add_argument("--check", type=int, default=5, help="定義の確認に使う枚数（両施設から。conch は論文コホート）")
+    ap.add_argument("--check", type=int, default=5, help="定義の確認に使う枚数（両施設から。conch は髄膜腫+SFT コホート）")
     ap.add_argument("--workers", type=int, default=MAX_WORKERS, help=f"virchow の NFS の読みの並列数（{MAX_WORKERS} まで）")
     args = ap.parse_args()
     cfg = load_config()

@@ -30,8 +30,8 @@
 表（行 = 指標、列 = エンコーダ）:
     0 参考          次元、スライド埋め込みのノルムの中央値（転移テストの 2,301 枚 = shift_transfer のキャッシュ）、‖Δ_paper‖ とその比
     1 幾何          施設差の大きさ（ここだけ計算する。転移テストの全スライド = manifest、科は family 列、施設は site 列）:
-                      論文コホート = family ∈ {meningioma, SFT}。Δ_S = mean(EBRAINS の S) − mean(patho2 の S)（S = 論文コホート / 科 f）。
-                      群内 RMS = patho2 の論文コホートの各スライドとその重心の距離の RMS = sqrt(mean ‖x − x̄‖²)（エンコーダの尺度の物差し）。
+                      髄膜腫+SFT コホート = family ∈ {meningioma, SFT}。Δ_S = mean(EBRAINS の S) − mean(patho2 の S)（S = 髄膜腫+SFT コホート / 科 f）。
+                      群内 RMS = patho2 の髄膜腫+SFT コホートの各スライドとその重心の距離の RMS = sqrt(mean ‖x − x̄‖²)（エンコーダの尺度の物差し）。
                       施設差の相対的な大きさ = ‖Δ_paper‖ / 群内 RMS。Δ_f の分解（5 科）: u = Δ_paper / ‖Δ_paper‖ として
                       平行成分 Δ_f·u と直交成分 sqrt(‖Δ_f‖² − (Δ_f·u)²)、どちらも群内 RMS で割る。ノイズ補正はしない（生の平均の差）。
                       髄膜腫・SFT は Δ_paper に含まれる（in-sample）。
@@ -43,13 +43,13 @@
     2 転移          残差の比（補正後 / 補正なし）と施設 ASW: セル（推定元 → 当て先）× 3 法（平行移動 / 相似変換 / ComBat）。
                     平行移動の残差が 3 法で最小のセルの数（当て先 paper / glioma / lymphoma / metastasis × none・own 以外の推定元。
                     当て先 all は推定元が一部 in-sample なので除く。厳密な最小と、1% 以内の同点を含む数）、相似変換の倍率 s
-                    （単独の科の範囲と論文コホート）、others（まとめ）→ others_mean（科ごと平均）の平行移動の残差の比、
+                    （単独の科の範囲と髄膜腫+SFT コホート）、others（まとめ）→ others_mean（科ごと平均）の平行移動の残差の比、
                     髄膜腫ベンチ（当て先 paper: 隣接ペア /13、patho2 の SFT−髄膜腫距離 / EBRAINS の同じ距離）、残差の絶対値（参考）
     3 ばらつきの比  科をまたぐ次元ごとの分散比の相関（10 組の中央値 [範囲]）、分割半分の再現性（髄膜腫 / グリオーマ / 転移）、
                     再現性で割った相関（髄膜腫–グリオーマと、3 科の 3 組の範囲）、EBRAINS が広い次元の割合（5 科の範囲）
     4 検索          参照コホート（EBRAINS）への最近傍重心法（nc_euclid）の診断名の top-1、科ごとと全体: 補正なし → Δ_paper →
                     自分の科の Δ（括弧は EBRAINS LOO）。4a は各エンコーダの参照（診断数が違う）、4b は参照をそろえた比較
-    5 例数          推定元 論文コホート（patho2 だけ n 枚、EBRAINS は全部）→ 当て先グリオーマ: 残差の中央値がその n 以上の格子の
+    5 例数          推定元 髄膜腫+SFT コホート（patho2 だけ n 枚、EBRAINS は全部）→ 当て先グリオーマ: 残差の中央値がその n 以上の格子の
                     すべてで全枚数の値の 10% 以内に入る最小の n（transfer_sample_size.py の reach_n の value と同じ規則）、
                     残差の比の床（全枚数）、n = 20 の残差の比
 
@@ -94,11 +94,12 @@ RELIABLE = ["meningioma", "glioma", "metastasis"]              # 分割半分の
 ATLAS_ROWS = FAMILIES + ["overall"]
 ATLAS_CHAIN = ["none", "paper", "family"]
 SS = dict(source="paper", variant="patho2", target="glioma", n_mid=20)
-PAPER_FAMILIES = ("meningioma", "SFT")                         # 論文コホート（施設差の大きさの Δ_paper と群内 RMS）
+PAPER_FAMILIES = ("meningioma", "SFT")                         # 髄膜腫+SFT コホート（施設差の大きさの Δ_paper と群内 RMS）
+ST_REF = "Paper cohort"                                        # shift_transfer.py の REF = groups.csv の group 列の値（髄膜腫+SFT コホートの行）。表示には使わない
 MANIFEST = "transfer/manifest.csv"                              # config の transfer.manifest の既定（transfer_correction.py と同じ）
-SRC_JA = {"paper": "論文コホート", "own": "own", "none": "補正なし", "others": "others（まとめ）",
+SRC_JA = {"paper": "髄膜腫+SFT コホート", "own": "own", "none": "補正なし", "others": "others（まとめ）",
           "others_mean": "others_mean（科ごと平均）", **FAMILY_LABELS_JA}
-SRC_EN = {"paper": "Paper cohort", "own": "own", "others": "others", "others_mean": "others (per-family mean)", **FAMILY_LABELS}
+SRC_EN = {"paper": "Meningioma + SFT cohort", "own": "own", "others": "others", "others_mean": "others (per-family mean)", **FAMILY_LABELS}
 ATLAS_JA = {**FAMILY_LABELS_JA, "overall": "全体"}
 ATLAS_EN = {**FAMILY_LABELS, "overall": "Overall"}
 INPUT_LABELS = {"atlas": "retrieval", "atlas_md": "retrieval_md",           # 入力の表示名（キーはそのまま。出力の retrieval_* に合わせる）
@@ -334,7 +335,7 @@ def reach_n(c: pd.DataFrame, full: float) -> Val:
 def site_gap(X, ids: pd.DataFrame, man: pd.DataFrame, ref: str) -> dict:
     """施設差の大きさ（docstring の 1 幾何の先頭）。X は転移テストの埋め込みのキャッシュ（manifest の並び）。
 
-    返り値: dp_norm = ‖Δ_paper‖、rms = 群内 RMS（施設 ref でない側の論文コホート）、ratio = ‖Δ_paper‖ / rms、
+    返り値: dp_norm = ‖Δ_paper‖、rms = 群内 RMS（施設 ref でない側の髄膜腫+SFT コホート）、ratio = ‖Δ_paper‖ / rms、
     par / orth = 科ごとの Δ_f の平行成分・直交成分 / rms。並びが manifest と合わなければ ValueError（その列は空欄）。"""
     key = ["site", "slide_id"]
     if len(X) != len(man) or not ids[key].reset_index(drop=True).equals(man[key].reset_index(drop=True)):
@@ -376,12 +377,12 @@ def block_reference(T: Table) -> None:
         m = float(np.median(np.linalg.norm(X, axis=1)))
         return m, f"{m:.2f}（{len(X):,} 枚）"
     T.add(b, "スライド埋め込みのノルムの中央値", T.each(["emb_paper", "emb_glioma"], norm_med),
-          note="shift_transfer のキャッシュ（論文コホート ＋ グリオーマ側 = 転移テストの全スライド）")
-    T.add(b, "‖Δ_paper‖", T.each(["groups"], lambda g: one(_group(g, "Paper cohort")["shift_norm"], 3)))
+          note="shift_transfer のキャッシュ（髄膜腫+SFT コホート ＋ グリオーマ側 = 転移テストの全スライド）")
+    T.add(b, "‖Δ_paper‖", T.each(["groups"], lambda g: one(_group(g, ST_REF)["shift_norm"], 3)))
 
     def rel(g, p, gl):
         X = np.concatenate([np.asarray(p, dtype=np.float64), np.asarray(gl, dtype=np.float64)])
-        return one(_group(g, "Paper cohort")["shift_norm"] / np.median(np.linalg.norm(X, axis=1)), 3)
+        return one(_group(g, ST_REF)["shift_norm"] / np.median(np.linalg.norm(X, axis=1)), 3)
     T.add(b, "‖Δ_paper‖ / ノルムの中央値", T.each(["groups", "emb_paper", "emb_glioma"], rel))
 
 
@@ -391,19 +392,19 @@ def block_site_gap(T: Table, cfg: dict) -> dict[str, dict | None]:
     gap = T.each(["emb_all", "emb_ids", "manifest"], lambda X, ids, man: site_gap(X, ids, man, cfg["reference"]))
     T.add(b, "施設差の相対的な大きさ ‖Δ_paper‖ / 群内 RMS",
           {e: (g["ratio"], f"{g['ratio']:.3f}（{g['dp_norm']:.3f} / {g['rms']:.3f}）") if g else None for e, g in gap.items()},
-          note="括弧は ‖Δ_paper‖ / 群内 RMS。群内 RMS = patho2 の論文コホートの sqrt(mean ‖x − x̄‖²)。"
+          note="括弧は ‖Δ_paper‖ / 群内 RMS。群内 RMS = patho2 の髄膜腫+SFT コホートの sqrt(mean ‖x − x̄‖²)。"
                "out/transfer/manifest.csv と embeddings_{encoder}.npy から計算")
     for part, label, note in [("par", "Δ_f の Δ_paper 方向の成分 / 群内 RMS", "Δ_f·u（u = Δ_paper / ‖Δ_paper‖）。髄膜腫・SFT は Δ_paper に含まれる"),
                               ("orth", "Δ_f の直交成分 / 群内 RMS", "sqrt(‖Δ_f‖² − (Δ_f·u)²)")]:
         for f in FAMILIES:
             T.add(b, label, {e: one(g[part][f], 3) if g else None for e, g in gap.items()}, cell=FAMILY_LABELS_JA[f], note=note)
-    # 確認: manifest から取った ‖Δ_paper‖ が shift_transfer の groups.csv の Paper cohort と同じか（同じスライド・同じ埋め込みのはず）
+    # 確認: manifest から取った ‖Δ_paper‖ が shift_transfer の groups.csv の髄膜腫+SFT コホートの行（ST_REF）と同じか（同じスライド・同じ埋め込みのはず）
     for e, g in gap.items():
         grp = T.inputs[e].data["groups"]
         if not g or grp is None:
             continue
         try:
-            ref_norm = float(_group(grp, "Paper cohort")["shift_norm"])
+            ref_norm = float(_group(grp, ST_REF)["shift_norm"])
         except KeyError as err:
             T.warnings.append(f"{e}: groups.csv → {err}")
             continue
@@ -519,7 +520,7 @@ def block_transfer(T: Table) -> dict[str, list[dict]]:
         return float(r["value"].iloc[0])
     T.add(b, "相似変換の倍率 s", T.each(["transfer"], lambda tc: span({f: scale(tc, f) for f in FAMILIES}, 2, FAMILY_LABELS_JA)),
           cell="単独の科（範囲）")
-    T.add(b, "相似変換の倍率 s", T.each(["transfer"], lambda tc: one(scale(tc, "paper"), 3)), cell="論文コホート")
+    T.add(b, "相似変換の倍率 s", T.each(["transfer"], lambda tc: one(scale(tc, "paper"), 3)), cell="髄膜腫+SFT コホート")
 
     for tgt in MIN_TARGETS:
         f = (lambda t: lambda tc: chain([_ratio(tc, "centroid", "others", t), _ratio(tc, "centroid", "others_mean", t)], 3))(tgt)
@@ -533,7 +534,7 @@ def block_transfer(T: Table) -> dict[str, list[dict]]:
                 else:
                     f = (lambda s, mm: lambda tc: one(_tval(tc, mm, s, "paper", "sft_men_dist_patho2")
                                                       / _tval(tc, mm, s, "paper", "sft_men_dist_ebrains"), 3))(src, meth)
-                T.add(b, label, T.each(["transfer"], f), cell=f"{SRC_JA[src]} → 論文コホート" if src not in ("none", "own") else SRC_JA[src],
+                T.add(b, label, T.each(["transfer"], f), cell=f"{SRC_JA[src]} → 髄膜腫+SFT コホート" if src not in ("none", "own") else SRC_JA[src],
                       method="" if src == "none" else CONDITION_LABELS_JA[meth])
 
     for src, tgt in TRANSFER_CELLS:
@@ -666,13 +667,13 @@ def write_summary(path: Path, df: pd.DataFrame, inputs: dict[str, Inputs], excep
             f"（{' / '.join(f'{x[m]:.3f}' for m in METHODS)}、rel {x['rel']:+.1%}）" for x in exc))
     L += ["", "（残差の並びは 平行移動 / 相似変換 / ComBat）", "",
           "## 注", "",
-          "- 施設差の大きさ: 論文コホート = manifest の family ∈ {meningioma, SFT}。Δ_S = mean(EBRAINS の S) − mean(patho2 の S)。"
-          "群内 RMS = patho2 の論文コホートの各スライドとその重心の距離の RMS = sqrt(mean ‖x − x̄‖²)（エンコーダの尺度の物差し）。"
+          "- 施設差の大きさ: 髄膜腫+SFT コホート = manifest の family ∈ {meningioma, SFT}。Δ_S = mean(EBRAINS の S) − mean(patho2 の S)。"
+          "群内 RMS = patho2 の髄膜腫+SFT コホートの各スライドとその重心の距離の RMS = sqrt(mean ‖x − x̄‖²)（エンコーダの尺度の物差し）。"
           "Δ_f の分解は u = Δ_paper / ‖Δ_paper‖ への平行成分 Δ_f·u と直交成分 sqrt(‖Δ_f‖² − (Δ_f·u)²) を群内 RMS で割ったもの。"
           "ノイズ補正はしない（生の平均の差。直交成分には群の例数による推定の揺らぎが乗る）。髄膜腫・SFT は Δ_paper に含まれる。",
           "- 幾何の 12 群 = 髄膜腫サブタイプ（両施設で 20 例以上）・SFT・グリオーマ 3 群・DLBCL・転移（素な群）。"
-          "cos のノイズ補正は shift_transfer.py の tr V を差し引く版。論文コホートの部分集合は leave-group-out の Δ_paper と比べる。",
-          "- 転移の own（論文コホート）は当て先自身で推定した補正（上限）。ComBat は own でも残差が 0 にならない（次元ごとの尺度も合わせるため）。",
+          "cos のノイズ補正は shift_transfer.py の tr V を差し引く版。髄膜腫+SFT コホートの部分集合は leave-group-out の Δ_paper と比べる。",
+          "- 転移の own（髄膜腫+SFT コホート）は当て先自身で推定した補正（上限）。ComBat は own でも残差が 0 にならない（次元ごとの尺度も合わせるため）。",
           "- 参照コホートへの診断名の検索では、PRISM は PRISM を抽出した EBRAINS（転移テストの manifest の分）だけが参照なので、全体の EBRAINS を使う TITAN（4a）"
           "とは参照の診断数が違う。エンコーダどうしは 4b（TITAN の参照を同じスライドに絞った retrieval_titan_on_prism）で比べる。",
           "- 例数の n は transfer_sample_size.py の summary.md の「残差 value」と同じ規則（その n 以上のすべての格子で中央値が全枚数の値の 10% 以内）。",
@@ -743,7 +744,7 @@ def plot(path: Path, inputs: dict[str, Inputs], gap: dict[str, dict | None]) -> 
     ax.invert_yaxis()
     ax.set_xlabel("cos(Δ_group, Δ_paper)   filled: raw with 95% bootstrap CI   open: noise-corrected")
     _style(ax)
-    _panel(ax, "a", "Shift direction of each tumour group vs the paper-cohort shift")
+    _panel(ax, "a", "Shift direction of each tumour group vs the meningioma + SFT cohort shift")
 
     # b: 転移の残差の比
     ax = axes[0, 1]
@@ -791,7 +792,7 @@ def plot(path: Path, inputs: dict[str, Inputs], gap: dict[str, dict | None]) -> 
             ax.scatter([x0 + 0.008], [yy + 0.007], transform=ax.transAxes, marker=ENCODER_MARKERS[e], s=20,
                        color=ENCODER_COLORS[e], edgecolors="white", linewidths=0.4, zorder=6, clip_on=False)
             ax.text(x0 + 0.025, yy, f"{ENCODER_LABELS[e]}  {r:.2f}", transform=ax.transAxes, fontsize=7, color=INK)
-        ax.text(x0, y0 + len(lines) * dy + 0.004, "site gap ‖Δ_paper‖ / within-site RMS\n(RMS over the patho2 paper cohort)",
+        ax.text(x0, y0 + len(lines) * dy + 0.004, "site gap ‖Δ_paper‖ / within-site RMS\n(RMS over the patho2 meningioma + SFT cohort)",
                 transform=ax.transAxes, fontsize=7, color=MUTED, va="bottom")
 
     # c: ばらつきの比

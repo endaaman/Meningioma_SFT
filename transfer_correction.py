@@ -446,7 +446,7 @@ def acceptance(res: pd.DataFrame, cfg: dict, own_paper: dict[str, tuple[np.ndarr
 def acceptance_prism(res: pd.DataFrame, cfg: dict, encoder: str = "prism") -> pd.DataFrame:
     """prism の確認: 論文の PRISM の出力は無いので、同じ PRISM（manifest の h5_prism）を別の経路で読んだ出力と突き合わせる。
     encoder = meanpool_virchow も同じ形（shift_transfer/meanpool_virchow/groups.csv、dispersion_ratio/summary_meanpool_virchow.csv）。
-    shift_transfer.py --encoder prism（out/shift_transfer/prism/groups.csv、論文コホートは load_data の並び）の shift_norm と
+    shift_transfer.py --encoder prism（out/shift_transfer/prism/groups.csv、髄膜腫+SFT コホートは load_data の並び）の shift_norm と
     補正なしの残差・own の ‖Δ‖、dispersion_ratio.py --encoder prism（out/dispersion_ratio/summary_prism.csv）の scale_s と
     単独の科を推定元にした相似変換の s。own の平行移動の残差は定義で 0。無いファイルの項目は飛ばす。"""
     out = Path(cfg["output_dir"])
@@ -468,6 +468,7 @@ def acceptance_prism(res: pd.DataFrame, cfg: dict, encoder: str = "prism") -> pd
     grp_ref, disp_ref = f"shift_transfer/{encoder}/groups.csv", f"dispersion_ratio/summary_{encoder}.csv"
     grp = _read(out / grp_ref, "group")
     if grp is not None:
+        # gname は shift_transfer の groups.csv の group 列の値（"Paper cohort" = 髄膜腫+SFT コホートの行。表示名ではない）
         for target, gname in (("paper", "Paper cohort"), ("glioma", "Glioma (all)"),
                               ("lymphoma", names.get("lym", "lym")), ("metastasis", names.get("met", "met"))):
             if gname in grp.index:

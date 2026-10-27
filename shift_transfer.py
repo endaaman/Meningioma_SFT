@@ -1,15 +1,15 @@
 """shift_transfer.py — 施設間シフト Δ の向きは腫瘍の科（髄膜腫 / グリオーマ / リンパ腫 / 転移）を越えて同じか（予備解析）。
 
-論文のコホート（髄膜腫 + SFT、n551 / n577、TITAN、補正前）で推定した平行移動 Δ_paper と、同じ 2 施設の別の腫瘍
+髄膜腫+SFT コホート（n551 / n577、TITAN、補正前）で推定した平行移動 Δ_paper と、同じ 2 施設の別の腫瘍
 （院内 Patho2Gliomas の代表 HE 1 症例 1 枚 × EBRAINS の対応する診断）のシフト Δ_g の向きと長さを比べる。
     shift = mean(EBRAINS) − mean(patho2)   （patho2 → EBRAINS の向き。shift_direction.py と同じ）
 
 群:
-    髄膜腫側: Paper cohort（論文の全例 = centroid.py の Δ）/ Meningioma (all) / SFT / 両施設で subtype_min_n 以上の髄膜腫サブタイプ
+    髄膜腫側: 髄膜腫+SFT コホート（groups.csv の group 列の値は "Paper cohort"。論文の全例 = centroid.py の Δ）/ Meningioma (all) / SFT / 両施設で subtype_min_n 以上の髄膜腫サブタイプ
     グリオーマ側: ast / glm / odg / Glioma (all = 3 群) / lym / met。院内の群 → EBRAINS の診断名は config の shift_transfer.ebrains_groups
 
 見るもの:
-    1. 群ごとの cos(Δ_g, Δ_paper)。論文コホートの部分集合（髄膜腫サブタイプ・SFT）は自分を除いた Δ_paper（leave-group-out）と比べる
+    1. 群ごとの cos(Δ_g, Δ_paper)。髄膜腫+SFT コホートの部分集合（髄膜腫サブタイプ・SFT）は自分を除いた Δ_paper（leave-group-out）と比べる
     2. 素な群どうしの cos の行列。例数が少ない群ほど推定ノイズで cos が下がるので、ノイズを差し引いた cos も出す:
          E‖Δ̂‖² = ‖Δ‖² + tr V,   tr V = Σ_d ( s²_ebrains,d / n_ebrains + s²_patho2,d / n_patho2 )
          cos_corr(g, h) = Δ̂_g·Δ̂_h / sqrt( (‖Δ̂_g‖² − tr V_g)(‖Δ̂_h‖² − tr V_h) )   （g と h に共通のスライドが無いとき）
@@ -34,7 +34,7 @@
     cos_matrix.csv     — 素な群どうしの cos（raw と corrected、縦長）
     bio_control.csv    — 施設内の科どうしの差と Δ の cos
     shift_transfer.png — a: cos 行列（上三角 raw / 下三角 corrected）  b: |shift|
-    arrows.csv / arrows.png — 平行四辺形の図（2 次元の座標・矢印の角度と長さ・Δ_paper からの残差。1 行目は Paper cohort 自身）
+    arrows.csv / arrows.png — 平行四辺形の図（2 次元の座標・矢印の角度と長さ・Δ_paper からの残差。1 行目は髄膜腫+SFT コホート自身）
     mismatch_matrix.csv / mismatch_matrix.png — 科を食い違わせた差の cos（観測と予想、補正前 / 補正後）
     composition.csv    — 組成の感度（変種ごとの cos。CI はスライド単位と患者単位の両方。乱数は compute と別の列）
     paper_slides.csv / paper_embeddings.npy / glioma_slides.csv / glioma_embeddings.npy — 読み込んだ埋め込みのキャッシュ（--reload で読み直す）
@@ -43,21 +43,21 @@
 スライド埋め込み（--encoder）:
     titan     （既定）TITAN（{tile_model}/{keys.slide_feature}）。出力は上のとおり output_dir/shift_transfer/
     meanpool  学習なしの集約器の対照: CONCH v1.5 のパッチ埋め込みの単純平均（meanpool.py と同じ定義、768 次元）。
-              論文コホートは meanpool.py の h5（load_data(..., aggregator="mean")）、グリオーマ側は transfer_meanpool.py の
+              髄膜腫+SFT コホートは meanpool.py の h5（load_data(..., aggregator="mean")）、グリオーマ側は transfer_meanpool.py の
               キャッシュ（out/transfer/embeddings_meanpool.npy、先に transfer_meanpool.py build）を (施設, slide_id) で引く。
               キャッシュに無いスライド（組成の感度だけに使う EBRAINS の IDH 野生型星細胞腫）だけ h5 の features から平均を取る。
               出力は同じファイル名で output_dir/shift_transfer/meanpool/ に書く（TITAN の出力には触らない）。
               スライドの集合と並びは TITAN と同じ
     prism     第 2 のスライドエンコーダ: Virchow v1 → PRISM（1280 次元）。manifest の h5_prism の transfer.prism_key を
               transfer_correction.load_embeddings（out/transfer/embeddings_prism.npy にキャッシュ、無ければ h5 から読んで作る）
-              で読み、(施設, slide_id) で引く。論文コホートの並びとラベルは TITAN と同じ load_data(cfg, "original") から取り、
+              で読み、(施設, slide_id) で引く。髄膜腫+SFT コホートの並びとラベルは TITAN と同じ load_data(cfg, "original") から取り、
               埋め込みだけ差し替える（スライドの集合と並びは TITAN と同じ）。キャッシュに無いスライド（組成の感度だけに使う
               EBRAINS の IDH 野生型星細胞腫 66 枚）は h5 に prism_key があれば読み、無ければ落とす（PRISM は manifest の
               2,301 枚だけに抽出したので、今は全部落ちる）。その変種（composition.csv の (c) / (c')）は NaN の行になる。
               出力は同じファイル名で output_dir/shift_transfer/prism/ に書く。--reload は embeddings_prism.npy も読み直す
     meanpool_virchow  PRISM の集約器の対照: Virchow v1 のパッチ特徴（virchow_2560/features、concat 2560 次元）の単純平均。
               transfer_meanpool.py build --source virchow のキャッシュ（out/transfer/embeddings_meanpool_virchow.npy）を
-              (施設, slide_id) で引く。論文コホートの並びとラベルは prism と同じく TITAN の load_data(cfg, "original") から取り、
+              (施設, slide_id) で引く。髄膜腫+SFT コホートの並びとラベルは prism と同じく TITAN の load_data(cfg, "original") から取り、
               埋め込みだけ差し替える（スライドの集合と並びは TITAN と同じ）。キャッシュに無いスライド（組成の感度の
               IDH 野生型星細胞腫）は h5 に virchow_2560/features があれば平均を取り、無ければ落とす（prism と同じく今は全部落ちる。
               composition.csv の (c) / (c') は NaN の行）。出力は output_dir/shift_transfer/meanpool_virchow/。
@@ -81,7 +81,9 @@ import pandas as pd
 from utils.display import ordered_subtypes
 from utils.loader import load_config, load_data
 
-REF = "Paper cohort"          # 論文の全例（髄膜腫 + SFT）= centroid.py が使う Δ
+REF = "Paper cohort"          # 髄膜腫+SFT コホート（論文の全例）= centroid.py が使う Δ。groups.csv / arrows.csv の group 列の値で、
+                              # encoder_comparison.py・transfer_correction.py がこの名前で引くので変えない
+REF_LABEL = "Meningioma + SFT cohort"   # 図での REF の表示名
 MENI = "Meningioma (all)"
 SFT = "SFT"
 GLIOMA_ALL = "Glioma (all)"
@@ -93,7 +95,7 @@ COMPOSITION_EXTRA = ["Anaplastic astrocytoma, IDH-wildtype", "Diffuse astrocytom
 GBM_IDHMUT = "Glioblastoma, IDH-mutant"   # WHO 2016 では膠芽腫、CNS5 では星細胞腫 IDH 変異型 grade 4（config では ast に入れている）
 ENCODER_TAG = {"titan": "", "meanpool": "  [mean-pooled CONCH v1.5]", "prism": "  [PRISM]",
                "meanpool_virchow": "  [mean-pooled Virchow v1]"}   # 図の題に付ける（TITAN は付けない = 前の図と同じ）
-SWAP_PAPER = ("prism", "meanpool_virchow")   # 論文コホートを TITAN の並びのまま埋め込みだけキャッシュから差し替えるエンコーダ
+SWAP_PAPER = ("prism", "meanpool_virchow")   # 髄膜腫+SFT コホートを TITAN の並びのまま埋め込みだけキャッシュから差し替えるエンコーダ
 EXTRA_COLS = ["slide_id", "source", "group", "patient", "diagnosis", "embedding"]   # _ebrains_rows の列（組成の感度の行が 0 枚のとき）
 ARROWS_UNIT_TITAN = 5.4743   # TITAN の ‖Δ_paper‖。矢印の図の余白・ラベルの間隔はこの長さで決めてある（prism はこの比で伸縮する）
 
@@ -147,7 +149,7 @@ class SlideEmbedder:
         return f"{tile_model}/{self.cfg['keys']['slide_feature' if self.encoder == 'titan' else 'tile_features']}"
 
     def lookup(self, site: str, slide_id: str) -> np.ndarray:
-        """キャッシュ（meanpool / prism）から引く。無ければ止まる（論文コホートの差し替え用）。"""
+        """キャッシュ（meanpool / prism）から引く。無ければ止まる（髄膜腫+SFT コホートの差し替え用）。"""
         if (site, slide_id) not in self.cache:
             raise SystemExit(f"[{self.encoder}] キャッシュに無いスライド: {site} / {slide_id}")
         self.n_cached += 1
@@ -184,7 +186,7 @@ def _write_cache(df: pd.DataFrame, csv_path: Path, npy_path: Path) -> None:
 
 
 def load_paper(cfg: dict, out_dir: Path, reload: bool, encoder: str = "titan", embed: SlideEmbedder | None = None) -> pd.DataFrame:
-    """論文のコホート（embedding.*.original の TITAN、meanpool は meanpool.py の平均、prism / meanpool_virchow は TITAN と同じ並びで
+    """髄膜腫+SFT コホート（embedding.*.original の TITAN、meanpool は meanpool.py の平均、prism / meanpool_virchow は TITAN と同じ並びで
     embed のキャッシュの PRISM / Virchow の平均に差し替え）。列: slide_id, source, subtype, patient, embedding。"""
     csv_path, npy_path = out_dir / "paper_slides.csv", out_dir / "paper_embeddings.npy"
     if not reload and (df := _read_cache(csv_path, npy_path)) is not None:
@@ -298,7 +300,7 @@ def _ps(df: pd.DataFrame) -> dict[str, np.ndarray]:
 
 
 def build_groups(paper: pd.DataFrame, glioma: pd.DataFrame, cfg: dict) -> list[dict]:
-    """群ごとに name / family / kind / X（施設 → (n, d)）/ P（施設 → 患者 ID）/ n_pat / mask（論文コホートの部分集合なら paper 上の bool マスク）。"""
+    """群ごとに name / family / kind / X（施設 → (n, d)）/ P（施設 → 患者 ID）/ n_pat / mask（髄膜腫+SFT コホートの部分集合なら paper 上の bool マスク）。"""
     st = cfg["shift_transfer"]
     min_n = int(st.get("subtype_min_n", 20))
     names: dict = st.get("group_names", {})
@@ -386,7 +388,7 @@ def boot_cos(Xg: dict[str, np.ndarray], Xr: dict[str, np.ndarray], rng: np.rando
 
 
 def reference_for(group: dict, paper: pd.DataFrame, ref_mask: np.ndarray) -> pd.DataFrame | None:
-    """参照（Paper cohort または Meningioma (all)）のスライド。group が論文コホートの部分集合なら、その群のスライドを除く（leave-group-out）。"""
+    """参照（髄膜腫+SFT コホート = REF または Meningioma (all)）のスライド。group が髄膜腫+SFT コホートの部分集合なら、その群のスライドを除く（leave-group-out）。"""
     keep = ref_mask if group["mask"] is None else ref_mask & ~group["mask"]
     if not keep.any():
         return None
@@ -414,7 +416,7 @@ def compute(groups: list[dict], paper: pd.DataFrame, cfg: dict, bootstrap: str =
                    n_pat_ebrains=g["n_pat"]["ebrains"], n_pat_patho2=g["n_pat"]["patho2"],
                    shift_norm=g["norm"], shift_norm_corrected=g["norm_corr"], noise_trace=g["tr_v"])
         for suffix, (ref_name, ref_mask) in ref_defs.items():
-            if g["kind"] == "paper":   # Paper cohort / Meningioma (all) 自身は参照なので比べない
+            if g["kind"] == "paper":   # 髄膜腫+SFT コホート（REF）/ Meningioma (all) 自身は参照なので比べない
                 for k in ("cos", "cos_lo", "cos_hi", "cos_corrected", "residual"):
                     row[f"{k}_vs_{suffix}"] = np.nan
                 row[f"reference_{suffix}"] = ""
@@ -448,7 +450,7 @@ def compute(groups: list[dict], paper: pd.DataFrame, cfg: dict, bootstrap: str =
 
 
 def _family_frames(paper: pd.DataFrame, glioma: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """5 科（FAMILY_ORDER）→ スライド。meningioma = 論文コホートの SFT 以外、glioma = ast + glm + odg。"""
+    """5 科（FAMILY_ORDER）→ スライド。meningioma = 髄膜腫+SFT コホートの SFT 以外、glioma = ast + glm + odg。"""
     is_sft = paper["subtype"].str.lower().str.contains("sft").values
     return {
         "meningioma": paper[~is_sft], "SFT": paper[is_sft],
@@ -569,7 +571,7 @@ def mismatch(paper: pd.DataFrame, glioma: pd.DataFrame, d_paper: np.ndarray) -> 
 
 def composition(paper: pd.DataFrame, glioma: pd.DataFrame, extra: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     """組成の感度: グリオーマの群の EBRAINS 側の組成を変えた変種ごとの cos vs Δ_paper（生・ノイズ補正）。院内（patho2）側は変えない。
-    参照は Paper cohort（論文の全例）と Meningioma (all)。CI は 95% ブートストラップをスライド単位と患者単位の両方で（乱数は compute と別の列なので、
+    参照は髄膜腫+SFT コホート（REF、論文の全例）と Meningioma (all)。CI は 95% ブートストラップをスライド単位と患者単位の両方で（乱数は compute と別の列なので、
     baseline の CI は groups.csv と小数 2–3 桁目で違う。点推定は同じ）。
     extra（IDH 野生型星細胞腫）が 0 枚のとき（prism / meanpool_virchow）は、それを使う変種を NaN の行にする（乱数は消費しない）。"""
     st = cfg["shift_transfer"]
@@ -631,6 +633,11 @@ def composition(paper: pd.DataFrame, glioma: pd.DataFrame, extra: pd.DataFrame, 
 
 # ── figure ────────────────────────────────────────────────────────────────────
 
+def _label(name: str) -> str:
+    """図に出す群の名前。REF だけ表示名 REF_LABEL に置き換える（CSV の group 列と標準出力の表は REF のまま）。"""
+    return REF_LABEL if name == REF else name
+
+
 def plot(groups: list[dict], pairs: pd.DataFrame, out_path: Path, tag: str = "") -> None:
     disjoint = [g for g in groups if g["kind"] in ("subtype", "sft", "glioma")]
     disjoint.sort(key=lambda g: FAMILY_ORDER.index(g["family"]) if g["family"] in FAMILY_ORDER else 99)
@@ -668,7 +675,7 @@ def plot(groups: list[dict], pairs: pd.DataFrame, out_path: Path, tag: str = "")
     y = np.arange(len(allg))
     ax2.barh(y + 0.2, [g["norm"] for g in allg], height=0.4, color=[FAMILY_COLOR.get(g["family"], "gray") for g in allg], alpha=0.45, label="raw")
     ax2.barh(y - 0.2, [g["norm_corr"] for g in allg], height=0.4, color=[FAMILY_COLOR.get(g["family"], "gray") for g in allg], label="noise-corrected")
-    ax2.set_yticks(y); ax2.set_yticklabels([f"{g['name']} ({len(g['X']['ebrains'])}/{len(g['X']['patho2'])})" for g in allg], fontsize=8)
+    ax2.set_yticks(y); ax2.set_yticklabels([f"{_label(g['name'])} ({len(g['X']['ebrains'])}/{len(g['X']['patho2'])})" for g in allg], fontsize=8)
     ax2.invert_yaxis(); ax2.set_xlabel("|shift| (L2)"); ax2.set_title("shift magnitude (n EBRAINS / n patho2)", fontsize=10)
     ax2.legend(fontsize=8, loc="lower right")
     fig.tight_layout()
@@ -712,14 +719,14 @@ def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "", 
         ax.scatter([r.x_patho2], [r.y_patho2], s=28, facecolors="white", edgecolors=col, linewidths=1.2, zorder=3)
         ax.scatter([r.x_ebrains], [r.y_ebrains], s=28, color=col, zorder=3)
         ax.plot([label_x + 0.1 * u, r.x_patho2], [ly, r.y_patho2], color=col, lw=0.5, alpha=0.6)
-        ax.text(label_x, ly, r.group, ha="right", va="center", fontsize=8, color=col, fontstyle="italic" if is_ref else "normal")
+        ax.text(label_x, ly, _label(r.group), ha="right", va="center", fontsize=8, color=col, fontstyle="italic" if is_ref else "normal")
         ax2.annotate("", xy=(r.dx, r.dy), xytext=(0, 0), arrowprops=style)
     ax.set_xlim(label_x - 5.6 * u, float(xs.max()) + 0.6 * u)
     ax.set_ylim(min(float(ys.min()), float(label_y.min())) - 0.8 * u, max(float(ys.max()), float(label_y.max())) + 0.8 * u)
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("Δ_paper direction (L2 units)")
     ax.set_ylabel(f"PC1 of between-group variation ⊥ Δ_paper ({summary['pc1_frac']:.0%})")
-    ax.set_title("centroids at both sites (open: patho2, filled: EBRAINS)" + tag + "\narrow = site shift of each group, dashed = Paper cohort", fontsize=10)
+    ax.set_title("centroids at both sites (open: patho2, filled: EBRAINS)" + tag + "\narrow = site shift of each group, dashed = " + REF_LABEL, fontsize=10)
     ax.grid(alpha=0.25)
 
     grp = df[df["role"] == "group"]
@@ -734,7 +741,7 @@ def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "", 
                   f"full space (noise-corr.): angle {af[0]:.1f} ± {af[1]:.1f}°, |shift| {nf[0]:.2f} ± {nf[1]:.2f}", fontsize=9)
     ax2.grid(alpha=0.25)
     handles = [Line2D([], [], color=FAMILY_COLOR[f], lw=2, label=f) for f in FAMILY_ORDER if f in set(grp["family"])]
-    handles.append(Line2D([], [], color="0.45", lw=2, ls="--", label=REF))
+    handles.append(Line2D([], [], color="0.45", lw=2, ls="--", label=REF_LABEL))
     ax2.legend(handles=handles, fontsize=8, loc="upper left")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
@@ -791,7 +798,7 @@ def main() -> None:
     tag = ENCODER_TAG[args.encoder]
     print(f"[encoder] {args.encoder} -> {out_dir}")
     embed = SlideEmbedder(cfg, args.encoder, args.reload)
-    print("[load] paper cohort")
+    print("[load] meningioma + SFT cohort")
     paper = load_paper(cfg, out_dir, args.reload, args.encoder, embed)
     print("  ", paper.groupby("source").size().to_dict())
     print("[load] gliomas (Patho2Gliomas representatives × EBRAINS)")
@@ -832,7 +839,7 @@ def main() -> None:
     pd.set_option("display.width", 200)
     cols = ["group", "n_ebrains", "n_patho2", "shift_norm", "shift_norm_corrected", "cos_vs_paper", "cos_lo_vs_paper", "cos_hi_vs_paper",
             "cos_corrected_vs_paper", "residual_vs_paper", "cos_vs_meni", "cos_corrected_vs_meni"]
-    print("\n[groups]  shift = mean(EBRAINS) − mean(patho2); cos vs Δ_paper（論文コホートの部分集合は leave-group-out）")
+    print("\n[groups]  shift = mean(EBRAINS) − mean(patho2); cos vs Δ_paper（髄膜腫+SFT コホートの部分集合は leave-group-out）")
     print(df_groups[cols].to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     print("\n[pairs]  same family vs different family（corrected cos の中央値）")
     print(pairs.groupby("same_family")["cos_corrected"].describe()[["count", "50%", "min", "max"]].to_string())

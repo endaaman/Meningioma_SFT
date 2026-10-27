@@ -6,7 +6,7 @@ EBRAINS（reference）は補正しないので、どのパネルでも当ては�
 
 パネル（umap_titan.png）:
     a  補正なし（色 = 科、形 = 施設: EBRAINS ●・院内 ■ に黒縁）
-    b  院内を Δ_paper だけ平行移動（Δ_paper = 論文コホート（髄膜腫 + SFT）の EBRAINS 平均 − 院内平均。centroid.py の Δ と同じ）
+    b  院内を Δ_paper だけ平行移動（Δ_paper = 髄膜腫+SFT コホートの EBRAINS 平均 − 院内平均。centroid.py の Δ と同じ）
     c  院内を自分の科の Δ_f（= EBRAINS 科 f の平均 − 院内 科 f の平均）だけ平行移動（上限。科のラベルが要る）
 small multiples（umap_titan_families.png）: 2 行 × 5 列（列 = 科、上 = 補正なし、下 = Δ_paper）。その科の 2 施設を
     施設色（config の display.colors.sources）で、他の科は薄い灰で背景に。
@@ -58,7 +58,7 @@ FAMILY_LABEL = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "l
                 "metastasis": "Metastasis"}
 # 科の色は shift_transfer.py の FAMILY_COLOR と同じ（並行して編集中のスクリプトを import しないため写した）
 FAMILY_COLOR = {"meningioma": "#4c72b0", "SFT": "#000000", "glioma": "#dd8452", "lymphoma": "#55a868", "metastasis": "#c44e52"}
-PAPER = {"meningioma", "SFT"}                  # 論文コホート（Δ_paper の推定元）
+PAPER = {"meningioma", "SFT"}                  # 髄膜腫+SFT コホート（Δ_paper の推定元）
 CONDITIONS = ["uncorrected", "delta_paper", "delta_own"]
 TITLES = {"uncorrected": "a  Uncorrected",
           "delta_paper": "b  In-house + Δ_paper (meningioma + SFT)",
@@ -265,7 +265,7 @@ def main() -> None:
     lines = ["# transfer_umap — 転移テストの 2,301 枚の UMAP（TITAN）", "",
              f"UMAP: n_neighbors {k}, min_dist {ucfg.get('min_dist', 0.01)}, random_state {ucfg.get('random_state', 42)}"
              "（umap_plot.py と同じ config の umap）。補正なしの全スライドで 1 回当てはめ、補正後の院内は transform。", "",
-             f"- ‖Δ_paper‖ = {np.linalg.norm(d_paper):.3f}（論文コホート = 髄膜腫 + SFT の EBRAINS 平均 − 院内平均）",
+             f"- ‖Δ_paper‖ = {np.linalg.norm(d_paper):.3f}（髄膜腫+SFT コホートの EBRAINS 平均 − 院内平均）",
              "- 科ごとの ‖Δ_f‖ と cos(Δ_f, Δ_paper): " + "、".join(
                  f"{f} {np.linalg.norm(d):.2f} / {d @ d_paper / np.linalg.norm(d) / np.linalg.norm(d_paper):.3f}"
                  for f, d in d_own.items()), "",

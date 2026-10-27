@@ -1,7 +1,7 @@
 """transfer_manifest.py — 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧を作り、埋め込みの揃い具合を確認する。
 
 対象（2 施設 × 5 科）:
-    meningioma / SFT : 論文のコホート（config の label.*.subtype と embedding.*.original。EBRAINS n551、patho2 n577）
+    meningioma / SFT : 髄膜腫+SFT コホート（config の label.*.subtype と embedding.*.original。EBRAINS n551、patho2 n577）
     glioma (ast / glm / odg) / lymphoma (DLBCL) / metastasis:
         patho2  = Patho2Gliomas の代表 HE 1 症例 1 枚（patho2_gliomas.representatives → out/patho2_gliomas/slides.csv）
         ebrains = annotation.csv の diagnosis を shift_transfer.ebrains_groups で科に対応づけ（control は除く）、EBRAINS_embeddings の h5
@@ -39,7 +39,7 @@ def _has_key(h5_path: str | None, key: str) -> bool:
 
 
 def paper_rows(cfg: dict) -> list[dict]:
-    """論文コホート: ラベル CSV の症例 × embedding.*.original の h5。WSI は paper_patches.wsi_index から引く。"""
+    """髄膜腫+SFT コホート: ラベル CSV の症例 × embedding.*.original の h5。WSI は paper_patches.wsi_index から引く。"""
     rows: list[dict] = []
     wsi_index = cfg.get("paper_patches", {}).get("wsi_index", {})
     for site in SITES:
@@ -106,8 +106,8 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     df = pd.DataFrame(paper_rows(cfg) + glioma_rows(cfg))
-    # PRISM（Virchow → PRISM）は既存の h5 に足す（ken 2026-10-26）: EBRAINS は EBRAINS_embeddings の h5（論文コホートの EBRAINS 分も
-    # 山田さんの original ではなくこちら）、院内は TITAN と同じ h5（グリオーマ = Patho2Gliomas_embeddings、論文コホート = original）
+    # PRISM（Virchow → PRISM）は既存の h5 に足す（ken 2026-10-26）: EBRAINS は EBRAINS_embeddings の h5（髄膜腫+SFT コホートの EBRAINS 分も
+    # 山田さんの original ではなくこちら）、院内は TITAN と同じ h5（グリオーマ = Patho2Gliomas_embeddings、髄膜腫+SFT コホート = original）
     emb_root = Path(cfg["ebrains_embeddings"]["root"])
     by_prefix: dict[str, str] = {}
     for p in sorted(emb_root.rglob("*_hdf.h5"), key=lambda q: len(q.parts)):

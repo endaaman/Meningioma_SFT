@@ -5,12 +5,12 @@
 
 年: 院内のスライド ID の先頭 2 桁（任意の N / n の後）= 受付年（17-2197 → 2017、N20-097 → 2020、Patho2Gliomas の
     22-2450・N21-134 も同じ）。全院内 ID が `[Nn]?YY-数字` に合うことを確かめ、科ごとの年のヒストグラムを出す。
-    照合: (1) 論文コホートの WSI のパス（脳腫瘍レビュー/2017/・/N17/）の年と一致するか、(2) WSI のファイル名の撮像時刻
+    照合: (1) 髄膜腫+SFT コホートの WSI のパス（脳腫瘍レビュー/2017/・/N17/）の年と一致するか、(2) WSI のファイル名の撮像時刻
     （"HE - 2018-05-21 13.16.12"）の年、(3) NDPI の TIFF タグ DateTime（= 撮像日。WSI を読むだけ、NFS には書かない）の年
     との対応表。(3) は out/shift_time/scan_dates.csv にキャッシュする（--rescan で読み直し）。
     主解析は受付年（year_by = id）、撮像年（year_by = scan、DateTime の年。無ければファイル名の時刻）でも同じ表を作る。
 
-科: meningioma（論文コホートの SFT 以外）・glioma（ast / glm / odg）・metastasis（--families で変える）。
+科: meningioma（髄膜腫+SFT コホートの SFT 以外）・glioma（ast / glm / odg）・metastasis（--families で変える）。
 
 Δ の推定量（どちらも院内スライドごとのベクトル v_i の平均 Δ_S = mean_{i∈S} v_i として書ける）:
     raw      v_i = μ_E,科 − x_i（EBRAINS の科の平均 − 院内スライド）。年 y なら Δ_y = μ_E,科 − mean(院内 科 年 y)
@@ -22,7 +22,7 @@
     delta_norm   ‖Δ_y‖
     cos_all      cos(Δ_y, Δ_all)（Δ_all は Δ_y のスライドを含む。帰無も同じ作りなので比べられる）
     cos_rest     cos(Δ_y, Δ_rest)（Δ_rest = その年以外の院内の平均で作った Δ）
-    cos_paper    cos(Δ_y, Δ_paper)（Δ_paper = 論文コホート（髄膜腫 + SFT）の EBRAINS 平均 − 院内平均）
+    cos_paper    cos(Δ_y, Δ_paper)（Δ_paper = 髄膜腫+SFT コホートの EBRAINS 平均 − 院内平均）
     proj         Δ_y の Δ_all 方向の成分 Δ_y·Δ_all/‖Δ_all‖（Δ の長さの経年変化）
     orth         Δ_y の Δ_all に直交する成分の長さ
     drift        ‖Δ_y − Δ_all‖ / ‖Δ_all‖（raw ではその年の院内重心と全年の院内重心の距離を施設差で割ったもの）
@@ -75,7 +75,7 @@ REF = "ebrains"
 PAPER = {"meningioma", "SFT"}
 ID_RE = re.compile(r"[Nn]?(\d{2})-\d+")
 TS_RE = re.compile(r"(20\d{2})-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}")      # ファイル名の撮像時刻
-DIR_RE = re.compile(r"/(?:20|N)(\d{2})/")                              # 論文コホートの WSI の年のフォルダ
+DIR_RE = re.compile(r"/(?:20|N)(\d{2})/")                              # 髄膜腫+SFT コホートの WSI の年のフォルダ
 FAMILY_LABEL = {"meningioma": "Meningioma", "glioma": "Glioma", "metastasis": "Metastasis",
                 "lymphoma": "Lymphoma (DLBCL)", "SFT": "SFT"}
 YEAR_METRICS = ["delta_norm", "cos_all", "cos_rest", "cos_paper", "proj", "orth", "drift"]
@@ -146,7 +146,7 @@ def attach_years(man: pd.DataFrame, cache: Path, rescan: bool) -> tuple[pd.DataF
     dir_year = p2["wsi"].str.extract(DIR_RE)[0]
     has = dir_year.notna()
     agree = int((2000 + dir_year[has].astype(int) == p2.loc[has, "year_id"]).sum())
-    lines.append(f"- 照合 1（WSI のパスの年のフォルダ /YYYY/・/NYY/。論文コホートの脳腫瘍レビュー/ など）: {int(has.sum())} 件中 {agree} 件一致。")
+    lines.append(f"- 照合 1（WSI のパスの年のフォルダ /YYYY/・/NYY/。髄膜腫+SFT コホートの脳腫瘍レビュー/ など）: {int(has.sum())} 件中 {agree} 件一致。")
     def lag(yr: pd.Series, has: np.ndarray) -> str:
         """撮像年 − 受付年 の件数（+0: 何件, +1: 何件 …）。"""
         vc = pd.Series(yr[has].to_numpy() - p2["year_id"].to_numpy()[has]).astype(int).value_counts().sort_index()

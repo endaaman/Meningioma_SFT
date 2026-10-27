@@ -8,12 +8,12 @@
 （FeatureExtractionCommand と presets.slide.aggregate_slide を直接呼ぶ。PRISM のモデルは 1 回だけ読む）。
 
 書き先は manifest の h5_prism = **既存の h5**（ken 決定 2026-10-26）: EBRAINS → EBRAINS_embeddings の h5、院内グリオーマ →
-Patho2Gliomas_embeddings の h5、院内の論文コホート → 論文の original h5。既存のグループ（conch15 / conch15_768 / TITAN）は触らず
+Patho2Gliomas_embeddings の h5、院内の髄膜腫+SFT コホート → 論文の original h5。既存のグループ（conch15 / conch15_768 / TITAN）は触らず
 virchow_2560 を足すだけ（h5 のルート attrs（cols / rows / patch_count / mpp）は最初の抽出のまま。各グループの attrs に 224 px の格子が付く）。
 PRISM が既にあるスライドはスキップ、virchow_2560/features だけあるスライドは集約だけ。途中で止めても再実行で続きから進む。
 
-順番: EBRAINS（論文コホート → グリオーマ → DLBCL → 転移）→ 院内グリオーマ・DLBCL・転移 → 院内の論文コホート。
-      --sites / --families で絞れる（院内の論文コホートは ken の確認後に回す）。
+順番: EBRAINS（髄膜腫+SFT コホート → グリオーマ → DLBCL → 転移）→ 院内グリオーマ・DLBCL・転移 → 院内の髄膜腫+SFT コホート。
+      --sites / --families で絞れる（院内の髄膜腫+SFT コホートは ken の確認後に回す）。
 
 ログ: output_dir/transfer/prism_log.csv（time, status, seconds, n_tiles, site, family, slide_id, h5）。
 
@@ -68,7 +68,7 @@ def state_of(h5_path: str, keys: dict) -> str:
 
 
 def order_targets(df: pd.DataFrame) -> pd.DataFrame:
-    """EBRAINS → 院内の順、科は論文コホート → グリオーマ → DLBCL → 転移。院内の論文コホート（original h5 に書く）は最後。"""
+    """EBRAINS → 院内の順、科は髄膜腫+SFT コホート → グリオーマ → DLBCL → 転移。院内の髄膜腫+SFT コホート（original h5 に書く）は最後。"""
     site_rank = {"ebrains": 0, "patho2": 1}
     fam_rank = {f: i for i, f in enumerate(FAMILY_ORDER)}
     key = [(site_rank[s], (fam_rank[f] + 10) if (s == "patho2" and f in ("meningioma", "SFT")) else fam_rank[f], i)
