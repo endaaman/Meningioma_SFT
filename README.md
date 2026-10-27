@@ -15,7 +15,7 @@ patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE
 transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（髄膜腫+SFT コホート ＋ 院内代表 ＋ EBRAINS 対応診断、2,301 枚）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる
 transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（--encoder titan|prism|meanpool|meanpool_virchow、out/transfer/correction_{encoder}.*）
 prism_extract.py     # 第 2 のスライドエンコーダ: manifest の全スライドに Virchow（224 px / 0.5 mpp、concat 2560 次元）→ PRISM を足す。書き先は既存の h5（EBRAINS_embeddings / Patho2Gliomas_embeddings / 論文の original）の virchow_2560/…。既存はスキップ、ログ out/transfer/prism_log.csv
-atlas_retrieval.py   # 参照コホートへの診断名の検索: EBRAINS 全体（5 枚以上の 78 診断）の診断ごとの重心で院内スライドを最近傍診断。補正なし / 論文の Δ / 他の科の Δ（全平均・科ごと）/ 自分の科の Δ と EBRAINS 内 LOO（out/atlas/）。--encoder prism は参照が PRISM のある EBRAINS 1,464 枚・22 診断に縮む。TITAN を同じ参照で比べるには --atlas-slides prism（出力 *_titan_on_prism*）
+atlas_retrieval.py   # 参照コホートへの診断名の検索: EBRAINS 全体（5 枚以上の 78 診断）の診断ごとの重心で院内スライドを最近傍診断。補正なし / 髄膜腫+SFT コホートの Δ（Δ_paper）/ 他の科の Δ（全平均・科ごと）/ 自分の科の Δ と EBRAINS 内 LOO（out/atlas/）。--encoder prism は参照が PRISM のある EBRAINS 1,464 枚・22 診断に縮む。TITAN を同じ参照で比べるには --atlas-slides prism（出力 *_titan_on_prism*）
 dispersion_ratio.py  # Supplementary 用: 施設間の「ばらつきの比」（次元ごとの分散比）は腫瘍をまたいで共有されるか。科どうしの相関 vs 分割半分の再現性、平均のずれの cos と並べる（out/dispersion_ratio/）。shift_transfer.py のキャッシュを読む。--encoder meanpool / prism / meanpool_virchow は *_meanpool / *_prism / *_meanpool_virchow
 shift_transfer.py    # 転移テストの予備解析: 髄膜腫+SFT コホートの Δ と、グリオーマ（ast / glm / odg）・DLBCL・転移の施設間シフトの向き（cos、ノイズ補正つき）と長さ。群どうしの cos 行列、施設内の科どうしの差との直交性（out/shift_transfer/）。--encoder meanpool は out/shift_transfer/meanpool/、--encoder prism は out/shift_transfer/prism/（embeddings_prism.npy を引く。組成の感度の IDH 野生型星細胞腫 66 枚は manifest 外で PRISM が無いので NaN）。--encoder meanpool_virchow は out/shift_transfer/meanpool_virchow/（Virchow のパッチ平均、embeddings_meanpool_virchow.npy を引く。同じく 66 枚は NaN）
 transfer_meanpool.py # 転移テストの全スライドの平均プーリング埋め込み（CONCH v1.5 パッチ平均、meanpool.py と同じ定義。髄膜腫+SFT コホートは既存の meanpool h5、グリオーマ側は h5 の features から計算）→ out/transfer/embeddings_meanpool.npy。shift_transfer / transfer_correction / dispersion_ratio の --encoder meanpool が読む（集約器の対照）。--source virchow は Virchow のタイル特徴（h5_prism の virchow_2560/features、2560 次元）の平均 → embeddings_meanpool_virchow.npy（PRISM の集約器の対照、--encoder meanpool_virchow が読む。NFS を読むので --workers 4 まで、途中から再開できる、約 1.5 時間）
@@ -106,7 +106,7 @@ uv run python -u meanpool.py all   # 平均プーリングの対照（build は 
 uv run python stain_response.py    # paper_color.py / macenko.py の slide_color.csv と meanpool.py build の後。TITAN と平均プーリングの両方
 uv run python dataset.py   # 他スクリプトと独立。任意のタイミングで実行可
 
-# グリオーマ（平行移動 Δ の転移テスト用。論文のコホートとは別の h5 の木。どちらも既存はスキップするので途中から再開できる）
+# グリオーマ（平行移動 Δ の転移テスト用。髄膜腫+SFT コホートとは別の h5 の木。どちらも既存はスキップするので途中から再開できる）
 uv run python -u titan_batch.py --dry-run                  # EBRAINS_embeddings の対象と順番（グリオーマ → 残り）
 uv run python -u titan_batch.py                            # 学生が作った CONCH 特徴（3,121 本）に TITAN を書く（約 2 秒/本）
 uv run python -u patho2_gliomas_extract.py --dry-run       # 院内の HE 判定の監査（out/patho2_gliomas/slides.csv）
