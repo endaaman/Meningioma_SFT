@@ -46,14 +46,14 @@ COLUMNS = {
         ("own", "Δ from the same tumours (meningioma + SFT; ceiling)"),
         ("glioma", "Δ from glioma"),
         ("others_mean", "Δ from glioma + DLBCL + metastasis, per-family mean"),
-        ("others", "Δ from glioma + DLBCL + metastasis, pooled slides (case mix differs)"),
+        ("others", "Δ from glioma + DLBCL + metastasis, pooled slides (case mix differs between sites)"),
     ],
     "glioma": [
         ("none", "No correction"),
         ("own", "Δ from the same tumours (glioma; ceiling)"),
         ("meningioma", "Δ from meningioma"),
         ("others_mean", "Δ from meningioma + SFT + DLBCL + metastasis,\nper-family mean"),
-        ("others", "Δ from meningioma + SFT + DLBCL + metastasis,\npooled slides (case mix differs)"),
+        ("others", "Δ from meningioma + SFT + DLBCL + metastasis,\npooled slides (case mix similar between sites)"),
     ],
 }
 COL_GAP = 1.6                          # in。左の列の軸の右端から右の列の軸の左端まで（右の列の縦軸の目盛りが入る）
