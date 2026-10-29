@@ -7,15 +7,15 @@
 ## 単一情報源
 
 - 構成・実行順: `README.md`
-- 原稿の置き場と約束: `out/paper/README.md`
-- 図表の構成（Fig / Table ごとの主張・パネル・数値・状態）: `out/paper/v1/figures.md`
-- 論文の骨組み（段落ごとの要素）: `out/paper/v1/outline.md`
-- 解析の判断の記録（試したこと・数字・決めたこと）: `out/paper/decisions.md`
+- 原稿の置き場と約束: `paper/README.md`
+- 図表の構成（Fig / Table ごとの主張・パネル・数値・状態）: `paper/v1/figures.md`
+- 論文の骨組み（段落ごとの要素）: `paper/v1/outline.md`
+- 解析の判断の記録（試したこと・数字・決めたこと）: `paper/decisions.md`
 - 別論文の種: `out/ideas/`
 
 ## データ
 
-- `data` と `out` は `~/Sync/Projects/Meningioma_SFT/{data,out}` への symlink（git 管理外、Syncthing 同期）。
+- `data`・`out`・`paper` は `~/Sync/Projects/Meningioma_SFT/{data,out,paper}` への symlink（git 管理外、Syncthing 同期）。原稿は `paper/`（2026-10-29 に `out/paper/` から移動。図表の出力先は config の `paper.dir` / `paper.version`）。
 - 入力の original h5 は NFS（`/mnt/server42/個人用/山田/...`）への symlink。**NFS 上の既存ファイルは上書き・削除・リネームしない。** 新規作成が要るときは ken に確認。
 - 生成物（`centroid` / `gan` / `combat` / `affine_*` の h5、`out/`）は Sync 側の実体。
 - `config.yaml` は git 管理外。新しい設定キーは `config.example.yaml` にも足す。

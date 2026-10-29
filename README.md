@@ -44,7 +44,7 @@ shift_bio_axes.py    # 施設間シフト Δ の生物学的な軸（SFT−髄�
 shift_estimation.py  # 平行移動のシフト推定の実用面: 症例構成の切り分け（組織型を合わせたシフト Δ*）と、新施設から何例あれば推定できるか（部分抽出のシミュレーション）。Fig S4 の元
 harmonization.py     # 補正の効き具合の指標（ASW・LISI、補正なし / centroid / GAN）
 meanpool.py          # 平均プーリングのスライド埋め込み（TITAN の対照）: build で h5 を作り、analyze で Fig 4・Table S3 と同じ指標を出す。Table S4 の元（幾何の数値は Results 本文）
-paper_color.py       # スライドごとの組織の平均色（CIELAB と Ruifrok–Johnston の H/E、32 パッチ）。Fig 2c の元（out/paper/{version}/color/slide_color.csv）
+paper_color.py       # スライドごとの組織の平均色（CIELAB と Ruifrok–Johnston の H/E、32 パッチ）。Fig 2c の元（paper/{version}/color/slide_color.csv。置き場は config の paper.dir）
 stain_response.py    # 埋め込みの施設間シフト方向 u への射影 s と、スライドの H/E 染色バランス（log H/E）の対応。施設内相関・施設差の色による説明割合・応答曲線・補正（GAN/Macenko）による Δs と色変化の対応（out/stain_response/）
 figs/                # 論文の図表を out/ の解析結果から組み立てる（重い計算はしない）
   __init__.py        # 図表番号の唯一の定義（MAIN / TABLES / SUPP の順序）
@@ -142,7 +142,7 @@ uv run python transfer_correction.py --encoder meanpool_virchow # 上 2 本の�
 uv run python encoder_baseline.py                          # 各 --encoder の transfer_correction.py の後（埋め込みのキャッシュと correction_{encoder}.csv を読むだけ、数秒）。施設内の基礎精度（out/encoder_baseline/）
 uv run python encoder_comparison.py                        # 各 --encoder の解析（shift_transfer / transfer_correction / dispersion_ratio / atlas_retrieval（--atlas-slides prism も）/ transfer_sample_size）の後。4 エンコーダの横並び（out/encoder_comparison/）。atlas_retrieval / transfer_sample_size は CONCH の平均・Virchow の平均では回していないので空欄
 
-# 論文用の図表（上の出力を使う）。出力は output_dir/paper/{paper.version}/{fig,tables}/、
+# 論文用の図表（上の出力を使う）。出力は paper.dir/{paper.version}/{fig,tables}/（paper.dir の既定は paper/ = Sync 直下 paper/ への symlink）、
 # ファイル名は番号付き（例 fig3_umap_harmonization.png）。番号は figs/__init__.py だけで決まる
 uv run python -m figs.all
 uv run python -m figs.umap_harmonization   # 1 つだけ作る場合
