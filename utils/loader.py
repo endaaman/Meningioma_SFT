@@ -15,6 +15,16 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
+def paper_root(cfg: dict) -> Path:
+    """原稿と図表の置き場（config の paper.dir、既定 paper）。output_dir と同じく作業ディレクトリからの相対。"""
+    return Path(cfg.get("paper", {}).get("dir", "paper"))
+
+
+def paper_dir(cfg: dict) -> Path:
+    """版ごとの図表の置き場 {paper.dir}/{paper.version}（fig/ tables/ color/ patch_candidates/ の親）。"""
+    return paper_root(cfg) / cfg.get("paper", {}).get("version", "v1")
+
+
 def load_data(cfg: dict, dir_key: str, aggregator: str = "titan") -> pd.DataFrame:
     """slide-level 埋め込みとサブタイプラベルを結合して返す。
 

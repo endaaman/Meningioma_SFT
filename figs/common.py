@@ -9,7 +9,7 @@ from figs import stem
 from utils.display import (CONDITION_COLORS, CONDITION_LABELS, CONDITION_LABELS_JA, CONDITION_LABELS_SHORT,  # noqa: F401
                            CONDITION_ORDER, CONDITIONS_CORE, CONDITIONS_FIG3, CONDITIONS_FULL, CONDITIONS_SUPP,
                            order_conditions)
-from utils.loader import load_config
+from utils.loader import load_config, paper_dir, paper_root  # noqa: F401  paper_dir / paper_root の定義は utils/loader.py の 1 か所
 
 FONT = 8
 plt.rcParams.update({
@@ -30,10 +30,6 @@ def config() -> dict:
 def out_root(cfg: dict) -> Path:
     """解析結果の置き場（output_dir）。"""
     return Path(cfg["output_dir"])
-
-
-def paper_dir(cfg: dict) -> Path:
-    return out_root(cfg) / "paper" / cfg.get("paper", {}).get("version", "v1")
 
 
 def fig_dir(cfg: dict) -> Path:

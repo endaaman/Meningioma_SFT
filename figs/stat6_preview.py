@@ -5,7 +5,7 @@ stat6_case.py の group_text）ごとに箱ひげ ＋ 点で示す。2 行 × 2 
 列 = 条件（補正なし / 平行移動）。STAT6 で確認されていない SFT と、EBRAINS → patho2 で見逃した SFT に case_id を付ける。
 
 入力: output_dir/stat6/cases.csv（stat6_case.py）
-出力: output_dir/paper/v2/fig/_preview_stat6.png（config の paper.version が v1 のままでも v2 に出す。v1 は触らない約束）
+出力: paper.dir/v2/fig/_preview_stat6.png（config の paper.version が v1 のままでも v2 に出す。v1 は触らない約束）
 
 Usage:
     uv run python -m figs.stat6_preview
@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from figs.common import CONDITION_LABELS, FONT, SITE_DISPLAY, config, out_root
+from figs.common import CONDITION_LABELS, FONT, SITE_DISPLAY, config, out_root, paper_root
 
 PAPER_VERSION = "v2"
 VARIANTS = ["original", "centroid"]
@@ -61,7 +61,7 @@ def main() -> None:
             ax.spines[["top", "right"]].set_visible(False)
     fig.suptitle("patho2 slides by STAT6 status (report text reading); TITAN, nearest-centroid margin", fontsize=FONT + 1)
     fig.tight_layout()
-    out = out_root(cfg) / "paper" / PAPER_VERSION / "fig" / "_preview_stat6.png"
+    out = paper_root(cfg) / PAPER_VERSION / "fig" / "_preview_stat6.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=200, bbox_inches="tight")
     plt.close(fig)

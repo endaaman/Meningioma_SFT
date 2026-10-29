@@ -38,7 +38,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from utils.loader import load_config, load_data
+from utils.loader import load_config, load_data, paper_dir
 
 AGGREGATORS = ["titan", "mean"]
 CORRECTIONS = ["gan", "macenko"]            # 画像レベルの補正（patho2 → EBRAINS の向きだけ）
@@ -53,7 +53,7 @@ def load_color(cfg: dict) -> pd.DataFrame:
     """slide_color.csv（補正なし両施設 + GAN）と macenko の slide_color.csv を (site, case_id, condition) の表にする。"""
     reference: str = cfg["reference"]
     other = next(s for s in cfg["embedding"] if s != reference)
-    paper = Path(cfg["output_dir"]) / "paper" / cfg["paper"]["version"] / "color" / "slide_color.csv"
+    paper = paper_dir(cfg) / "color" / "slide_color.csv"
     mac = Path(cfg["output_dir"]) / "macenko" / "slide_color.csv"
     group_to_cond = {reference: "original", other: "original", f"{other} (GAN)": "gan", f"{other} (Macenko)": "macenko"}
     frames = []

@@ -9,7 +9,7 @@
 
 patho2 の候補については、同じ座標の GAN 変換後パッチ（cache/{size}/gan/patches）も並べる。
 
-出力 (output_dir/paper/{version}/patch_candidates/):
+出力 (paper.dir/{version}/patch_candidates/):
     {site}/{subtype}/rank{k}_{case}_x{X}_y{Y}.png
     {site}/{subtype}/contact_sheet.png     — 5 候補（症例 ID・距離つき）
     patho2_gan/{subtype}.png                — 上段: 元画像 / 下段: GAN 変換後
@@ -34,7 +34,7 @@ from PIL import Image
 from wsi_toolbox.utils.white import _count_low_range_pixels
 
 from utils.display import make_abbrev
-from utils.loader import load_config
+from utils.loader import load_config, paper_dir
 
 
 WHITE_RGB_RANGE = 20  # wsi-toolbox の is_white_patch_ptp の既定（RGB の max−min がこれ未満を白画素）
@@ -181,7 +181,7 @@ def main() -> None:
     k, min_n = pp.get("n_candidates", 5), pp.get("min_n", 5)
     max_white = pp.get("max_white_ratio", 0.10)
     size = cfg["gan"]["patch_size"]
-    out_dir = Path(cfg["output_dir"]) / "paper" / cfg["paper"]["version"] / "patch_candidates"
+    out_dir = paper_dir(cfg) / "patch_candidates"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     sites = list(cfg["embedding"].keys())

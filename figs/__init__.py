@@ -7,7 +7,7 @@
     uv run python -m figs.umap_harmonization
     uv run python -m figs.all        # fig/・tables/ の自分の出力を掃除してから全部作る
 
-入力は解析スクリプトが out/ に書いた CSV / npz、出力は output_dir/paper/{paper.version}/{fig,tables}/。
+入力は解析スクリプトが out/ に書いた CSV / npz、出力は paper.dir/{paper.version}/{fig,tables}/。
 """
 
 # 本文の図（順 = Fig 番号）。design は手描き（スクリプトが無いものは all で飛ばす）

@@ -43,7 +43,7 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from utils.display import ordered_subtypes, shorten
-from utils.loader import load_config, load_data
+from utils.loader import load_config, load_data, paper_dir
 
 SITE_LABEL = {"ebrains": "EBRAINS", "patho2": "patho2"}
 MENI = "Meningioma (all)"
@@ -275,7 +275,7 @@ def plot(axes: pd.DataFrame, cfg: dict, reference: str, other: str, out_path: Pa
 
 def _paper_ba(cfg: dict) -> dict[str, str]:
     """Table S1 / S2（paper/{version}/tables）から EBRAINS → patho2 の balanced accuracy の点推定を拾う。"""
-    tdir = Path(cfg["output_dir"]) / "paper" / cfg.get("paper", {}).get("version", "v1") / "tables"
+    tdir = paper_dir(cfg) / "tables"
     out = {}
     for key, fname, cond in (("sft_none", "tableS1_performance.csv", "なし"),
                              ("histo_none", "tableS2_histotype_performance.csv", "なし"),

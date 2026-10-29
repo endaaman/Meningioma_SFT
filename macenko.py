@@ -336,6 +336,7 @@ def color(cfg: dict, out_dir: Path) -> None:
     import pandas as pd
     from paper_color import sample_indices, slide_color
     from utils.display import CONDITION_COLORS
+    from utils.loader import paper_dir
 
     mc, pc = cfg["macenko"], cfg["paper_color"]
     size = mc.get("patch_size", 512)
@@ -360,7 +361,7 @@ def color(cfg: dict, out_dir: Path) -> None:
     df = pd.DataFrame(rows)
     df.to_csv(out_dir / "slide_color.csv", index=False)
 
-    base = Path(cfg["output_dir"]) / "paper" / cfg["paper"]["version"] / "color" / "slide_color.csv"
+    base = paper_dir(cfg) / "color" / "slide_color.csv"
     metrics = [("L", "L* (lightness)"), ("a", "a* (green–red)"), ("b", "b* (blue–yellow)"), ("H", "Hematoxylin"), ("E", "Eosin")]
     if base.exists():
         df = pd.concat([pd.read_csv(base), df], ignore_index=True)
@@ -400,9 +401,11 @@ def color_distance(cfg: dict, out_dir: Path) -> None:
     from scipy.spatial.distance import cdist
     from scipy.stats import wasserstein_distance
 
+    from utils.loader import paper_dir
+
     reference: str = cfg["reference"]
     other = next(s for s in cfg["embedding"] if s != reference)
-    base = Path(cfg["output_dir"]) / "paper" / cfg["paper"]["version"] / "color" / "slide_color.csv"
+    base = paper_dir(cfg) / "color" / "slide_color.csv"
     df = pd.concat([pd.read_csv(base), pd.read_csv(out_dir / "slide_color.csv")], ignore_index=True)
     ref = df[df.group == reference]
     cols = ["L", "a", "b", "H", "E"]

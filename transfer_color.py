@@ -78,7 +78,7 @@ from affine import scale_free  # noqa: E402
 from paper_color import rgb_to_hed, rgb_to_lab, sample_indices, slide_color  # noqa: E402
 from paper_patches import read_patches  # noqa: E402
 from stain_response import _corr, regression, residualize  # noqa: E402
-from utils.loader import load_config  # noqa: E402
+from utils.loader import load_config, paper_dir  # noqa: E402
 
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
 FAMILY_LABEL = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "lymphoma": "Lymphoma",
@@ -386,7 +386,7 @@ def explained(proj: pd.DataFrame) -> pd.DataFrame:
 def acceptance(cfg: dict, df: pd.DataFrame, delta_norm: float) -> list[str]:
     lines = [f"- |Δ_paper| = {delta_norm:.4f}（stain_response の titan {EXPECTED_SHIFT_NORM}）"
              + (" OK" if abs(delta_norm - EXPECTED_SHIFT_NORM) < 1e-3 else " **NG**")]
-    ref = Path(cfg["output_dir"]) / "paper" / cfg["paper"]["version"] / "color" / "slide_color.csv"
+    ref = paper_dir(cfg) / "color" / "slide_color.csv"
     if not ref.exists():
         return lines + [f"- paper_color の slide_color.csv が無い（{ref}）"]
     pc = pd.read_csv(ref, dtype={"case_id": str})
@@ -396,7 +396,7 @@ def acceptance(cfg: dict, df: pd.DataFrame, delta_norm: float) -> list[str]:
     same = m[m["n_rejected"] == 0]
     diff = max(float((same[f] - same[f"{f}_ref"]).abs().max()) for f in COLOR5)
     px = int((same["n_pixels"] != same["n_pixels_ref"]).sum())
-    lines.append(f"- 髄膜腫+SFT コホートの色 vs paper_color.py（{ref.relative_to(cfg['output_dir'])}）: 突き合わせ {len(m)} 枚、"
+    lines.append(f"- 髄膜腫+SFT コホートの色 vs paper_color.py（{ref}）: 突き合わせ {len(m)} 枚、"
                  f"パッチを捨てなかった {len(same)} 枚で max |差| = {diff:.2e}、画素数の不一致 {px} 枚"
                  + (" OK" if diff < 1e-9 and px == 0 else " **NG**")
                  + f"（捨てたパッチがあるのは {int((m['n_rejected'] > 0).sum())} 枚）")

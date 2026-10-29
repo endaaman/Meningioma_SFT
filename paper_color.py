@@ -10,7 +10,7 @@
     CIELAB  … sRGB → 線形 RGB → XYZ（D65）→ L*a*b*
     H / E   … Ruifrok & Johnston の色分解（skimage.color.rgb2hed と同じ行列・同じ対数変換）
 
-出力 (output_dir/paper/{version}/color/):
+出力 (paper.dir/{version}/color/):
     slide_color.csv   — group, site, case_id, n_patches, n_pixels, L, a, b, H, E
     color_dist.png    — 群ごとの分布（L*, a*, b*, H, E）
 
@@ -29,7 +29,7 @@ import pandas as pd
 
 from paper_patches import load_subtypes, load_wsi_index, read_patches
 from utils.display import CONDITION_COLORS
-from utils.loader import load_config
+from utils.loader import load_config, paper_dir
 
 
 # ── 色空間（skimage と同じ定義）──────────────────────────────────────────────────
@@ -81,7 +81,7 @@ def main() -> None:
     pc = cfg["paper_color"]
     n, stride, thr, seed = pc.get("n_patches", 32), pc.get("stride", 4), pc.get("white_thr", 220), pc.get("seed", 42)
     size = cfg["gan"]["patch_size"]
-    out_dir = Path(cfg["output_dir"]) / "paper" / cfg["paper"]["version"] / "color"
+    out_dir = paper_dir(cfg) / "color"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     reference = cfg["reference"]
