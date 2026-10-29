@@ -110,6 +110,11 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
                                       施設の見分けやすさ（group_gap_sd・knn_mix）・ベンチ
     correction_{encoder}.png          a: residual_norm、b: asw_site、c: group_gap_sd、d: knn_mix（当て先ごとのヒートマップ、行 = 推定元、
                                       列 = 法）、e: paper のベンチ
+    structure/{encoder}/{target}/{source}__{method}/euc_mean_raw_groups.csv / euc_mean_raw.npz
+                                      pairs_adjacent の元になった施設 × 群の平均の樹形図（群情報・距離行列 D・Ward の連結 Z。
+                                      dendrogram.save_raw と同じ形式 = out/dendrogram/{variant}/ と同じファイル）。pairs_adjacent を
+                                      出す当て先（paper / glioma / all）× 評価した推定元 × 法。source = none は各 method に同じものを置く
+                                      （CSV と同じ）。figs/transfer_structure_preview.py が読む
     embeddings_{encoder}.npy / embeddings_{encoder}_slides.csv   埋め込みのキャッシュ
 
 Usage:
@@ -137,7 +142,7 @@ np.int = int  # neuroCombat が numpy の旧い別名（np.int）を使うため
 from neuroCombat import neuroCombat, neuroCombatFromTraining  # noqa: E402
 
 from affine import scale_free  # noqa: E402
-from dendrogram import group_means, pair_stats, raw_distance, ward_linkage  # noqa: E402
+from dendrogram import group_means, pair_stats, raw_distance, save_raw, ward_linkage  # noqa: E402
 from harmonization import _reduce, _site_values  # noqa: E402
 from histotype_labels import apply_set  # noqa: E402
 from method_compare import shape_metrics  # noqa: E402
@@ -345,22 +350,29 @@ def nc_ba(Y: np.ndarray, st: np.ndarray, y: np.ndarray, classes: list, tr: str, 
     return float(balanced_accuracy_score(true, pred))
 
 
-def pairs(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, cfg: dict) -> dict:
+def pairs(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, cfg: dict, save_to: list[Path] = ()) -> dict:
+    """pairs_adjacent。save_to の各ディレクトリに樹形図の元（群情報・D・Z、dendrogram.save_raw）を保存する。"""
     df = pd.DataFrame({"source": st, "subtype": lab, "embedding": list(Y)})
     g = group_means(df, cfg)
     D = raw_distance(g)
-    ps = pair_stats(D, ward_linkage(D), g)
+    Z = ward_linkage(D)
+    for d in save_to:
+        with contextlib.redirect_stdout(io.StringIO()):
+            save_raw(g, D, Z, d)
+    ps = pair_stats(D, Z, g)
     return {"pairs_adjacent": ps["adjacent_pairs"], "pairs_n": ps["n_subtypes"]}
 
 
-def evaluate(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, target: str, cfg: dict, ctx: dict) -> dict:
+def evaluate(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, target: str, cfg: dict, ctx: dict,
+             save_to: list[Path] = ()) -> dict:
+    """当て先の指標。save_to は pairs に渡す（樹形図の元の保存先。pairs を出す当て先だけで効く）。"""
     ref, oth = ctx["ref"], ctx["oth"]
     e, p = st == ref, st != ref
     asw, ilisi = _site_values(_reduce(Y, ctx["pca_n"]), st, ctx["lisi_k"])
     out = {"residual_norm": float(np.linalg.norm(Y[e].mean(0) - Y[p].mean(0))), "asw_site": asw, "ilisi_site": ilisi}
     if target in ("paper", "glioma", "all"):
         out["distortion"], out["distortion_n_groups"] = distortion(Y, st, lab, ref, ctx["min_n"])
-        out.update(pairs(Y, st, lab, cfg))
+        out.update(pairs(Y, st, lab, cfg, save_to))
     if target == "paper":
         out.update(shape_metrics(pd.DataFrame({"source": st, "subtype": lab, "embedding": list(Y)}), cfg))
         cls = ctx["histotype_classes"]
@@ -776,6 +788,7 @@ def main() -> None:
     targets = ccfg.get("targets", TARGETS)
     out_dir = Path(cfg["output_dir"]) / "transfer"
     out_dir.mkdir(parents=True, exist_ok=True)
+    struct_dir = out_dir / "structure" / args.encoder   # 樹形図の元（{target}/{source}__{method}/）
     ref = cfg["reference"]
 
     print(f"[transfer_correction / {args.encoder}]")
@@ -808,7 +821,7 @@ def main() -> None:
         tm = np.isin(fam, list(TARGET_FAMILIES[target]))
         Xt, st, lab = X[tm], site[tm], target_labels(man[tm], target)
         base = {"encoder": args.encoder, "target": target, "n_ebrains": int((st == ref).sum()), "n_patho2": int((st != ref).sum())}
-        m0 = evaluate(Xt, st, lab, target, cfg, ctx)
+        m0 = evaluate(Xt, st, lab, target, cfg, ctx, [struct_dir / target / f"none__{m}" for m in methods])
         x0, g0 = site_mixing(Xt, st, lab, ref, cfg)
         if "pairs_n" in m0 and len(g0) != m0["pairs_n"]:
             raise SystemExit(f"[{target}] site_mixing の群（{len(g0)}）が pairs_adjacent の群（{m0['pairs_n']}）と合わない")
@@ -846,7 +859,7 @@ def main() -> None:
                 if source == "own" and target == "paper":
                     own_paper[method] = (Y[st != ref], man.loc[tm, "slide_id"].to_numpy()[st != ref].tolist())
                 mx, gx = site_mixing(Y, st, lab, ref, cfg)
-                m = {**evaluate(Y, st, lab, target, cfg, ctx), **par, **mx}
+                m = {**evaluate(Y, st, lab, target, cfg, ctx, [struct_dir / target / f"{source}__{method}"]), **par, **mx}
                 rows += [{**base, "method": method, "source": source, "metric": k, "value": v,
                           "n_src_ebrains": fit["n_e"], "n_src_patho2": fit["n_p"]} for k, v in m.items()]
                 group_rows += _group_rows(args.encoder, method, source, target, gx)
@@ -868,6 +881,8 @@ def main() -> None:
     gcsv = out_dir / f"correction_{args.encoder}_groups.csv"
     gres.to_csv(gcsv, index=False)
     print(f"  saved: {gcsv}")
+    print(f"  saved: {struct_dir}/{{target}}/{{source}}__{{method}}/euc_mean_raw_groups.csv / euc_mean_raw.npz"
+          f"  ({len(list(struct_dir.glob('*/*/euc_mean_raw.npz')))} dirs)")
 
     acc = acceptance(res, cfg, own_paper, args.encoder)
     print("\n[acceptance: target = paper, source = own / none vs paper outputs]")

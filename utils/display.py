@@ -55,6 +55,10 @@ ENCODER_MARKERS = {"meanpool": "s", "titan": "o", "meanpool_virchow": "^", "pris
 # 腫瘍の科（転移テストの 5 科。コード上の名前は shift_transfer / transfer_correction の family のまま）
 FAMILY_LABELS = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "lymphoma": "DLBCL", "metastasis": "Metastasis"}
 FAMILY_LABELS_JA = {"meningioma": "髄膜腫", "SFT": "SFT", "glioma": "グリオーマ", "lymphoma": "DLBCL", "metastasis": "転移"}
+# 転移テストの当て先 グリオーマの 3 群（manifest の group）。表示名は config の shift_transfer.group_names と同じ。
+# 色は髄膜腫サブタイプの色（config の display.colors.subtypes、tab20 から）に無い 3 色（figs/transfer_structure_preview.py）
+GLIOMA_GROUP_LABELS = {"ast": "Astrocytoma, IDH-mutant", "glm": "Glioblastoma, IDH-wildtype", "odg": "Oligodendroglioma"}
+GLIOMA_GROUP_COLORS = {"ast": "#17becf", "glm": "#bcbd22", "odg": "#7b4173"}
 
 
 def order_conditions(variants) -> list[str]:
