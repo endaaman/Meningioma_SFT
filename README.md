@@ -55,6 +55,8 @@ figs/                # 論文の図表を out/ の解析結果から組み立て
   subtype_distance_heatmap.py / sft_distance.py / histotype.py / shift_sample_size.py  # Supplementary の図
   performance.py / histotype_performance.py / method_comparison.py / meanpool_comparison.py / stat6_groups.py  # Supplementary の表
   meanpool_geometry.py  # 参考用（登録していない。figs.all では作らない）
+  transfer_structure_preview.py  # プレビュー（登録していない）: 転移テストの「対の再構成」樹形図（TITAN、平行移動、段 = Δ の推定元）→ paper/v4/fig/_preview_transfer_structure.*。transfer_correction.py の後に uv run python -m figs.transfer_structure_preview
+  slides_asno.py     # ASNO 発表用のスライド（登録していない。16:9・英語、補正なし / GAN / 平行移動の 3 条件だけ、v3 の Fig 2・3・5 と同じ入力を読むだけ）→ paper/share/asno/（01 施設差の UMAP、02a/b GAN のパッチと色、03 3 条件の UMAP と施設差、04 対の回復の樹形図、05 まとめ。発表者向けの README.md は手書き）。uv run python -m figs.slides_asno
   all.py             # 自分の出力を掃除してから全部作る
 utils/
   loader.py          # load_config / load_data（各スクリプトが共通利用）
