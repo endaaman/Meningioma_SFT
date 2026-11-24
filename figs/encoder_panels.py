@@ -5,11 +5,12 @@ a 基礎精度（施設内の 5 分割交差検証の balanced accuracy、患者
   グリオーマ 3 群、5 つの腫瘍）、施設ごとに 1 枚
 b ずれの向き。横軸 = エンコーダ、縦軸 = 髄膜腫だけのずれとの cos（生の値）、点 = 12 群（色 = 腫瘍）
 c 隣り合う組の数（平行移動）。当て先ごとに 1 枚（髄膜腫 12 組 / グリオーマ 3 組）、3 本（補正なし / 借りる / 同じ腫瘍で推定）
-d 施設差の相対的な大きさ（‖Δ‖ ÷ 院内の施設内の広がり。encoder_comparison.py の値で、ずれは髄膜腫 + SFT コホートのもの）と、
+d 施設差の相対的な大きさ（‖Δ_meni‖ ÷ 院内の髄膜腫の施設内の広がり（群内 RMS）。encoder_comparison.py --reference meningioma の値で、
+  ずれは髄膜腫だけのもの。Fig 3 の基準と同じ）と、
   借りたときに中心の差が残る割合（‖残差‖ ÷ 補正なしの ‖残差‖、グリオーマ ← 髄膜腫 / 髄膜腫 ← グリオーマ）
 
 入力: output_dir/encoder_baseline/baseline.csv、output_dir/shift_transfer/{,meanpool/,prism/,meanpool_virchow/}groups.csv、
-      output_dir/transfer/correction_{encoder}.csv、output_dir/encoder_comparison/comparison.csv
+      output_dir/transfer/correction_{encoder}.csv、output_dir/encoder_comparison/reference_meningioma/site_gap.csv
 出力: fig/{fig n}_encoder_panels.{png,pdf}、同 _values.csv
 
 Usage:
@@ -21,6 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 from figs import label
 from figs.common import FONT, config, fig_path, out_root, panel, save
@@ -59,8 +61,9 @@ def main() -> None:
         if k == 0:
             ax.set_ylabel("Balanced accuracy")
             panel(ax, "a", x=-0.3, y=1.04)
-    fig.legend(handles=[Line2D([], [], marker="s", ls="", color=ENCODER_COLORS[e], label=ENCODER_LABELS[e]) for e in ENCODER_ORDER],
-               loc="upper center", ncol=nenc, frameon=False, fontsize=FONT - 1, bbox_to_anchor=(0.5, 1.0))
+    fig.legend(handles=[Patch(color=ENCODER_COLORS[e], label=ENCODER_LABELS[e]) for e in ENCODER_ORDER],
+               loc="upper center", ncol=nenc, frameon=False, fontsize=FONT - 1, bbox_to_anchor=(0.5, 1.0),
+               handlelength=1.0, handleheight=0.8, handletextpad=0.5, columnspacing=1.6)
 
     # b
     ax = fig.add_subplot(gs[0, 3:])
@@ -107,9 +110,8 @@ def main() -> None:
 
     # d
     ax = fig.add_subplot(gs[1, 3:])
-    comp = pd.read_csv(out / "encoder_comparison" / "comparison.csv")
-    row = comp[comp["metric"].astype(str).str.startswith("施設差の相対的な大きさ")].iloc[0]
-    rel = {e: float(row[f"{e}_value"]) for e in ENCODER_ORDER}   # comparison.csv の数値の列 <encoder>_value
+    sg = pd.read_csv(out / "encoder_comparison" / "reference_meningioma" / "site_gap.csv").set_index("encoder")
+    rel = {e: float(sg.loc[e, "ratio"]) for e in ENCODER_ORDER}   # 髄膜腫だけのずれ ÷ 院内の髄膜腫の群内 RMS
     resid = {}
     for enc in ENCODER_ORDER:
         c = pd.read_csv(out / "transfer" / f"correction_{enc}.csv")
@@ -117,7 +119,7 @@ def main() -> None:
         f = lambda t, s: float(c[(c["target"] == t) & (c["source"] == s)]["value"].iloc[0])  # noqa: E731
         resid[enc] = (f("glioma", "meningioma") / f("glioma", "none"), f("meningioma", "glioma") / f("meningioma", "none"))
     x = np.arange(nenc)
-    ax.bar(x - 0.27, [rel[e] for e in ENCODER_ORDER], width=0.25, color="#555555", label="‖Δ‖ / within-site spread")
+    ax.bar(x - 0.27, [rel[e] for e in ENCODER_ORDER], width=0.25, color="#555555", label="‖Δ meningioma‖ / within-site spread")
     ax.bar(x, [resid[e][0] for e in ENCODER_ORDER], width=0.25, color="#9ecae1", label="Residual left, glioma ← meningioma")
     ax.bar(x + 0.27, [resid[e][1] for e in ENCODER_ORDER], width=0.25, color="#3182bd", label="Residual left, meningioma ← glioma")
     for e in ENCODER_ORDER:

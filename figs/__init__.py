@@ -60,7 +60,7 @@ V4_MAIN = [
     "meningioma_scaffold",     # Fig 2 髄膜腫で足場（パッチ / UMAP / 補正法の比較 / 樹形図。髄膜腫だけ、12 組）
     "tumour_shift_arrows",     # Fig 3 12 群の施設のずれは同じ 1 本（矢印 / 群ごとの cos。基準は髄膜腫だけのずれ）
     "transfer_structure",      # Fig 4 構造が移る（主役）: 樹形図（髄膜腫 12 組・グリオーマ 3 組）/ 推定元ごとの組の数 / 鑑別の腫瘍
-    "why_translation",         # Fig 5 なぜ平行移動だけか（ken の返事待ち。スクリプト無し = all で飛ばす。素材は why_translation_preview）
+    "borrowed_scaling",        # Fig 5 倍率を含む補正を借りると何が動くか（観察として。優劣を言わない、ken 2026-11-24）
     "encoder_panels",          # Fig 6 エンコーダで共通なこと、違うこと
     "glioma_retrieval",        # Fig 7 出口: グリオーマの参照コホートへの診断名の検索
 ]
@@ -69,6 +69,7 @@ V4_TABLES = [
 ]
 V4_SUPP = [
     "shift_mismatch",          # Fig 3c を移した: 腫瘍を食い違わせた対照（5 × 5、髄膜腫だけのずれとの cos）
+    "combat_recentred",        # Fig 5 の対照: 借りた ComBat の中心を当て先で取り直す
 ]
 V4_SUPP_TABLES = [
     "meningioma_subtype_counts",   # 髄膜腫のサブタイプ別の枚数と患者数（Table 1 から分けた）

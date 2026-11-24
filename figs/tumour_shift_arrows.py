@@ -9,6 +9,7 @@ b 群ごとの cos（髄膜腫だけのずれとの。髄膜腫のサブタイ�
 
 入力: output_dir/shift_transfer/reference_meningioma/arrows.csv（shift_transfer.py --reference meningioma）、
       output_dir/shift_transfer/groups.csv（cos_vs_meni / cos_lo_vs_meni / cos_hi_vs_meni / cos_corrected_vs_meni）
+      （区間 lo / hi は生の cos のブートストラップの区間。雑音を差し引いた値 cos_corrected は区間を持たない）
 出力: fig/{fig n}_tumour_shift_arrows.{png,pdf}
 
 Usage:
@@ -94,9 +95,12 @@ def main() -> None:
     axb.axvline(1, color="0.8", lw=0.6)
     axb.set_xlabel("cos with the meningioma site shift")
     axb.spines[["top", "right"]].set_visible(False)
-    axb.legend(handles=[Line2D([], [], marker="o", ls="", color="0.3", label="raw (95% CI)"),
-                        Line2D([], [], marker="o", ls="", markerfacecolor="white", color="0.3", label="noise-corrected")],
-               fontsize=FONT - 2, loc="lower left", frameon=False)
+    # 区間は生の cos のブートストラップ（施設内のスライドを再抽出）の 95% 区間。雑音を差し引いた値は別の推定量（推定の雑音で
+    # 縮んだ長さを補正した cos）で区間を持たないので、区間の外に出ることがある（Microcystic・Angiomatous）。凡例でそう書く
+    axb.legend(handles=[Line2D([], [], marker="o", ls="-", lw=1.2, color="0.3", label="raw cos\n(line: 95% bootstrap CI)"),
+                        Line2D([], [], marker="o", ls="", markerfacecolor="white", color="0.3",
+                               label="noise-corrected cos\n(point estimate, no CI)")],
+               fontsize=FONT - 2.5, loc="upper left", frameon=False, labelspacing=0.8)
     panel(axb, "b", x=-0.62, y=1.02)
     save(fig, cfg, NAME)
     print(f"  12 groups: in-plane angle {a2.mean():.2f} ± {a2.std(ddof=1):.2f}, length {l2.mean():.2f} ± {l2.std(ddof=1):.2f}; "

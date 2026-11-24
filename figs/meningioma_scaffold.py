@@ -22,6 +22,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 
 import dendrogram
 from figs import label, tissue
@@ -49,6 +50,8 @@ def site_legend(handles: list) -> list:
             h.set_label("In-house")
         if isinstance(h, Line2D) and h.get_marker() not in (None, "None", "none", ""):
             h.set_markersize(5)
+        if isinstance(h, Rectangle):   # 破線の四角: 線が太いと小さい凡例で 2 本の太線に潰れるので、図の四角（frame_lw）と同じ太さに
+            h.set_linewidth(0.7)
     return handles
 
 
@@ -84,6 +87,10 @@ def main() -> None:
         ax = fig.add_subplot(cgs[k, 0])
         ys = [float(summ.loc[c, metric]) for c in CONDITIONS_FIG3]
         ax.bar(x, ys, color=[CONDITION_COLORS[c] for c in CONDITIONS_FIG3], width=0.7)
+        top = max(ys)
+        for xi, y, c in zip(x, ys, CONDITIONS_FIG3):
+            if y < 0.03 * top:   # 0 に近くて棒が見えない条件（ComBat・平行移動）は、0 の位置に条件の色の短い線を引く
+                ax.plot([xi - 0.35, xi + 0.35], [0, 0], color=CONDITION_COLORS[c], lw=2.5, solid_capstyle="butt", clip_on=False, zorder=3)
         for xi, y in zip(x, ys):
             ax.text(xi, y, f"{y:.0f}" if metric == "pairs_adjacent" else (f"{y:.2f}" if metric == "site_shift_norm" else f"{y:.3f}"),
                     ha="center", va="bottom", fontsize=FONT - 3)
@@ -128,7 +135,7 @@ def main() -> None:
     ax_l = fig.add_axes([0.08, 0.015, 0.90, 0.04])
     ax_l.axis("off")
     ax_l.legend(handles=site_legend(legend_handles(data[TREE_CONDS[-1]][0], cfg)), loc="center", ncol=8, frameon=False,
-                fontsize=FONT - 2, handlelength=1.2, handletextpad=0.4, columnspacing=0.9)
+                fontsize=FONT - 2, handlelength=1.6, handletextpad=0.4, columnspacing=0.9)
     panel_fig(fig, 0.005, 0.37, "d")
     save(fig, cfg, NAME)
     print(summ.loc[CONDITIONS_FIG3 + ["affine_free"], ["site_shift_norm", "asw_site", "pairs_adjacent", "group_gap_sd", "knn_mix"]].round(3).to_string())

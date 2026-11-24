@@ -63,8 +63,12 @@
                             右下にエンコーダごとの ‖Δ_paper‖ / 群内 RMS）/ c ばらつきの比: 科をまたぐ相関 vs 2 科の再現性の
                             幾何平均（対角線 = 完全に共有）/ d 参照コホートへの診断名の検索の top-1（出力のあるエンコーダだけ）
 
+    reference_meningioma/site_gap.csv  --reference meningioma のときだけ（ほかの出力は書かない）。施設差の相対的な大きさを、
+                            基準を髄膜腫だけのずれ（‖Δ_meni‖ / 院内の髄膜腫の群内 RMS）にして出し直したもの。列: encoder, ratio,
+                            shift_norm, rms, n_patho2, par_<科>, orth_<科>（v4 Fig 6d）
+
 Usage:
-    uv run python encoder_comparison.py
+    uv run python encoder_comparison.py [--reference paper|meningioma]
 """
 from __future__ import annotations
 
@@ -97,6 +101,7 @@ ATLAS_CHAIN = ["none", "paper", "family"]
 SS = dict(source="paper", variant="patho2", target="glioma", n_mid=20)
 PAPER_FAMILIES = ("meningioma", "SFT")                         # 髄膜腫+SFT コホート（施設差の大きさの Δ_paper と群内 RMS）
 ST_REF = "Paper cohort"                                        # shift_transfer.py の REF = groups.csv の group 列の値（髄膜腫+SFT コホートの行）。表示には使わない
+ST_MENI = "Meningioma (all)"                                   # 同じく髄膜腫だけ（SFT を除く）の行（--reference meningioma の確認）
 MANIFEST = "transfer/manifest.csv"                              # config の transfer.manifest の既定（transfer_correction.py と同じ）
 SRC_JA = {"paper": "髄膜腫+SFT コホート", "own": "own", "none": "補正なし", "others": "others（まとめ）",
           "others_mean": "others_mean（科ごと平均）", **FAMILY_LABELS_JA}
@@ -334,11 +339,12 @@ def reach_n(c: pd.DataFrame, full: float) -> Val:
     return float(n), f"{n}" + ("（全枚数）" if first == len(ok) - 1 else "")
 
 
-def site_gap(X, ids: pd.DataFrame, man: pd.DataFrame, ref: str) -> dict:
+def site_gap(X, ids: pd.DataFrame, man: pd.DataFrame, ref: str, ref_families: tuple[str, ...] = PAPER_FAMILIES) -> dict:
     """施設差の大きさ（docstring の 1 幾何の先頭）。X は転移テストの埋め込みのキャッシュ（manifest の並び）。
 
     返り値: dp_norm = ‖Δ_paper‖、rms = 群内 RMS（施設 ref でない側の髄膜腫+SFT コホート）、ratio = ‖Δ_paper‖ / rms、
-    par / orth = 科ごとの Δ_f の平行成分・直交成分 / rms。並びが manifest と合わなければ ValueError（その列は空欄）。"""
+    par / orth = 科ごとの Δ_f の平行成分・直交成分 / rms。並びが manifest と合わなければ ValueError（その列は空欄）。
+    ref_families = 基準のずれと群内 RMS を取る科（既定 = 髄膜腫+SFT コホート。--reference meningioma では ("meningioma",)）。"""
     key = ["site", "slide_id"]
     if len(X) != len(man) or not ids[key].reset_index(drop=True).equals(man[key].reset_index(drop=True)):
         idx = align_rows(ids, man) if len(X) == len(ids) else None   # 症例の表で院内を減らした manifest はキャッシュの行を引く
@@ -356,7 +362,7 @@ def site_gap(X, ids: pd.DataFrame, man: pd.DataFrame, ref: str) -> dict:
         if not (m & e).any() or not (m & p).any():
             raise ValueError("片方の施設にスライドが無い群がある")
         return X[m & e].mean(0) - X[m & p].mean(0)
-    paper = np.isin(fam, PAPER_FAMILIES)
+    paper = np.isin(fam, ref_families)
     dp = delta(paper)
     P = X[paper & p]
     rms = float(np.sqrt(np.mean(np.sum((P - P.mean(0)) ** 2, axis=1))))
@@ -892,7 +898,37 @@ def plot(path: Path, inputs: dict[str, Inputs], gap: dict[str, dict | None]) -> 
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+def site_gap_meningioma(inputs: dict, cfg: dict, out_dir: Path) -> pd.DataFrame:
+    """--reference meningioma: 施設差の相対的な大きさを、基準を髄膜腫だけのずれにして計算し reference_meningioma/site_gap.csv に書く。
+    ‖Δ_meni‖ が shift_transfer の groups.csv の髄膜腫だけの行（ST_MENI）と同じかを確かめる。"""
+    rows = []
+    for e in ENCODER_ORDER:
+        d = inputs[e].data
+        if any(d.get(k) is None for k in ("emb_all", "emb_ids", "manifest")):
+            print(f"  [{e}] 入力が無いので空欄")
+            continue
+        g = site_gap(d["emb_all"], d["emb_ids"], d["manifest"], cfg["reference"], ("meningioma",))
+        grp = d.get("groups")
+        if grp is not None:
+            ref_norm = float(_group(grp, ST_MENI)["shift_norm"])
+            assert np.isclose(g["dp_norm"], ref_norm, rtol=1e-5, atol=0), (e, g["dp_norm"], ref_norm)
+        rows.append({"encoder": e, "ratio": g["ratio"], "shift_norm": g["dp_norm"], "rms": g["rms"], "n_patho2": g["n_paper_p"],
+                     **{f"par_{f}": g["par"][f] for f in FAMILIES}, **{f"orth_{f}": g["orth"][f] for f in FAMILIES}})
+    df = pd.DataFrame(rows)
+    rdir = out_dir / "reference_meningioma"
+    rdir.mkdir(parents=True, exist_ok=True)
+    df.to_csv(rdir / "site_gap.csv", index=False)
+    print(df[["encoder", "ratio", "shift_norm", "rms", "n_patho2"]].round(3).to_string(index=False))
+    print(f"saved: {rdir}/site_gap.csv")
+    return df
+
+
 def main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--reference", choices=["paper", "meningioma"], default="paper",
+                    help="paper = 今までの表と図（既定）、meningioma = 施設差の相対的な大きさだけを髄膜腫だけのずれで出し直す")
+    args = ap.parse_args()
     cfg = load_config()
     out = Path(cfg["output_dir"])
     out_dir = out / "encoder_comparison"
@@ -902,6 +938,9 @@ def main() -> None:
     for e in ENCODER_ORDER:
         miss = inputs[e].missing
         print(f"[{e}] 入力 {len(inputs[e].data) - len(miss)}/{len(inputs[e].data)}" + (f"、無い: {', '.join(INPUT_LABELS.get(n, n) for n in miss)}" if miss else ""))
+    if args.reference == "meningioma":
+        site_gap_meningioma(inputs, cfg, out_dir)
+        return
 
     T = Table(inputs)
     block_reference(T, cfg)

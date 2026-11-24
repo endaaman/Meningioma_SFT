@@ -181,7 +181,8 @@ def figure(cfg: dict) -> tuple[plt.Figure, pd.DataFrame, pd.DataFrame]:
         for x, pname in enumerate(pairs):
             d = dv[dv["pair"] == pname].set_index("condition")
             y0, y1 = d.loc["none", metric], d.loc["borrowed", metric]
-            ax.annotate("", xy=(x, y1), xytext=(x, y0), arrowprops=dict(arrowstyle="-|>", color="#2a78d6", lw=2.2, mutation_scale=22))
+            ax.annotate("", xy=(x, y1), xytext=(x, y0), arrowprops=dict(arrowstyle="-|>", color="#2a78d6", lw=2.2, mutation_scale=22,
+                                                                               shrinkA=9, shrinkB=9))   # 点（s=160）の縁で止める
             ax.scatter([x], [y0], s=160, color="#a3a29b", zorder=3, label="No correction" if x == 0 else None)
             ax.scatter([x], [y1], s=160, color="#2a78d6", zorder=3, label="Δ borrowed" if x == 0 else None)
             if metric == "group_gap_sd" and np.isfinite(d.loc["none", "floor"]) and pname.startswith("SFT"):

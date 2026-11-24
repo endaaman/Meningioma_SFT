@@ -37,6 +37,7 @@
     arrows.csv / arrows.png — 平行四辺形の図（2 次元の座標・矢印の角度と長さ・Δ_paper からの残差。1 行目は髄膜腫+SFT コホート自身）
     mismatch_matrix.csv / mismatch_matrix.png — 科を食い違わせた差の cos（観測と予想、補正前 / 補正後）
     composition.csv    — 組成の感度（変種ごとの cos。CI はスライド単位と患者単位の両方。乱数は compute と別の列）
+    reference_meningioma/{arrows,mismatch_matrix}.{csv,png}, bio_control.csv — --reference meningioma のときだけ。基準を髄膜腫だけのずれにした矢印・食い違いの行列・腫瘍どうしの差の軸との cos（列 cos_vs_shift_meningioma）
     paper_slides.csv / paper_embeddings.npy / glioma_slides.csv / glioma_embeddings.npy — 読み込んだ埋め込みのキャッシュ（--reload で読み直す）
     extra_slides.csv / extra_embeddings.npy — 組成の感度に使う EBRAINS の IDH 野生型（退形成性）星細胞腫のキャッシュ
 
@@ -467,11 +468,14 @@ def _family_frames(paper: pd.DataFrame, glioma: pd.DataFrame) -> dict[str, pd.Da
     }
 
 
-def bio_control(paper: pd.DataFrame, glioma: pd.DataFrame, groups: list[dict]) -> pd.DataFrame:
-    """施設内の科どうしの差の向きと、施設間シフト（Δ_paper・Δ_glioma）の cos。両施設での向きの一致も。"""
+def bio_control(paper: pd.DataFrame, glioma: pd.DataFrame, groups: list[dict], ref_name: str = REF) -> pd.DataFrame:
+    """施設内の科どうしの差の向きと、施設間シフト（Δ_paper・Δ_glioma）の cos。両施設での向きの一致も。
+    ref_name = MENI（--reference meningioma）のときは基準を髄膜腫だけのずれにし、列 cos_vs_shift_paper の代わりに
+    cos_vs_shift_meningioma を書く（既定の出力は今までどおり）。"""
     fam_df = _family_frames(paper, glioma)
     means = {s: {f: np.stack(d.loc[d["source"] == s, "embedding"].values).mean(0) for f, d in fam_df.items() if (d["source"] == s).any()} for s in SITES}
-    d_paper = next(g["delta"] for g in groups if g["name"] == REF)
+    d_paper = next(g["delta"] for g in groups if g["name"] == ref_name)
+    ref_col = "cos_vs_shift_paper" if ref_name == REF else "cos_vs_shift_meningioma"
     d_glioma = next(g["delta"] for g in groups if g["name"] == GLIOMA_ALL)
     axes = [("glioma", "meningioma"), ("lymphoma", "meningioma"), ("metastasis", "meningioma"), ("SFT", "meningioma"),
             ("metastasis", "glioma"), ("lymphoma", "glioma")]
@@ -482,7 +486,7 @@ def bio_control(paper: pd.DataFrame, glioma: pd.DataFrame, groups: list[dict]) -
             continue
         for s, v in vec.items():
             rows.append(dict(axis=f"{a} − {b}", site=s, norm=float(np.linalg.norm(v)),
-                             cos_vs_shift_paper=_cos(v, d_paper), cos_vs_shift_glioma=_cos(v, d_glioma),
+                             **{ref_col: _cos(v, d_paper)}, cos_vs_shift_glioma=_cos(v, d_glioma),
                              cos_between_sites=_cos(vec["ebrains"], vec["patho2"])))
     return pd.DataFrame(rows)
 
@@ -801,7 +805,7 @@ def main() -> None:
                     help="groups.csv の CI の再抽出の単位。patients は施設・群ごとに患者を再抽出し groups_patients.csv に書く（groups.csv は上書きしない）")
     ap.add_argument("--reference", choices=["paper", "meningioma"], default="paper",
                     help="矢印の図と食い違わせた対照の基準のずれ。paper = 髄膜腫+SFT コホート（既定、今までの出力）、meningioma = 髄膜腫だけ"
-                         "（v4。arrows.* と mismatch_matrix.* だけを <出力先>/reference_meningioma/ に書き、ほかの出力は書かない）")
+                         "（v4。arrows.*・mismatch_matrix.*・bio_control.csv だけを <出力先>/reference_meningioma/ に書き、ほかの出力は書かない）")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -843,6 +847,9 @@ def main() -> None:
                     u=arr_summary["paper_norm"] / ARROWS_UNIT_TITAN if args.encoder in SWAP_PAPER else 1.0, ref_label=MENI)
         mm.to_csv(rdir / "mismatch_matrix.csv", index=False)
         plot_mismatch(mm, rdir / "mismatch_matrix.png", tag)
+        bio = bio_control(paper, glioma, groups, MENI)
+        bio.to_csv(rdir / "bio_control.csv", index=False)
+        print(f"   bio_control: max |cos(腫瘍どうしの差の軸, {MENI} のずれ)| = {bio['cos_vs_shift_meningioma'].abs().max():.3f}")
         for k in ("angle_2d_deg", "length_2d", "angle_vs_paper_deg", "angle_corrected_vs_paper_deg", "shift_norm"):
             m, sd = arr_summary[k]
             print(f"   {k:32s} {m:7.3f} ± {sd:.3f}  (vs {MENI})")
