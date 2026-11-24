@@ -15,7 +15,8 @@
     transfer_meanpool.py build --source virchow のキャッシュ（out/transfer/embeddings_meanpool_virchow.npy ＋ _ids.csv）を読むだけ。
 
 科（manifest の family）: meningioma / SFT / glioma（ast・glm・odg）/ lymphoma / metastasis。
-当て先: paper（髄膜腫 + SFT。論文のベンチが使える）/ glioma / lymphoma / metastasis / all（5 科全部）。
+当て先: paper（髄膜腫 + SFT。論文のベンチが使える。v3 の定義）/ meningioma（髄膜腫だけ。SFT の葉を入れない。v4 の定義、ken 2026-11-24）/
+        glioma / lymphoma / metastasis / all（5 科全部）。使う当て先は config の transfer.correction.targets。
 推定元: none（補正なし）/ own（当て先自身 = 上限）/ paper / meningioma / SFT / glioma / lymphoma / metastasis /
         others（当て先の科以外の全部をまとめて 1 回で当てはめ）/
         others_mean（others と同じ科を科ごとに別々に当てはめ、パラメータを科ごとに等しい重みで平均。下の「others_mean」）。
@@ -62,7 +63,8 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
     asw_site       施設ラベルのシルエット係数（harmonization.py と同じ: PCA centroid.pca_n_components 次元 → silhouette。
                    harmonization._reduce / _site_values をそのまま使う）。ilisi_site も同じ関数から（k = harmonization.lisi_k）
     distortion     群の平均どうしの距離の比 d_patho2'(a, b) / d_ebrains(a, b) の群の組についての平均（1 = 歪みなし）。
-                   群は当て先の両施設で min_n 例以上: paper = 髄膜腫サブタイプ + SFT、glioma = ast / glm / odg、all = 5 科
+                   群は当て先の両施設で min_n 例以上: paper = 髄膜腫サブタイプ + SFT、meningioma = 髄膜腫サブタイプ、
+                   glioma = ast / glm / odg、all = 5 科
     scale / shift_norm  推定元で当てはめたパラメータ（affine_free: s、combat / combat_recentred: 次元ごとの倍率 1/√δ* の
                    中央値、centroid: ‖μ_E − μ_P‖。others_mean は平均した s・k・Δ）
     施設の見分けやすさ（査読者に一目で伝わる 2 指標。site_mixing。どちらも群ごとに計算して群の中央値、全次元・ユークリッド距離）:
@@ -74,7 +76,8 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
                    期待値 n_E,g / (n_E,g + n_P,g − 1) で割る（1 = 施設の見分けがつかない、0 = 近傍が全部 patho2）。
                    群が 11 枚以下（k = 群の枚数 − 1）の群は近傍が群の全部になるので定義で 1
       群 = pairs_adjacent と同じ集合（両施設に 1 枚以上ある群。dendrogram.group_means と同じ集合・並び）: paper = 髄膜腫
-      サブタイプ + SFT の 13 組、glioma = ast / glm / odg、all = 5 科、lymphoma / metastasis は 1 群。
+      サブタイプ + SFT の 13 組、meningioma = 髄膜腫サブタイプの 12 組、glioma = ast / glm / odg、all = 5 科、
+      lymphoma / metastasis は 1 群。
       correction_{encoder}.csv には群の中央値（metric group_gap_sd / knn_mix）、群ごとの値は correction_{encoder}_groups.csv。
       乱数は使わない（他の指標の値と乱数の消費順は変わらない）
     ベンチ:
@@ -84,6 +87,7 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
               nc_sft_ba_E2P / P2E（SFT vs 髄膜腫の最近傍重心法）、
               sft_men_dist_patho2 / sft_men_dist_ebrains / subtype_dist_mismatch（「通り越し」と組織型間距離の施設差。
               method_compare.shape_metrics をそのまま使う）
+      meningioma  pairs_adjacent（12 組。SFT の葉を入れない樹形図）、nc_histotype_ba_E2P / P2E（paper と同じクラス）
       glioma  nc_glioma3_ba_E2P / P2E（ast / glm / odg の最近傍重心法）、pairs_adjacent（3 組）
       all     nc_family5_ba_E2P / P2E（5 科の最近傍重心法）、pairs_adjacent（5 組）
     最近傍重心法は nc.py の点推定と同じ: 学習施設のクラス平均（nc._dist のユークリッド距離）で最も近いクラスに割り当て、
@@ -113,7 +117,7 @@ others_mean（others の構成の問題への対処）: 科の構成が施設で
     structure/{encoder}/{target}/{source}__{method}/euc_mean_raw_groups.csv / euc_mean_raw.npz
                                       pairs_adjacent の元になった施設 × 群の平均の樹形図（群情報・距離行列 D・Ward の連結 Z。
                                       dendrogram.save_raw と同じ形式 = out/dendrogram/{variant}/ と同じファイル）。pairs_adjacent を
-                                      出す当て先（paper / glioma / all）× 評価した推定元 × 法。source = none は各 method に同じものを置く
+                                      出す当て先（paper / meningioma / glioma / all）× 評価した推定元 × 法。source = none は各 method に同じものを置く
                                       （CSV と同じ）。figs/transfer_structure_preview.py が読む
     embeddings_{encoder}.npy / embeddings_{encoder}_slides.csv   埋め込みのキャッシュ
 
@@ -147,17 +151,19 @@ from harmonization import _reduce, _site_values  # noqa: E402
 from histotype_labels import apply_set  # noqa: E402
 from method_compare import shape_metrics  # noqa: E402
 from nc import _dist  # noqa: E402
+from utils.cohort import align_rows  # noqa: E402
 from utils.display import CONDITION_COLORS, CONDITION_LABELS_JA, CONDITION_LABELS_SHORT, ordered_subtypes  # noqa: E402
 from utils.loader import load_config, load_data  # noqa: E402
 
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
-TARGET_FAMILIES = {"paper": {"meningioma", "SFT"}, "glioma": {"glioma"}, "lymphoma": {"lymphoma"},
+TARGET_FAMILIES = {"paper": {"meningioma", "SFT"}, "meningioma": {"meningioma"}, "glioma": {"glioma"}, "lymphoma": {"lymphoma"},
                    "metastasis": {"metastasis"}, "all": set(FAMILIES)}
 NAMED_SOURCES = {"paper": {"meningioma", "SFT"}, "meningioma": {"meningioma"}, "SFT": {"SFT"}, "glioma": {"glioma"},
                  "lymphoma": {"lymphoma"}, "metastasis": {"metastasis"}}
 METHODS = ["centroid", "affine_free", "combat", "combat_recentred"]
 SOURCES = ["none", "own", "paper", "meningioma", "SFT", "glioma", "lymphoma", "metastasis", "others", "others_mean"]
-TARGETS = ["paper", "glioma", "lymphoma", "metastasis", "all"]
+TARGETS = ["paper", "meningioma", "glioma", "lymphoma", "metastasis", "all"]
+PAIR_TARGETS = ("paper", "meningioma", "glioma", "all")   # distortion・pairs_adjacent（樹形図）を出す当て先
 GLIOMA_GROUPS = ["ast", "glm", "odg"]
 KNN_K = 10                       # knn_mix の近傍の枚数（群の枚数 − 1 を超えない）
 MIX_METRICS = ["group_gap_sd", "knn_mix"]                                        # correction_{encoder}.csv（群の中央値）
@@ -200,6 +206,11 @@ def load_embeddings(cfg: dict, encoder: str, out_dir: Path, reload: bool) -> tup
         if cached.equals(ident):
             print(f"  cache: {npy}")
             return man, np.load(npy).astype(np.float64)
+        X = np.load(npy)
+        idx = align_rows(cached, man) if len(X) == len(cached) else None
+        if idx is not None:   # 症例の表で院内を減らした manifest: キャッシュの行を引く（キャッシュは書き換えない。utils.cohort）
+            print(f"  cache: {npy}  {X.shape} から manifest の {len(man)} 行を引いた")
+            return man, X[idx].astype(np.float64)
         print("  cache の並びが manifest と合わないので読み直す")
     print(f"  reading {len(man)} h5 ({key}) ...")
     X = np.stack([_read_h5(p, key) for p in man[h5_col]])
@@ -370,7 +381,7 @@ def evaluate(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, target: str, cfg: d
     e, p = st == ref, st != ref
     asw, ilisi = _site_values(_reduce(Y, ctx["pca_n"]), st, ctx["lisi_k"])
     out = {"residual_norm": float(np.linalg.norm(Y[e].mean(0) - Y[p].mean(0))), "asw_site": asw, "ilisi_site": ilisi}
-    if target in ("paper", "glioma", "all"):
+    if target in PAIR_TARGETS:
         out["distortion"], out["distortion_n_groups"] = distortion(Y, st, lab, ref, ctx["min_n"])
         out.update(pairs(Y, st, lab, cfg, save_to))
     if target == "paper":
@@ -381,6 +392,11 @@ def evaluate(Y: np.ndarray, st: np.ndarray, lab: np.ndarray, target: str, cfg: d
         for name, (a, b) in (("E2P", (ref, oth)), ("P2E", (oth, ref))):
             out[f"nc_histotype_ba_{name}"] = nc_ba(Y[m], st[m], lab[m], cls, a, b)
             out[f"nc_sft_ba_{name}"] = nc_ba(Y, st, sft, ["meningioma", "SFT"], a, b)
+    elif target == "meningioma":   # 組織型の最近傍重心法（paper と同じクラス、SFT は入らない）
+        cls = ctx["histotype_classes"]
+        m = np.isin(lab, cls)
+        for name, (a, b) in (("E2P", (ref, oth)), ("P2E", (oth, ref))):
+            out[f"nc_histotype_ba_{name}"] = nc_ba(Y[m], st[m], lab[m], cls, a, b)
     elif target in ("glioma", "all"):
         cls = GLIOMA_GROUPS if target == "glioma" else FAMILIES
         task = "glioma3" if target == "glioma" else "family5"
@@ -610,20 +626,22 @@ def mixing_section(res: pd.DataFrame, gres: pd.DataFrame, methods: list[str], so
             pv = pivot(res, t, metric, methods, sources)
             if pv.size:
                 L += [_md(pv, digits=3), ""]
-    g = gres[gres["target"] == "paper"]
-    if len(g):
+    for tt in ("paper", "meningioma"):
+        g = gres[gres["target"] == tt]
+        if g.empty:
+            continue
         big = g[(g["n_ebrains"] >= min_n) & (g["n_patho2"] >= min_n)]
         names = list(pd.unique(big["group"]))
-        L += [f"### 参考: 当て先 paper の両施設 {min_n} 枚以上の群（{len(names)} 組）だけの中央値", "",
+        L += [f"### 参考: 当て先 {tt} の両施設 {min_n} 枚以上の群（{len(names)} 組）だけの中央値", "",
               "除いた群: " + ", ".join(f"{r.group}（{r.n_ebrains} / {r.n_patho2}）" for r in
                                        g[~g["group"].isin(names)].drop_duplicates("group").itertuples()), ""]
         med = big.groupby(["method", "source", "metric"], sort=False)["value"].median().reset_index()
-        med["target"] = "paper"
+        med["target"] = tt
         for metric in MIX_METRICS:
-            pv = pivot(med, "paper", metric, methods, sources)
+            pv = pivot(med, tt, metric, methods, sources)
             if pv.size:
                 L += [_md(pv, digits=3), ""]
-    for t in ("paper", "glioma"):
+    for t in ("paper", "meningioma", "glioma"):
         g = gres[(gres["target"] == t) & (gres["method"] == "centroid")]
         if g.empty:
             continue
@@ -687,6 +705,12 @@ def write_summary(path: Path, res: pd.DataFrame, acc: pd.DataFrame, fits_tbl: pd
             "nc_sft_ba_E2P": "sft E→P", "nc_sft_ba_P2E": "sft P→E", "sft_men_dist_patho2": "d_sft_P",
             "sft_men_dist_ebrains": "d_sft_E", "subtype_dist_mismatch": "mismatch"})
         L += [_md(tb, digits=3), ""]
+    if "meningioma" in targets:
+        mets = ["pairs_adjacent", "nc_histotype_ba_E2P", "nc_histotype_ba_P2E", "distortion"]
+        n_m = int(res[(res["target"] == "meningioma") & (res["metric"] == "pairs_n")]["value"].iloc[0])
+        tb = bench_table(res, "meningioma", mets, methods, sources).rename(columns={
+            "pairs_adjacent": f"pairs (/{n_m})", "nc_histotype_ba_E2P": "histo E→P", "nc_histotype_ba_P2E": "histo P→E"})
+        L += [f"### meningioma（髄膜腫だけ、SFT の葉を入れない樹形図の {n_m} 組）", "", _md(tb, digits=3), ""]
     for t, task, n_pairs in (("glioma", "glioma3", 3), ("all", "family5", 5)):
         if t not in targets:
             continue
@@ -825,7 +849,7 @@ def main() -> None:
         x0, g0 = site_mixing(Xt, st, lab, ref, cfg)
         if "pairs_n" in m0 and len(g0) != m0["pairs_n"]:
             raise SystemExit(f"[{target}] site_mixing の群（{len(g0)}）が pairs_adjacent の群（{m0['pairs_n']}）と合わない")
-        if target in ("paper", "glioma", "all"):
+        if target in PAIR_TARGETS:
             e, p = st == ref, st != ref
             groups_used[target] = [g for g in pd.unique(lab) if ((lab == g) & e).sum() >= ctx["min_n"] and ((lab == g) & p).sum() >= ctx["min_n"]]
         for method in methods:   # none は method によらず同じ（各 method に同じ行を置く）

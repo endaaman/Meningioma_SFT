@@ -26,6 +26,7 @@
 条件（patho2 の問い合わせに足すベクトル。推定に使うのは manifest の 2 施設のスライド = transfer_correction.py と同じ集合）:
     none        補正なし
     paper       Δ_paper = mean(EBRAINS 髄膜腫+SFT コホート n551) − mean(patho2 髄膜腫+SFT コホート n577)。論文の centroid 補正（髄膜腫 + SFT）
+    meningioma  Δ_髄膜腫 = 髄膜腫だけ（SFT を含めない）の 2 施設の平均の差（v4 の定義、ken 2026-11-24）
     others      問い合わせの科以外の全部の科で推定（2 施設それぞれの全スライド平均の差。transfer_correction.py の others と同じ）
     others_bal  問い合わせの科以外の科ごとの Δ_f を重み n_E·n_P / (n_E + n_P) で平均したもの。2 施設で科の構成
                 （例: EBRAINS はグリオーマが多く patho2 は髄膜腫が多い）が違うと、素朴な others には科どうしの差（長さ 10–16）が
@@ -63,7 +64,8 @@ EBRAINS 内の基準（施設差なしの上限）: 問い合わせのラベル�
     --atlas-slides <enc2> のときは {enc}_on_{enc2}（と _min{n}）になる。
 
 Usage:
-    uv run python atlas_retrieval.py [--reload] [--min-n 5] [--encoder titan] [--atlas-slides prism]
+    uv run python atlas_retrieval.py [--reload] [--min-n 5] [--encoder titan] [--atlas-slides prism] [--conditions none paper ...]
+    （--conditions は使う条件。既定は CONDITIONS の全部。meningioma を足す前の出力の再現には none paper others others_bal family）
     （--encoder prism は transfer.prism_key を同じ h5 から読む。参照は PRISM のある EBRAINS のスライドだけになる。
     PRISM は転移テストの manifest の 2,301 枚にしか抽出していないので、今は EBRAINS 1,464 枚・診断はその科のものだけ。
     TITAN と同じ参照で比べるには --encoder titan --atlas-slides prism: TITAN の参照を atlas_prism_slides.csv の
@@ -85,6 +87,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from utils.cohort import align_rows
 from utils.loader import load_config
 
 ENCODERS = {  # encoder → (manifest の h5 の列, config transfer.* のキーの名前)。参照も同じキーを EBRAINS_embeddings の h5 から読む
@@ -94,7 +97,7 @@ ENCODERS = {  # encoder → (manifest の h5 の列, config transfer.* のキー
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
 GLIOMA_GROUPS = ["ast", "glm", "odg"]
 NOS = "NOS meningioma"
-CONDITIONS = ["none", "paper", "others", "others_bal", "family"]
+CONDITIONS = ["none", "paper", "meningioma", "others", "others_bal", "family"]
 BASELINES = ["ebrains_loo", "ebrains_loo_mix", "ebrains_lpo"]
 RETRIEVALS = ["nc_euclid", "nc_cosine", "knn5"]
 TOPK = 5
@@ -106,10 +109,10 @@ BROAD_PATTERNS = {"glioma": re.compile(r"glioblastoma|gliosarcoma|astrocytoma, I
 # 集計の単位（retrieval_*.csv の query_family、query_label = "(all)"）
 AGG_ORDER = ["meningioma", "meningioma (NOS)", "SFT", "glioma", "ast", "glm", "odg", "lymphoma", "metastasis",
              "glioma+lym+met", "overall"]
-COND_LABEL = {"none": "none", "paper": "paper Δ", "others": "others Δ (pooled)", "others_bal": "others Δ (per-family)",
+COND_LABEL = {"none": "none", "paper": "paper Δ", "meningioma": "meningioma Δ", "others": "others Δ (pooled)", "others_bal": "others Δ (per-family)",
               "family": "own-family Δ (upper ref.)", "ebrains_loo": "EBRAINS LOO", "ebrains_loo_mix": "EBRAINS LOO (patho2 mix)",
               "ebrains_lpo": "EBRAINS leave-patient-out"}
-COND_COLOR = {"none": "#a3a29b", "paper": "#2a78d6", "others": "#eda100", "others_bal": "#eb6834", "family": "#1baf7a"}
+COND_COLOR = {"none": "#a3a29b", "paper": "#2a78d6", "meningioma": "#7b4bd6", "others": "#eda100", "others_bal": "#eb6834", "family": "#1baf7a"}
 
 
 # ── data ──────────────────────────────────────────────────────────────────────
@@ -178,9 +181,15 @@ def load_manifest(cfg: dict, h5_col: str, key: str, out_dir: Path, enc: str, rel
     ident = man[["site", "slide_id"]].reset_index(drop=True)
     npy, order_csv = out_dir / f"manifest_{enc}.npy", out_dir / f"manifest_{enc}_slides.csv"
     if not reload and npy.exists() and order_csv.exists():
-        if pd.read_csv(order_csv, dtype={"slide_id": str}).equals(ident):
+        cached = pd.read_csv(order_csv, dtype={"slide_id": str})
+        if cached.equals(ident):
             print(f"  cache: {npy}")
             return man, np.load(npy).astype(np.float64)
+        X = np.load(npy)
+        idx = align_rows(cached, man) if len(X) == len(cached) else None
+        if idx is not None:   # 症例の表で院内を減らした manifest: キャッシュの行を引く（キャッシュは書き換えない。utils.cohort）
+            print(f"  cache: {npy}  {X.shape} から manifest の {len(man)} 行を引いた")
+            return man, X[idx].astype(np.float64)
         print("  cache の並びが manifest と合わないので読み直す")
     print(f"  reading {len(man)} h5 ({key}) ...")
     embs = [_read_h5(p, key) if isinstance(p, str) and p else None for p in man[h5_col]]
@@ -267,6 +276,8 @@ class Shifts:
             return out
         if cond == "paper":
             return out + self.pooled(["meningioma", "SFT"])
+        if cond == "meningioma":
+            return out + self.pooled(["meningioma"])
         for f in FAMILIES:
             m = fam_q == f
             if not m.any():
@@ -628,8 +639,11 @@ def main() -> None:
     ap.add_argument("--atlas-slides", choices=sorted(ENCODERS), default=None,
                     help="参照をこの encoder の参照のキャッシュ（atlas_<enc>_slides.csv）にあるスライドに絞る"
                          "（TITAN と PRISM を同じ参照で比べる用。出力名は <encoder>_on_<atlas-slides>）")
+    ap.add_argument("--conditions", nargs="+", choices=CONDITIONS, default=CONDITIONS,
+                    help="使う条件（既定は全部。meningioma を足す前の出力の再現には none paper others others_bal family）")
     args = ap.parse_args()
     enc = args.encoder
+    conds = [c for c in CONDITIONS if c in args.conditions]
 
     cfg = load_config()
     h5_col, key_name = ENCODERS[enc]
@@ -710,12 +724,15 @@ def main() -> None:
     for f in FAMILIES:
         rest = [g for g in FAMILIES if g != f]
         d_fam = sh.pooled([f])
-        for cond, d in [("paper", d_paper), ("others", sh.pooled(rest)), ("others_bal", sh.balanced(rest)), ("family", d_fam)]:
+        cands = [("paper", d_paper), ("meningioma", sh.pooled(["meningioma"])), ("others", sh.pooled(rest)),
+                 ("others_bal", sh.balanced(rest)), ("family", d_fam)]
+        fams_of = {"paper": ["meningioma", "SFT"], "meningioma": ["meningioma"], "family": [f]}
+        for cond, d in [(c, d) for c, d in cands if c in conds or c == "paper"]:
             drows.append(dict(query_family=f, condition=cond, norm=float(np.linalg.norm(d)),
                               cos_vs_paper=float(d @ d_paper / np.linalg.norm(d) / np.linalg.norm(d_paper)),
                               dev_from_family=float(np.linalg.norm(d - d_fam) / np.linalg.norm(d_fam)),
-                              n_ebrains=sum(sh.N["ebrains", g] for g in ({"paper": ["meningioma", "SFT"], "family": [f]}.get(cond, rest))),
-                              n_patho2=sum(sh.N["patho2", g] for g in ({"paper": ["meningioma", "SFT"], "family": [f]}.get(cond, rest)))))
+                              n_ebrains=sum(sh.N["ebrains", g] for g in fams_of.get(cond, rest)),
+                              n_patho2=sum(sh.N["patho2", g] for g in fams_of.get(cond, rest))))
     deltas = pd.DataFrame(drows)
     print(f"  |Δ_paper| = {np.linalg.norm(d_paper):.3f}")
 
@@ -723,7 +740,7 @@ def main() -> None:
     per_slide, long_rows, conf_rows = [], [], []
 
     # 問い合わせ × 条件
-    for cond in CONDITIONS:
+    for cond in conds:
         Q = Xq + sh.for_queries(cond, fam_q, Xq)
         Ds = {"nc_euclid": _dist(Q, C, "euclid"), "nc_cosine": _dist(Q, C, "cosine")}
         Dsl = _dist(Q, R, "euclid")

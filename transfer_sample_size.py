@@ -58,7 +58,7 @@ B. 推定元に要る腫瘍の種類（k の曲線）
 
 Usage:
     uv run python transfer_sample_size.py [--encoder titan|prism] [--n-draws 200] [--asw-draws N] [--n-jobs 12]
-                                          [--sources paper glioma lymphoma metastasis] [--summary-only]
+                                          [--sources paper meningioma glioma lymphoma metastasis] [--summary-only]
     --asw-draws N: ASW（1 回 0.03〜0.3 秒）を各設定の最初の N 回だけ計算する（残りは空。既定は全部）。
     --summary-only: 計算せず既存の CSV から summary.md と png だけ作り直す。
 """
@@ -84,13 +84,15 @@ from harmonization import _reduce  # noqa: E402
 from histotype_labels import apply_set  # noqa: E402
 from transfer_correction import (FAMILIES, GLIOMA_GROUPS, NAMED_SOURCES, TARGET_FAMILIES, nc_ba,  # noqa: E402
                                  target_labels)
+from utils.cohort import align_rows, cohort_table  # noqa: E402
 from utils.loader import load_config  # noqa: E402
 
 SEED = 42
 N_DRAWS = 200
 N_LIST = [5, 10, 20, 50, 100, 200]               # 推定元の patho2 の枚数未満だけ使い、全枚数（full）を足す
 N_JOBS = 12
-SOURCES = ["paper", "glioma", "lymphoma", "metastasis"]          # 既定の n 曲線の推定元（--sources で変える）
+SOURCES = ["paper", "meningioma", "glioma", "lymphoma", "metastasis"]   # 既定の n 曲線の推定元（--sources で変える）。meningioma（SFT を
+# 含めない髄膜腫だけ）は v4 の定義（ken 2026-11-24）。足す前の出力の再現は --sources paper glioma lymphoma metastasis（乱数列は推定元ごとに独立）
 SOURCE_INDEX = {s: i for i, s in enumerate(["paper", "meningioma", "SFT", "glioma", "lymphoma", "metastasis"])}  # 乱数列の番号
 TARGETS = ["paper", "glioma", "lymphoma", "metastasis"]
 VARIANTS = ["patho2", "both"]
@@ -102,8 +104,12 @@ FAMILY_COLOR = {"meningioma": "#4c72b0", "SFT": "#000000", "glioma": "#dd8452", 
 MARKER = {"paper": "o", "meningioma": "o", "SFT": "v", "glioma": "s", "lymphoma": "^", "metastasis": "D"}
 INK, MUTED = "#222222", "#777777"
 # summary.md の「読み」。数値を見て書いた文章（2026-10-26 の TITAN の実行、200 回）。数値や設定を変えたら見直す。
+# 2026-11-24 に院内のグリオーマ・リンパ腫・転移を過去の論文の症例に絞った（症例の表）。この文章の数値はその前の 260 例のもので、
+# 症例の表が有効なときは READING_STALE を前に付ける（見直しは未）
 # TITAN の数値の文章なので、他の encoder の summary.md には入れない（READING_OTHER）
 READING_OTHER = "（{encoder} の読みは未記入。この節の文章は TITAN の数値で書いたもので、titan の summary.md にだけ入れる）"
+READING_STALE = ("**注意: 下の文章の数値は 2026-10-26 の実行（院内のグリオーマ・リンパ腫・転移 260 例）のもの。症例の表で過去の論文の症例に"
+                 "絞った後（2026-11-24）の見直しは未。数値は上の表を見ること。**")
 READING = """
 - A. 髄膜腫+SFT コホートから別の腫瘍へ（patho2 だけ n 枚、EBRAINS は全部）: 残差の比は n = 20 で全枚数の値の 10% 以内
   （グリオーマ 0.549 [0.501, 0.593] vs 全 577 枚 0.502、DLBCL 0.607 vs 0.556、転移 0.535 vs 0.496）。上側 2.5% 点まで入るのは
@@ -152,6 +158,10 @@ def load_embeddings(cfg: dict, encoder: str) -> tuple[pd.DataFrame, np.ndarray]:
         if cached.equals(ident) and len(X) == len(man):
             print(f"  cache: {npy}  {X.shape}（並びは manifest と一致）")
             return man, X.astype(np.float64)
+        idx = align_rows(cached, man) if len(X) == len(cached) else None
+        if idx is not None:   # 症例の表で院内を減らした manifest: キャッシュの行を引く（utils.cohort.align_rows）
+            print(f"  cache: {npy}  {X.shape} から manifest の {len(man)} 行を引いた")
+            return man, X[idx].astype(np.float64)
         print("  cache の並びが manifest と合わないので h5 から読む（キャッシュは書かない）")
     h5_col, key = {"titan": ("h5_titan", tcfg["titan_key"]), "prism": ("h5_prism", tcfg["prism_key"])}[encoder]
     print(f"  reading {len(man)} h5 ({key}) ...")
@@ -528,7 +538,8 @@ def write_summary(path: Path, ncs: pd.DataFrame, kc: pd.DataFrame, kcs: pd.DataF
                 cells += [mm(m, "ba_E2P", 3), mm(p, "ba_E2P", 3)]
             L.append("| " + " | ".join(cells) + " |")
         L.append("")
-    L += ["## 読み", "", READING.strip() if encoder == "titan" else READING_OTHER.format(encoder=encoder), ""]
+    stale = [READING_STALE, ""] if encoder == "titan" and cohort_table(load_config(), verbose=False) is not None else []
+    L += ["## 読み", "", *stale, READING.strip() if encoder == "titan" else READING_OTHER.format(encoder=encoder), ""]
     if acc is not None and len(acc):
         L += ["## 受け入れ確認（transfer_correction の method = centroid の行と、許容 1e-6）", "",
               "| part | 当て先 | transfer_correction の source | 指標 | 期待 | 得た値 | 差 | |", "|---|---|---|---|---|---|---|---|"]
