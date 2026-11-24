@@ -70,6 +70,7 @@ from histotype_labels import apply_set  # noqa: E402
 from nc import _dist  # noqa: E402
 from utils.display import (ENCODER_COLORS, ENCODER_LABELS, ENCODER_LABELS_JA, ENCODER_MARKERS,  # noqa: E402
                            ENCODER_ORDER)
+from utils.cohort import align_rows  # noqa: E402
 from utils.loader import load_config  # noqa: E402
 
 SEED = 42
@@ -124,7 +125,10 @@ def load_embedding(out: Path, enc: str, man: pd.DataFrame) -> tuple[np.ndarray |
     ids = pd.read_csv(ids_path, dtype={"slide_id": str})
     key = ["site", "slide_id"]
     if len(X) != len(man) or not ids[key].reset_index(drop=True).equals(man[key].reset_index(drop=True)):
-        return None, f"並びが manifest と合わない（{npy.name} {len(X)} 行 / {ids_path.name} / manifest {len(man)} 行）"
+        idx = align_rows(ids, man) if len(X) == len(ids) else None   # 症例の表で院内を減らした manifest はキャッシュの行を引く
+        if idx is None:
+            return None, f"並びが manifest と合わない（{npy.name} {len(X)} 行 / {ids_path.name} / manifest {len(man)} 行）"
+        return X[idx].astype(np.float64), f"{npy.relative_to(out)} {X.shape} から manifest の {len(man)} 行を引いた（{ids_path.name} で照合）"
     return X.astype(np.float64), f"{npy.relative_to(out)} {X.shape} の並び = {ids_path.name} = manifest"
 
 

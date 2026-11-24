@@ -82,6 +82,7 @@ from matplotlib.lines import Line2D  # noqa: E402
 
 from utils.display import (CONDITION_LABELS, CONDITION_LABELS_JA, ENCODER_COLORS, ENCODER_LABELS,  # noqa: E402
                            ENCODER_LABELS_JA, ENCODER_MARKERS, ENCODER_ORDER, FAMILY_LABELS, FAMILY_LABELS_JA)
+from utils.cohort import align_rows, apply_cohort  # noqa: E402
 from utils.loader import load_config  # noqa: E402
 
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
@@ -121,6 +122,7 @@ def input_paths(out: Path, enc: str, manifest: str = MANIFEST) -> dict[str, list
         "groups": [st / "groups.csv"], "cos_matrix": [st / "cos_matrix.csv"], "arrows": [st / "arrows.csv"],
         "mismatch": [st / "mismatch_matrix.csv"], "bio": [st / "bio_control.csv"],
         "emb_paper": [st / "paper_embeddings.npy"], "emb_glioma": [st / "glioma_embeddings.npy"],
+        "glioma_ids": [st / "glioma_slides.csv"],
         "manifest": [out / manifest], "emb_all": [out / "transfer" / f"embeddings_{enc}.npy"],
         "emb_ids": [out / "transfer" / f"embeddings_{enc}_slides.csv", out / "transfer" / f"embeddings_{enc}_ids.csv"],
         "transfer": [out / "transfer" / f"correction_{enc}.csv"],
@@ -339,7 +341,10 @@ def site_gap(X, ids: pd.DataFrame, man: pd.DataFrame, ref: str) -> dict:
     par / orth = 科ごとの Δ_f の平行成分・直交成分 / rms。並びが manifest と合わなければ ValueError（その列は空欄）。"""
     key = ["site", "slide_id"]
     if len(X) != len(man) or not ids[key].reset_index(drop=True).equals(man[key].reset_index(drop=True)):
-        raise ValueError(f"埋め込みのキャッシュ（{len(X)} 行）の並びが manifest（{len(man)} 行）と合わない")
+        idx = align_rows(ids, man) if len(X) == len(ids) else None   # 症例の表で院内を減らした manifest はキャッシュの行を引く
+        if idx is None:
+            raise ValueError(f"埋め込みのキャッシュ（{len(X)} 行）の並びが manifest（{len(man)} 行）と合わない")
+        X = np.asarray(X)[idx]
     X = np.asarray(X, dtype=np.float64)
     fam, site = man["family"].astype(str).to_numpy(), man["site"].astype(str).to_numpy()
     others = sorted(set(site) - {ref})
@@ -368,22 +373,30 @@ def site_gap(X, ids: pd.DataFrame, man: pd.DataFrame, ref: str) -> dict:
 
 # ── ブロック ──────────────────────────────────────────────────────────────────
 
-def block_reference(T: Table) -> None:
+def block_reference(T: Table, cfg: dict) -> None:
     b = "0 参考（絶対値）"
     T.add(b, "埋め込みの次元", T.each(["emb_paper"], lambda e: (float(e.shape[1]), f"{e.shape[1]}")))
 
-    def norm_med(p, g):
-        X = np.concatenate([np.asarray(p, dtype=np.float64), np.asarray(g, dtype=np.float64)])
+    def glioma_rows(g, gids) -> np.ndarray:
+        """グリオーマ側のキャッシュの行のうち、症例の表（utils.cohort、無効なら全部）で残る院内と EBRAINS の行。"""
+        if len(gids) != len(g):
+            raise ValueError(f"glioma_slides.csv（{len(gids)} 行）と glioma_embeddings.npy（{len(g)} 行）が合わない")
+        keep = apply_cohort(gids.assign(_row=np.arange(len(gids))).astype({"slide_id": str}), cfg, case_col="slide_id",
+                            group_cols=["group"], site_col="source")["_row"].to_numpy()
+        return np.asarray(g, dtype=np.float64)[keep]
+
+    def norm_med(p, g, gids):
+        X = np.concatenate([np.asarray(p, dtype=np.float64), glioma_rows(g, gids)])
         m = float(np.median(np.linalg.norm(X, axis=1)))
         return m, f"{m:.2f}（{len(X):,} 枚）"
-    T.add(b, "スライド埋め込みのノルムの中央値", T.each(["emb_paper", "emb_glioma"], norm_med),
+    T.add(b, "スライド埋め込みのノルムの中央値", T.each(["emb_paper", "emb_glioma", "glioma_ids"], norm_med),
           note="shift_transfer のキャッシュ（髄膜腫+SFT コホート ＋ グリオーマ側 = 転移テストの全スライド）")
     T.add(b, "‖Δ_paper‖", T.each(["groups"], lambda g: one(_group(g, ST_REF)["shift_norm"], 3)))
 
-    def rel(g, p, gl):
-        X = np.concatenate([np.asarray(p, dtype=np.float64), np.asarray(gl, dtype=np.float64)])
+    def rel(g, p, gl, gids):
+        X = np.concatenate([np.asarray(p, dtype=np.float64), glioma_rows(gl, gids)])
         return one(_group(g, ST_REF)["shift_norm"] / np.median(np.linalg.norm(X, axis=1)), 3)
-    T.add(b, "‖Δ_paper‖ / ノルムの中央値", T.each(["groups", "emb_paper", "emb_glioma"], rel))
+    T.add(b, "‖Δ_paper‖ / ノルムの中央値", T.each(["groups", "emb_paper", "emb_glioma", "glioma_ids"], rel))
 
 
 def block_site_gap(T: Table, cfg: dict) -> dict[str, dict | None]:
@@ -891,7 +904,7 @@ def main() -> None:
         print(f"[{e}] 入力 {len(inputs[e].data) - len(miss)}/{len(inputs[e].data)}" + (f"、無い: {', '.join(INPUT_LABELS.get(n, n) for n in miss)}" if miss else ""))
 
     T = Table(inputs)
-    block_reference(T)
+    block_reference(T, cfg)
     gap = block_site_gap(T, cfg)
     block_geometry(T, cfg)
     exceptions = block_transfer(T)

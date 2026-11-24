@@ -12,7 +12,7 @@ titan.py             # TITAN による WSI-level aggregate（--variants で対�
 titan_batch.py       # 外部の h5 の木に TITAN を書く（EBRAINS 全体の CONCH 特徴 = /mnt/server42/AI/Datasets/EBRAINS_embeddings。config の ebrains_embeddings.priority のグリオーマを先に、残りは名前順。ログは out/ebrains_embeddings/）
 patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor。症例フォルダ直下に ndpi が無ければ同名の入れ子 <症例>/<症例>/ も見る）の HE から CONCH v1.5（wsi-toolbox 0.7.0 の preset conch15、cls 1024 と proj 768 を 1 回で）+ TITAN を作り Patho2Gliomas_embeddings に置く（EBRAINS_embeddings と同じ構成）。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
 patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を目で選ぶツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶページ（serve: クリックごとに data/patho2_gliomas/representatives.csv が書かれる。html: サーバーなしの静的版）。HE 1 枚の症例は自動で選択済み、EXCLUDE で症例除外。解析はこの CSV を読む
-transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（髄膜腫+SFT コホート ＋ 院内代表 ＋ EBRAINS 対応診断、2,301 枚）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる
+transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（髄膜腫+SFT コホート ＋ 院内代表 ＋ EBRAINS 対応診断）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる。院内のグリオーマ・リンパ腫・転移は症例の表 data/patho2_gliomas/cohort.csv（patho2_gliomas.cohort_enabled）で過去の論文（Pathol Int 2026;76(2):e70098）の症例に絞る（群はフォルダのまま。無効なら代表 HE の全 260 例 = 2026-11-24 より前の 2,301 枚）。--build-cohort で表を作る（1 回だけ、過去の論文の症例一覧を ~/.cache から読む。再確認で疑問が付いた 7 例は flag、exclude_flagged: true で外す = 感度分析）
 transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（--encoder titan|prism|meanpool|meanpool_virchow、out/transfer/correction_{encoder}.*）。施設の見分けやすさの 2 指標 group_gap_sd（同じ群の 2 施設の中心の距離 / 施設内の広がり）と knn_mix（院内スライドの 10 近傍に占める EBRAINS の割合 / 完全に混ざったときの期待値）を、群（対の回復と同じ群）の中央値で correction_{encoder}.csv に、群ごとに correction_{encoder}_groups.csv に出す pairs_adjacent の元になった樹形図（施設 × 群の平均の群情報・距離行列 D・Ward の連結 Z、dendrogram.save_raw の形式）を out/transfer/structure/{encoder}/{target}/{source}__{method}/ に保存（当て先 paper / glioma / all。figs/transfer_structure_preview.py が読む）
 transfer_rare_target.py # 希少な腫瘍への転移: 当て先 paper に、SFT を推定に使わない髄膜腫だけのずれ（と参考に SFT だけのずれ）を 3 法（平行移動 / 相似変換 / ComBat）で当て、SFT の群の group_gap_sd・knn_mix・gap と樹形図で SFT の 2 施設が隣り合うかを、補正なし / own / glioma と並べる（transfer_correction.py の関数をそのまま呼ぶ。none / own / glioma の行は correction_{encoder}_groups.csv と一致を確認）。ずれの長さと cos も（out/transfer/rare_target_{encoder}.csv、rare_target_shifts.csv、rare_target_cos.csv、rare_target_summary.md）
 prism_extract.py     # 第 2 のスライドエンコーダ: manifest の全スライドに Virchow（224 px / 0.5 mpp、concat 2560 次元）→ PRISM を足す。書き先は既存の h5（EBRAINS_embeddings / Patho2Gliomas_embeddings / 論文の original）の virchow_2560/…。既存はスキップ、ログ out/transfer/prism_log.csv
@@ -61,7 +61,8 @@ figs/                # 論文の図表を out/ の解析結果から組み立て
   slides_asno.py     # ASNO 発表用のスライド（登録していない。16:9・英語、補正なし / GAN / 平行移動の 3 条件だけ、v3 の Fig 2・3・5 と同じ入力を読むだけ）→ paper/share/asno/（01 施設差の UMAP、02a/b GAN のパッチと色、03 3 条件の UMAP と施設差、04 対の回復の樹形図、05 まとめ。発表者向けの README.md は手書き）。uv run python -m figs.slides_asno
   all.py             # 自分の出力を掃除してから全部作る
 utils/
-  loader.py          # load_config / load_data（各スクリプトが共通利用）
+  loader.py          # load_config / load_data（各スクリプトが共通利用）。環境変数 MENINGIOMA_SFT_CONFIG で別の config を読める（感度分析）
+  cohort.py          # 院内の症例の表（cohort.csv）を当てる apply_cohort と、転移テストの埋め込みキャッシュを manifest に揃える align_rows（症例を減らした manifest はキャッシュの行を引く）
   display.py         # 色・順序・略称ヘルパー（ordered_subtypes / subtype_color_map / make_abbrev 等）
 ```
 
@@ -117,6 +118,7 @@ uv run python -u patho2_gliomas_extract.py --dry-run       # 院内の HE 判定
 uv run python -u patho2_gliomas_extract.py                 # 院内 A/G/O/L/M の HE 全部を抽出（約 30–45 秒/枚）。--groups A G O で群を、--cases で症例を絞れる
 uv run python -u patho2_gliomas_review.py thumbs           # HE 全部のサムネイル（out/patho2_gliomas/review/thumbs/、4 分）
 uv run python -u patho2_gliomas_review.py serve            # tmux の担当 window で。http://127.0.0.1:8765/ で代表を選ぶ → data/patho2_gliomas/representatives.csv
+uv run python transfer_manifest.py --build-cohort          # 1 回だけ。院内の症例の表（data/patho2_gliomas/cohort.csv、作り直しは --force）
 uv run python transfer_manifest.py                         # 代表を選び終えてから。転移テストの全スライド一覧と埋め込みの揃い具合（out/transfer/manifest.csv）
 uv run python transfer_correction.py                       # transfer_manifest.py の後。3 法 × 推定元 × 当て先（--encoder prism は PRISM が揃ってから。埋め込みはキャッシュ、--reload で読み直し）
 uv run python transfer_rare_target.py                      # 4 エンコーダの transfer_correction.py と shift_transfer.py の後（その出力と突き合わせる、数秒）。髄膜腫だけのずれで SFT を補正（out/transfer/rare_target_*）

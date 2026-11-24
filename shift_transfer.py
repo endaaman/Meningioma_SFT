@@ -78,6 +78,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from utils.cohort import apply_cohort
 from utils.display import ordered_subtypes
 from utils.loader import load_config, load_data
 
@@ -208,7 +209,14 @@ def load_paper(cfg: dict, out_dir: Path, reload: bool, encoder: str = "titan", e
 
 
 def load_glioma(cfg: dict, out_dir: Path, reload: bool, embed: SlideEmbedder | None = None) -> pd.DataFrame:
-    """Patho2Gliomas の代表 HE（1 症例 1 枚、representatives.csv）と EBRAINS の対応診断の埋め込み（既定 TITAN）。列: slide_id, source, group, patient, diagnosis, embedding。"""
+    """Patho2Gliomas の代表 HE（1 症例 1 枚、representatives.csv）と EBRAINS の対応診断の埋め込み（既定 TITAN）。列: slide_id, source, group, patient, diagnosis, embedding。
+    キャッシュは代表 HE の全症例で作り、院内は返す前に症例の表（utils.cohort、無効ならそのまま）で絞って群を表の group にする。"""
+    df = _load_glioma_all(cfg, out_dir, reload, embed)
+    return apply_cohort(df, cfg, case_col="slide_id", group_cols=["group", "diagnosis"], site_col="source").reset_index(drop=True)
+
+
+def _load_glioma_all(cfg: dict, out_dir: Path, reload: bool, embed: SlideEmbedder | None = None) -> pd.DataFrame:
+    """load_glioma のキャッシュ（代表 HE の全症例、フォルダの群）。"""
     csv_path, npy_path = out_dir / "glioma_slides.csv", out_dir / "glioma_embeddings.npy"
     if not reload and (df := _read_cache(csv_path, npy_path)) is not None:
         return df

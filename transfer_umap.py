@@ -49,6 +49,7 @@ import pandas as pd  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from sklearn.neighbors import NearestNeighbors  # noqa: E402
 
+from utils.cohort import align_rows  # noqa: E402
 from utils.loader import load_config  # noqa: E402
 
 REF = "ebrains"
@@ -83,8 +84,12 @@ def load_titan(cfg: dict) -> tuple[pd.DataFrame, np.ndarray]:
     npy, order_csv = out / "transfer" / "embeddings_titan.npy", out / "transfer" / "embeddings_titan_slides.csv"
     ident = man[["site", "slide_id"]].reset_index(drop=True)
     if npy.exists() and order_csv.exists():
-        same_order = pd.read_csv(order_csv, dtype={"slide_id": str}).equals(ident)
+        cached = pd.read_csv(order_csv, dtype={"slide_id": str})
+        same_order = cached.equals(ident)
         C = np.load(npy)
+        if not same_order and (idx := align_rows(cached, man)) is not None and len(C) == len(cached):
+            C, same_order = C[idx], True   # 症例の表で院内を減らした manifest: キャッシュの行を引いて照合する
+            print(f"  cache {npy}: manifest の {len(man)} 行を引いた")
         diff = float(np.abs(C - H).max()) if same_order and C.shape == H.shape else float("nan")
         print(f"  cache {npy}: order {'OK' if same_order else 'MISMATCH'}, max |cache − h5| = {diff:.3g}")
         if not (same_order and diff == 0.0):
@@ -262,7 +267,7 @@ def main() -> None:
     plot_main(coords, man, cfg, out_dir / "umap_titan.png")
     plot_families(coords, man, cfg, out_dir / "umap_titan_families.png")
 
-    lines = ["# transfer_umap — 転移テストの 2,301 枚の UMAP（TITAN）", "",
+    lines = [f"# transfer_umap — 転移テストの {len(man):,} 枚の UMAP（TITAN）", "",
              f"UMAP: n_neighbors {k}, min_dist {ucfg.get('min_dist', 0.01)}, random_state {ucfg.get('random_state', 42)}"
              "（umap_plot.py と同じ config の umap）。補正なしの全スライドで 1 回当てはめ、補正後の院内は transform。", "",
              f"- ‖Δ_paper‖ = {np.linalg.norm(d_paper):.3f}（髄膜腫+SFT コホートの EBRAINS 平均 − 院内平均）",
@@ -270,7 +275,7 @@ def main() -> None:
                  f"{f} {np.linalg.norm(d):.2f} / {d @ d_paper / np.linalg.norm(d) / np.linalg.norm(d_paper):.3f}"
                  for f, d in d_own.items()), "",
              "## 科 × 条件: transform の近傍と施設の混ざり具合（768 次元）", "",
-             "- knn_ebrains_frac: 写した院内スライドの、当てはめデータ（補正なしの全 2,301 枚）中の "
+             f"- knn_ebrains_frac: 写した院内スライドの、当てはめデータ（補正なしの全 {len(man):,} 枚）中の "
              f"{k} 近傍のうち EBRAINS の割合（transform がどこから位置を取るか。補正なしの院内に引かれていれば低い）",
              f"- mix_ebrains_frac: 院内スライドの、「EBRAINS ＋ その条件の院内」の中の {k} 近傍（自分を除く）のうち EBRAINS の割合",
              "- mix_expected: その科の全スライドに占める EBRAINS の割合（科の中で施設が完全に混ざったときの目安）",

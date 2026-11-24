@@ -1,13 +1,15 @@
 """loader.py — config / embedding データの読み込み共通処理。"""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import h5py
 import pandas as pd
 import yaml
 
-CONFIG_PATH = Path(__file__).parent.parent / "config.yaml"
+# 環境変数 MENINGIOMA_SFT_CONFIG で別の config を読める（感度分析を主解析と別の output_dir に出すとき）。無ければ repo の config.yaml
+CONFIG_PATH = Path(os.environ.get("MENINGIOMA_SFT_CONFIG") or Path(__file__).parent.parent / "config.yaml")
 
 
 def load_config() -> dict:

@@ -53,6 +53,7 @@ import numpy as np
 import pandas as pd
 
 from meanpool import _mean_features
+from utils.cohort import align_rows
 from utils.loader import load_config
 
 PAPER_FAMILIES = ("meningioma", "SFT")   # 既存の平均プーリング h5（meanpool.py）がある科
@@ -74,19 +75,21 @@ def load_manifest(cfg: dict) -> pd.DataFrame:
 
 
 def load_cache(cfg: dict, source: str = "conch") -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
-    """(manifest, 埋め込み (n, 768) float64（virchow は (n, 2560)）、ids)。キャッシュが無いか manifest の並びと合わなければ止まる。"""
+    """(manifest, 埋め込み (n, 768) float64（virchow は (n, 2560)）、ids)。キャッシュが無いか manifest の並びと合わなければ止まる。
+    キャッシュが manifest の (site, slide_id) を全部含むとき（症例の表で院内を減らした manifest）はその行を引く（utils.cohort.align_rows）。"""
     npy, ids_csv = _paths(cfg, source)
     tag, opt = ENCODER_NAME[source], "" if source == "conch" else f" --source {source}"
     man = load_manifest(cfg)
     if not (npy.exists() and ids_csv.exists()):
         raise SystemExit(f"[{tag}] キャッシュが無い: {npy}。先に `uv run python -u transfer_meanpool.py build{opt}` を回すこと")
     ids = pd.read_csv(ids_csv, dtype={"slide_id": str})
-    if not ids[["site", "slide_id"]].equals(man[["site", "slide_id"]].reset_index(drop=True)):
+    idx = align_rows(ids, man)
+    if idx is None:
         raise SystemExit(f"[{tag}] {ids_csv} の並びが manifest と合わない。`transfer_meanpool.py build{opt} --reload` で作り直すこと")
     X = np.load(npy)
-    if len(X) != len(man):
-        raise SystemExit(f"[{tag}] {npy} の行数 {len(X)} が manifest の {len(man)} と合わない")
-    return man, X.astype(np.float64), ids
+    if len(X) != len(ids):
+        raise SystemExit(f"[{tag}] {npy} の行数 {len(X)} が {ids_csv} の {len(ids)} と合わない")
+    return man, X[idx].astype(np.float64), ids.iloc[idx].reset_index(drop=True)
 
 
 def _paper_h5(cfg: dict, site: str, slide_id: str) -> tuple[Path, str]:

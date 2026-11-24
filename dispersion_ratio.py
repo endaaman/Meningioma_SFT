@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from utils.cohort import apply_cohort
 from utils.loader import load_config
 
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
@@ -45,11 +46,15 @@ N_SPLIT = 50
 SEED = 42
 
 
-def load_cache(d: Path) -> pd.DataFrame:
+def load_cache(d: Path, cfg: dict | None = None) -> pd.DataFrame:
+    """shift_transfer.py のキャッシュ（髄膜腫+SFT コホートとグリオーマ・リンパ腫・転移）。グリオーマ側の院内は症例の表
+    （utils.cohort、無効ならそのまま）で絞り、群を表の group にする（shift_transfer.load_glioma と同じ）。"""
     frames = []
     for name in ("paper", "glioma"):
         df = pd.read_csv(d / f"{name}_slides.csv", dtype=str)
         df["embedding"] = list(np.load(d / f"{name}_embeddings.npy").astype(np.float64))
+        if name == "glioma" and cfg is not None:
+            df = apply_cohort(df, cfg, case_col="slide_id", group_cols=["group", "diagnosis"], site_col="source")
         if name == "paper":
             df["family"] = np.where(df["subtype"].str.lower().str.contains("sft"), "SFT", "meningioma")
         else:
@@ -93,7 +98,7 @@ def main() -> None:
     out_dir = Path(cfg["output_dir"]) / "dispersion_ratio"
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[encoder] {args.encoder}  cache: {cache}")
-    df = load_cache(cache)
+    df = load_cache(cache, cfg)
     rng = np.random.default_rng(SEED)
 
     X = {f: {s: np.stack(df.loc[(df["family"] == f) & (df["source"] == s), "embedding"].values) for s in SITES} for f in FAMILIES}

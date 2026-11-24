@@ -370,6 +370,10 @@ patho2_gliomas:
   review_host: 0.0.0.0                                            # patho2_gliomas_review.py serve の bind 先。SSH 先のブラウザから開くので LAN に公開（127.0.0.1 なら手元だけ）
   review_port: 8765                                               # patho2_gliomas_review.py serve のポート
   representatives: data/patho2_gliomas/representatives.csv       # 1 症例 1 枚の代表 HE（case, file, note）。review.py が書き、解析が読む。file が EXCLUDE は除外
+  cohort:     data/patho2_gliomas/cohort.csv                     # 症例の表（case, folder_group, label, group, status = include / exclude, reason, flag）。transfer_manifest.py --build-cohort が 1 回作る（ken 決定 2026-11-24: 過去の論文の症例に限り、群はフォルダのまま）
+  cohort_enabled: true                                       # false か表が無ければ代表 HE の全 260 例（2026-11-24 より前の定義。再現確認用）
+  exclude_flagged: false                                     # true で flag のある症例（再確認で疑問が付いた 7 例）も外す（感度分析用）
+  past_paper_tiles: ~/.cache/endaaman/bt/tiles/enda4_512        # 過去の論文（Pathol Int 2026;76(2):e70098）の症例一覧の手がかり（{A,G,O,L,M}/<症例名>/）。--build-cohort のときだけ読む
 
 # ---- shift_transfer.py（Δ の向きは腫瘍の科を越えて同じか。論文コホートの Δ と Patho2Gliomas × EBRAINS の各群のシフトを比べる予備解析）----
 shift_transfer:

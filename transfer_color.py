@@ -78,6 +78,7 @@ from affine import scale_free  # noqa: E402
 from paper_color import rgb_to_hed, rgb_to_lab, sample_indices, slide_color  # noqa: E402
 from paper_patches import read_patches  # noqa: E402
 from stain_response import _corr, regression, residualize  # noqa: E402
+from utils.cohort import align_rows  # noqa: E402
 from utils.loader import load_config, paper_dir  # noqa: E402
 
 FAMILIES = ["meningioma", "SFT", "glioma", "lymphoma", "metastasis"]
@@ -200,10 +201,10 @@ def load_all(cfg: dict, out_dir: Path) -> tuple[pd.DataFrame, np.ndarray]:
     man = pd.read_csv(Path(cfg["output_dir"]) / cfg["transfer"]["manifest"], dtype={"slide_id": str})
     order = pd.read_csv(tdir / "embeddings_titan_slides.csv", dtype={"slide_id": str})
     X = np.load(tdir / "embeddings_titan.npy").astype(np.float64)
-    if len(order) != len(man) or not (order[["site", "slide_id"]].values == man[["site", "slide_id"]].values).all():
+    idx = align_rows(order, man) if len(X) == len(order) else None   # 症例の表で院内を減らした manifest はキャッシュの行を引く
+    if idx is None:
         raise SystemExit("embeddings_titan の並びが manifest と合わない → transfer_correction.py --reload を先に回す")
-    if len(X) != len(man):
-        raise SystemExit(f"embeddings_titan.npy の行数 {len(X)} ≠ manifest {len(man)}")
+    X = X[idx]
     col = pd.read_csv(out_dir / "slide_color.csv", dtype={"slide_id": str}).drop_duplicates("slide_id", keep="last")
     df = man[["slide_id", "site", "family", "group"]].merge(
         col.drop(columns=["site", "family", "group"]), on="slide_id", how="left", validate="one_to_one")
@@ -424,6 +425,7 @@ def write_summary(path: Path, fam: pd.DataFrame, xcorr: pd.DataFrame, corr: pd.D
                   acc: list[str], df: pd.DataFrame) -> None:
     order = [*FAMILIES, "paper"]
     fam = fam.set_index("family").loc[order].reset_index()
+    nn = {r.family: (int(r.n_ebrains), int(r.n_patho2)) for r in fam.itertuples()}   # 科 → (EBRAINS, 院内) の枚数（読みの文に使う）
     t1 = pd.DataFrame({
         "family": fam["family"].map(FAMILY_LABEL), "n_E": fam["n_ebrains"], "n_P": fam["n_patho2"],
         "s（埋め込みの倍率）": _ci(fam, "scale_s"),
@@ -539,8 +541,10 @@ def write_summary(path: Path, fam: pd.DataFrame, xcorr: pd.DataFrame, corr: pd.D
                 f"{f5['shift_along_u'].min():.1f}〜{f5['shift_along_u'].max():.1f} で、ΔE76 と |Δ_f| の相関は r = {rd['pearson_r']:+.2f}（5 点）。")
     read.append("- 注意: 色はスライドあたり 32 パッチ（h5 の座標 = TITAN が見たパッチから無作為）の組織画素の平均で、"
                 "H / E は Ruifrok–Johnston の固定行列。ブートストラップはスライド単位（患者単位ではない）。"
-                "SFT（22 / 32 枚）・リンパ腫（59 / 59）・転移（47 / 84）は例数が少なく、比の CI が広い。"
-                "グリオーマは EBRAINS 807 / patho2 117 で組成（ast / glm / odg）も施設で違い、科全体の幅には群の違いも入る。")
+                f"SFT（{nn['SFT'][1]} / {nn['SFT'][0]} 枚）・リンパ腫（{nn['lymphoma'][1]} / {nn['lymphoma'][0]}）・"
+                f"転移（{nn['metastasis'][0]} / {nn['metastasis'][1]}）は例数が少なく、比の CI が広い。"
+                f"グリオーマは EBRAINS {nn['glioma'][0]} / patho2 {nn['glioma'][1]} で組成（ast / glm / odg）も施設で違い、"
+                "科全体の幅には群の違いも入る。")
 
     body = [
         "# transfer_color — 転移テストの全スライドの色と、科ごとの色の幅・施設軸の H 応答（TITAN）",
