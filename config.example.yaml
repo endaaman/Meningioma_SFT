@@ -292,7 +292,7 @@ meanpool:
 # ---- paper_figs.py ----
 paper:
   dir:     paper   # 原稿と図表の置き場（Sync 直下 paper/ への symlink）。図表は {dir}/{version}/
-  version: v3      # 図表の出力先 {dir}/{version}/。v1・v2 は凍結、v3 が現行
+  version: v4      # 図表の出力先 {dir}/{version}/ と figs の登録表（figs/__init__.py の REGISTRY）。v1・v2 は凍結、v3 は髄膜腫 + SFT（v3 にすれば v3 の図表を作れる）、v4 が現行
 
 # ---- paper_patches.py（新 Fig 2 の代表パッチ候補）----
 paper_patches:

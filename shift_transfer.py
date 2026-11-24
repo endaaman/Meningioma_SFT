@@ -491,12 +491,15 @@ def _deg(c: float) -> float:
     return float(np.degrees(np.arccos(np.clip(c, -1.0, 1.0)))) if np.isfinite(c) else float("nan")
 
 
-def arrows(groups: list[dict], paper: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """平行四辺形の図の座標。素な 12 群の両施設の重心（24 点）を、x = Δ_paper の単位ベクトル、
+def arrows(groups: list[dict], paper: pd.DataFrame, ref_name: str = REF) -> tuple[pd.DataFrame, dict]:
+    """ref_name = 基準のずれの群（既定 REF = 髄膜腫+SFT コホート。--reference meningioma では MENI = 髄膜腫だけで、列名の *_vs_paper は
+    「基準のずれに対して」の意味になり、leave-group-out の参照も SFT を除いた髄膜腫になる）。
+    平行四辺形の図の座標。素な 12 群の両施設の重心（24 点）を、x = Δ_paper の単位ベクトル、
     y = 24 重心（中心化）から Δ_paper 成分を除いた群間変動の第 1 主成分、の平面に射影する。原点は 24 重心の平均。
     残差は ‖Δ_g − Δ_paper‖（Δ_paper は論文の全例）。ノイズ補正の残差は、部分集合なら自分を除いた Δ_paper（leave-group-out）と比べて
     両方の推定ノイズ tr V を差し引く（sqrt(max(‖Δ_g − Δ_lgo‖² − tr V_g − tr V_lgo, 0))）。"""
-    ref = next(g for g in groups if g["name"] == REF)
+    ref = next(g for g in groups if g["name"] == ref_name)
+    ref_mask = np.ones(len(paper), bool) if ref_name == REF else ~paper["subtype"].str.lower().str.contains("sft").to_numpy()
     disjoint = [g for g in groups if g["kind"] in ("subtype", "sft", "glioma")]
     d_paper = ref["delta"]
     ux = d_paper / ref["norm"]
@@ -526,7 +529,7 @@ def arrows(groups: list[dict], paper: pd.DataFrame) -> tuple[pd.DataFrame, dict]
                    angle_vs_paper_deg=_deg(_cos(d, d_paper)),
                    residual_vs_paper=res, residual_rel_vs_paper=res / g["norm"])
         if g is not ref:
-            sub = reference_for(g, paper, np.ones(len(paper), bool))
+            sub = reference_for(g, paper, ref_mask)
             dr, _, tr_r, nr_corr = shift_stats(_xs(sub))
             r2 = float((d - dr) @ (d - dr))
             row["angle_corrected_vs_paper_deg"] = _deg(corrected_cos(d, g["norm_corr"], dr, nr_corr))
@@ -710,7 +713,7 @@ def _spread(y: np.ndarray, gap: float, n_iter: int = 500) -> np.ndarray:
     return out
 
 
-def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "", u: float = 1.0) -> None:
+def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "", u: float = 1.0, ref_label: str = REF_LABEL) -> None:
     """a: 両施設の重心と patho2 → EBRAINS の矢印（平行四辺形）。b: 同じ矢印を原点から並べたもの（平行・同じ長さかを見る）。両方とも縦横同じ縮尺。
     u = 余白・ラベルの間隔の倍率（L2 の単位で書いた定数に掛ける。TITAN・meanpool は 1 = 前の図と同じ、prism・meanpool_virchow は ‖Δ_paper‖ / ARROWS_UNIT_TITAN）。"""
     from matplotlib.lines import Line2D
@@ -734,7 +737,7 @@ def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "", 
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("Δ_paper direction (L2 units)")
     ax.set_ylabel(f"PC1 of between-group variation ⊥ Δ_paper ({summary['pc1_frac']:.0%})")
-    ax.set_title("centroids at both sites (open: patho2, filled: EBRAINS)" + tag + "\narrow = site shift of each group, dashed = " + REF_LABEL, fontsize=10)
+    ax.set_title("centroids at both sites (open: patho2, filled: EBRAINS)" + tag + "\narrow = site shift of each group, dashed = " + ref_label, fontsize=10)
     ax.grid(alpha=0.25)
 
     grp = df[df["role"] == "group"]
@@ -749,7 +752,7 @@ def plot_arrows(df: pd.DataFrame, summary: dict, out_path: Path, tag: str = "", 
                   f"full space (noise-corr.): angle {af[0]:.1f} ± {af[1]:.1f}°, |shift| {nf[0]:.2f} ± {nf[1]:.2f}", fontsize=9)
     ax2.grid(alpha=0.25)
     handles = [Line2D([], [], color=FAMILY_COLOR[f], lw=2, label=f) for f in FAMILY_ORDER if f in set(grp["family"])]
-    handles.append(Line2D([], [], color="0.45", lw=2, ls="--", label=REF_LABEL))
+    handles.append(Line2D([], [], color="0.45", lw=2, ls="--", label=ref_label))
     ax2.legend(handles=handles, fontsize=8, loc="upper left")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
@@ -796,6 +799,9 @@ def main() -> None:
     ap.add_argument("--reload", action="store_true", help="埋め込みのキャッシュを捨てて h5 から読み直す")
     ap.add_argument("--bootstrap", choices=["slides", "patients"], default="slides",
                     help="groups.csv の CI の再抽出の単位。patients は施設・群ごとに患者を再抽出し groups_patients.csv に書く（groups.csv は上書きしない）")
+    ap.add_argument("--reference", choices=["paper", "meningioma"], default="paper",
+                    help="矢印の図と食い違わせた対照の基準のずれ。paper = 髄膜腫+SFT コホート（既定、今までの出力）、meningioma = 髄膜腫だけ"
+                         "（v4。arrows.* と mismatch_matrix.* だけを <出力先>/reference_meningioma/ に書き、ほかの出力は書かない）")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -825,6 +831,23 @@ def main() -> None:
               f"{embed.n_computed} 枚（shift_transfer/meanpool_virchow/ のキャッシュを使ったときは 0）。次元 {len(paper['embedding'].iloc[0])}")
 
     groups = build_groups(paper, glioma, cfg)
+    if args.reference == "meningioma":   # 基準を髄膜腫だけのずれにした矢印と食い違いの行列だけ（キャッシュは上の out_dir のものを読む）
+        rdir = out_dir / "reference_meningioma"
+        rdir.mkdir(parents=True, exist_ok=True)
+        for g in groups:   # compute と同じ（ブートストラップは要らないので compute は呼ばない）
+            g["delta"], g["norm"], g["tr_v"], g["norm_corr"] = shift_stats(g["X"])
+        arr, arr_summary = arrows(groups, paper, MENI)
+        mm = mismatch(paper, glioma, next(g["delta"] for g in groups if g["name"] == MENI))
+        arr.to_csv(rdir / "arrows.csv", index=False)
+        plot_arrows(arr, arr_summary, rdir / "arrows.png", tag,
+                    u=arr_summary["paper_norm"] / ARROWS_UNIT_TITAN if args.encoder in SWAP_PAPER else 1.0, ref_label=MENI)
+        mm.to_csv(rdir / "mismatch_matrix.csv", index=False)
+        plot_mismatch(mm, rdir / "mismatch_matrix.png", tag)
+        for k in ("angle_2d_deg", "length_2d", "angle_vs_paper_deg", "angle_corrected_vs_paper_deg", "shift_norm"):
+            m, sd = arr_summary[k]
+            print(f"   {k:32s} {m:7.3f} ± {sd:.3f}  (vs {MENI})")
+        print(f"saved to {rdir}")
+        return
     df_groups, pairs = compute(groups, paper, cfg, args.bootstrap)
     bio = bio_control(paper, glioma, groups)
     arr, arr_summary = arrows(groups, paper)
