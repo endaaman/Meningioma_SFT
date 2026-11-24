@@ -132,6 +132,7 @@ uv run python shift_transfer.py --encoder meanpool         # 同様に transfer_
 uv run python transfer_umap.py                             # transfer_correction.py（埋め込みのキャッシュ）の後。5 科の UMAP（out/transfer_umap/）
 uv run python transfer_sample_size.py                      # 同。枚数 n・種類数 k vs 転移の指標（out/transfer_sample_size/。--summary-only で CSV から図だけ）
 uv run python transfer_rare_crossover.py                   # 4 エンコーダの transfer_correction.py・transfer_rare_target.py・atlas_retrieval.py の後（その出力と突き合わせる）。自前の n 枚 vs 借りる Δ の交点（約 40 分、Virchow の平均が半分以上、--n-jobs 12）
+MENINGIOMA_SFT_CONFIG=$PWD/out/_sensitivity/flagged_excluded/config.yaml uv run python shift_transfer.py   # 感度分析（TITAN）: config.yaml の写しで output_dir を out/_sensitivity/flagged_excluded、patho2_gliomas.exclude_flagged を true にし（主解析のキャッシュは symlink で読むだけ）、transfer_manifest.py → shift_transfer.py → transfer_correction.py → transfer_rare_target.py --encoders titan を同じ環境変数で回す。主解析の out/ は書かない
 uv run python transfer_color.py build --workers 4           # transfer_manifest.py の後。全スライドの色（h5 のパッチ画素か元 WSI。NFS を読むので 4 並列まで、途中から再開できる。約 4 時間）
 uv run python transfer_color.py analyze                     # build と transfer_correction.py（埋め込みのキャッシュ）の後（out/transfer_color/）
 uv run python shift_time.py                                # 論文には出さない。院内の Δ の経年安定性（out/shift_time/、--plot-only で図だけ）
