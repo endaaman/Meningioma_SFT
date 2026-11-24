@@ -70,33 +70,47 @@ V4_TABLES = [
 V4_SUPP = [
     "shift_mismatch",          # Fig 3c を移した: 腫瘍を食い違わせた対照（5 × 5、髄膜腫だけのずれとの cos）
     "combat_recentred",        # Fig 5 の対照: 借りた ComBat の中心を当て先で取り直す
+    "estimation_sample_size",  # ずれの推定に要る枚数（髄膜腫の院内 n 枚 → グリオーマ / 6 群の自身の n 枚 対 借りる）
 ]
 V4_SUPP_TABLES = [
     "meningioma_subtype_counts",   # 髄膜腫のサブタイプ別の枚数と患者数（Table 1 から分けた）
+    "meningioma_methods",          # 髄膜腫の補正法の比較（全指標）
+    "sft_cross_site",              # SFT 対 髄膜腫の施設間分類（最近傍重心法、4 条件）
+    "scale_origin_table",          # 倍率を掛ける中心の全数値（当て先 × 推定元 × 5 変種）
+    "ebrains_composition",         # EBRAINS 側の構成を変えた感度
+]
+# Supplementary Data（表にしない CSV。番号は Supplementary Data n）
+V4_SUPP_DATA = [
+    "transfer_corrections_all",    # 借りた補正の全数値（当て先 × 推定元 × 3 法 ＋ 中心を取り直した ComBat）
 ]
 V4_UNREGISTERED: list[str] = []
 
 REGISTRY = {
-    "v3": {"MAIN": V3_MAIN, "TABLES": V3_TABLES, "SUPP": V3_SUPP, "SUPP_TABLES": V3_SUPP_TABLES, "UNREGISTERED": V3_UNREGISTERED},
-    "v4": {"MAIN": V4_MAIN, "TABLES": V4_TABLES, "SUPP": V4_SUPP, "SUPP_TABLES": V4_SUPP_TABLES, "UNREGISTERED": V4_UNREGISTERED},
+    "v3": {"MAIN": V3_MAIN, "TABLES": V3_TABLES, "SUPP": V3_SUPP, "SUPP_TABLES": V3_SUPP_TABLES, "SUPP_DATA": [],
+           "UNREGISTERED": V3_UNREGISTERED},
+    "v4": {"MAIN": V4_MAIN, "TABLES": V4_TABLES, "SUPP": V4_SUPP, "SUPP_TABLES": V4_SUPP_TABLES, "SUPP_DATA": V4_SUPP_DATA,
+           "UNREGISTERED": V4_UNREGISTERED},
 }
 VERSION = str((_load_config().get("paper", {}) or {}).get("version", "v4"))
 if VERSION not in REGISTRY:
     raise KeyError(f"figs: paper.version {VERSION!r} の登録表が無い（{sorted(REGISTRY)}）")
-MAIN, TABLES, SUPP, SUPP_TABLES, UNREGISTERED = (REGISTRY[VERSION][k] for k in ("MAIN", "TABLES", "SUPP", "SUPP_TABLES", "UNREGISTERED"))
+MAIN, TABLES, SUPP, SUPP_TABLES, SUPP_DATA, UNREGISTERED = (
+    REGISTRY[VERSION][k] for k in ("MAIN", "TABLES", "SUPP", "SUPP_TABLES", "SUPP_DATA", "UNREGISTERED"))
 
 
 def stem(name: str) -> str:
-    """出力ファイル名の幹（例: fig3_umap_harmonization / table1_cohort / figS1_subtype_distance_heatmap / tableS1_performance）。"""
-    for prefix, names in (("fig", MAIN), ("table", TABLES), ("figS", SUPP), ("tableS", SUPP_TABLES)):
+    """出力ファイル名の幹（例: fig3_umap_harmonization / table1_cohort / figS1_subtype_distance_heatmap / tableS1_performance /
+    dataS1_transfer_corrections_all）。"""
+    for prefix, names in (("fig", MAIN), ("table", TABLES), ("figS", SUPP), ("tableS", SUPP_TABLES), ("dataS", SUPP_DATA)):
         if name in names:
             return f"{prefix}{names.index(name) + 1}_{name}"
-    raise KeyError(f"figs: '{name}' is not registered in MAIN / TABLES / SUPP / SUPP_TABLES")
+    raise KeyError(f"figs: '{name}' is not registered in MAIN / TABLES / SUPP / SUPP_TABLES / SUPP_DATA")
 
 
 def label(name: str) -> str:
-    """原稿での呼び名（例: Fig 3 / Table 1 / Fig S1）。"""
-    for prefix, names in (("Fig ", MAIN), ("Table ", TABLES), ("Fig S", SUPP), ("Table S", SUPP_TABLES)):
+    """原稿での呼び名（例: Fig 3 / Table 1 / Fig S1 / Supplementary Data 1）。"""
+    for prefix, names in (("Fig ", MAIN), ("Table ", TABLES), ("Fig S", SUPP), ("Table S", SUPP_TABLES),
+                          ("Supplementary Data ", SUPP_DATA)):
         if name in names:
             return f"{prefix}{names.index(name) + 1}"
     raise KeyError(name)

@@ -64,6 +64,12 @@ figs/                # 論文の図表を out/ の解析結果から組み立て
   glioma_retrieval.py  # Fig 7: グリオーマの参照コホートへの診断名の検索（1 位・5 位以内の一致、3 群の混同行列）
   shift_mismatch.py  # Fig S1: 腫瘍を食い違わせた対照（5 × 5、基準は髄膜腫だけのずれ）
   combat_recentred.py  # Fig S2: Fig 5 の対照。借りた ComBat の中心を当て先で取り直す（中心の距離・近傍の混ざり）
+  estimation_sample_size.py  # Fig S3: ずれの推定に要る枚数（a 髄膜腫の院内 n 枚 → グリオーマに残る施設差、b 6 群の自身の n 枚 対 借りる。out/transfer_sample_size/）
+  meningioma_methods.py  # Table S2: 髄膜腫の補正法の比較（全指標、out/method_compare_meningioma/summary.csv）
+  sft_cross_site.py  # Table S3: SFT 対 髄膜腫の施設間分類（4 条件、out/nc/binary/。セルの作り方は v3 の performance.py の関数）
+  scale_origin_table.py  # Table S4: 倍率を掛ける中心の全数値と分解（out/_diagnostics/scale_origin/）
+  ebrains_composition.py  # Table S5: EBRAINS 側の構成を変えた感度（out/shift_transfer/composition.csv、髄膜腫だけのずれとの cos）
+  transfer_corrections_all.py  # Supplementary Data 1（CSV だけ）: 借りた補正の全数値（当て先 × 推定元 × 4 法）→ tables/dataS1_*.csv。番号は figs/__init__.py の SUPP_DATA
   # --- v3（paper.version: v3 のときに登録される）---
   common.py          # 出力先・共通スタイル・保存
   tissue.py / umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py / pathology_checks.py  # 図（内容名）
