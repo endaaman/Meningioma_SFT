@@ -10,7 +10,7 @@ gan.py               # Cycle-GAN による補正後のバッチをエンコー�
 macenko.py           # 色正規化（Macenko、patho2 → EBRAINS）: EBRAINS から目標を推定し、patho2 のパッチを正規化して CONCH でエンコード
 titan.py             # TITAN による WSI-level aggregate（--variants で対象 variant を指定できる）
 titan_batch.py       # 外部の h5 の木に TITAN を書く（EBRAINS 全体の CONCH 特徴 = /mnt/server42/AI/Datasets/EBRAINS_embeddings。config の ebrains_embeddings.priority のグリオーマを先に、残りは名前順。ログは out/ebrains_embeddings/）
-patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor）の HE から CONCH v1.5（wsi-toolbox 0.7.0 の preset conch15、cls 1024 と proj 768 を 1 回で）+ TITAN を作り Patho2Gliomas_embeddings に置く（EBRAINS_embeddings と同じ構成）。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
+patho2_gliomas_extract.py  # 院内グリオーマ（/mnt/server42/AI/Datasets/Patho2Gliomas、旧 BrainTumor。症例フォルダ直下に ndpi が無ければ同名の入れ子 <症例>/<症例>/ も見る）の HE から CONCH v1.5（wsi-toolbox 0.7.0 の preset conch15、cls 1024 と proj 768 を 1 回で）+ TITAN を作り Patho2Gliomas_embeddings に置く（EBRAINS_embeddings と同じ構成）。HE の判定（ファイル名）と全 ndpi の一覧は out/patho2_gliomas/slides.csv
 patho2_gliomas_review.py   # 院内グリオーマの 1 症例 1 枚の代表 HE を目で選ぶツール: HE 全部のサムネイル（thumbs）と、症例ごとに並べてクリックで選ぶページ（serve: クリックごとに data/patho2_gliomas/representatives.csv が書かれる。html: サーバーなしの静的版）。HE 1 枚の症例は自動で選択済み、EXCLUDE で症例除外。解析はこの CSV を読む
 transfer_manifest.py # 転移テスト（3 法 × 推定元 × 当て先）で使う全スライドの一覧（髄膜腫+SFT コホート ＋ 院内代表 ＋ EBRAINS 対応診断、2,301 枚）と TITAN / PRISM の有無 → out/transfer/manifest.csv。Virchow 抽出の入力にもなる
 transfer_correction.py # 転移テスト本体: 施設補正 3 法（平行移動 / 相似変換 / ComBat ＋ 倍率だけ移す ComBat-recentred）を推定元（科・paper・others・科ごとに当てはめて平均する others_mean・own）で当てはめて当て先（paper / glioma / lymphoma / metastasis / all）に当てる。残差・施設 ASW・歪み・論文のベンチ（対・組織型と SFT の最近傍重心法）と、own・paper で論文の値の再現確認（--encoder titan|prism|meanpool|meanpool_virchow、out/transfer/correction_{encoder}.*）。施設の見分けやすさの 2 指標 group_gap_sd（同じ群の 2 施設の中心の距離 / 施設内の広がり）と knn_mix（院内スライドの 10 近傍に占める EBRAINS の割合 / 完全に混ざったときの期待値）を、群（対の回復と同じ群）の中央値で correction_{encoder}.csv に、群ごとに correction_{encoder}_groups.csv に出す pairs_adjacent の元になった樹形図（施設 × 群の平均の群情報・距離行列 D・Ward の連結 Z、dendrogram.save_raw の形式）を out/transfer/structure/{encoder}/{target}/{source}__{method}/ に保存（当て先 paper / glioma / all。figs/transfer_structure_preview.py が読む）
@@ -114,7 +114,7 @@ uv run python dataset.py   # 他スクリプトと独立。任意のタイミン
 uv run python -u titan_batch.py --dry-run                  # EBRAINS_embeddings の対象と順番（グリオーマ → 残り）
 uv run python -u titan_batch.py                            # 学生が作った CONCH 特徴（3,121 本）に TITAN を書く（約 2 秒/本）
 uv run python -u patho2_gliomas_extract.py --dry-run       # 院内の HE 判定の監査（out/patho2_gliomas/slides.csv）
-uv run python -u patho2_gliomas_extract.py                 # 院内 A/G/O/L/M の HE 全部を抽出（約 30–45 秒/枚）。--groups A G O で群を絞れる
+uv run python -u patho2_gliomas_extract.py                 # 院内 A/G/O/L/M の HE 全部を抽出（約 30–45 秒/枚）。--groups A G O で群を、--cases で症例を絞れる
 uv run python -u patho2_gliomas_review.py thumbs           # HE 全部のサムネイル（out/patho2_gliomas/review/thumbs/、4 分）
 uv run python -u patho2_gliomas_review.py serve            # tmux の担当 window で。http://127.0.0.1:8765/ で代表を選ぶ → data/patho2_gliomas/representatives.csv
 uv run python transfer_manifest.py                         # 代表を選び終えてから。転移テストの全スライド一覧と埋め込みの揃い具合（out/transfer/manifest.csv）

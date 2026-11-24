@@ -1,7 +1,9 @@
 """patho2_gliomas_extract.py — 院内グリオーマ（Patho2Gliomas、旧 BrainTumor）の HE WSI から CONCH v1.5 パッチ特徴と TITAN を作る。
 
 入力（config の patho2_gliomas）:
-    wsi_root/<群>/<症例番号>/*.ndpi
+    wsi_root/<群>/<症例番号>/*.ndpi（症例フォルダの直下に ndpi が無く、同名の入れ子 <症例番号>/<症例番号>/ があればその中の *.ndpi。
+      報告書 PDF と並んで 1 段深く置かれた症例がある: G/N20-241、O/19-1570 など 10 例、2026-11-24 に判明。h5 は入れ子にせず
+      out_root/<群>/<症例番号>/ に書く）
       コピーが途中で切れているファイルがある（N20-097#1_HE: 295 MB、正本は 4,952 MB。openslide も tifffile も開けない）。review_root
       （server41/脳腫瘍レビュー、院内 WSI の正本）に同名でより大きいファイルがあればそちらを読む（index の wsi_source = review）。
       群: A = IDH 変異型星細胞腫（ast）、G = IDH 野生型（glm）、O = 乏突起膠腫（odg）、L = リンパ腫（lym）、M = 転移（met）。
@@ -26,6 +28,7 @@ Usage:
     uv run python -u patho2_gliomas_extract.py --dry-run           # HE 判定と件数だけ（index CSV は書く。GPU を使わない）
     uv run python -u patho2_gliomas_extract.py --groups A G O      # グリオーマ 3 群だけ
     uv run python -u patho2_gliomas_extract.py --limit 1
+    uv run python -u patho2_gliomas_extract.py --cases N20-241 19-1570   # 抽出をこの症例の HE に限る（一覧 slides.csv は全部作り直す）
     uv run python -u patho2_gliomas_extract.py                      # config の priority 順に全群
 """
 from __future__ import annotations
@@ -106,7 +109,10 @@ def build_index(wsi_root: Path, out_root: Path, groups: dict[str, str], order: l
         for cdir in sorted(gdir.iterdir()):
             if not cdir.is_dir() or cdir.name in SKIP_DIRS or not CASE_RE.match(cdir.name):
                 continue
-            for ndpi in sorted(cdir.glob("*.ndpi")):
+            ndpis = sorted(cdir.glob("*.ndpi"))
+            if not ndpis and (cdir / cdir.name).is_dir():   # 報告書 PDF と並んで 1 段深い入れ子 <症例>/<症例>/*.ndpi
+                ndpis = sorted((cdir / cdir.name).glob("*.ndpi"))
+            for ndpi in ndpis:
                 stain, is_he, recut = classify(ndpi.stem)
                 # Patho2Gliomas のコピーが正本（同名ファイル）より小さければ途中で切れたコピーなので、正本の方を読む
                 src, source = ndpi, "patho2_gliomas"
@@ -127,6 +133,7 @@ def main() -> None:
     ap.add_argument("--groups", nargs="+", default=None, help="処理する群（既定: config の priority 順に全部）")
     ap.add_argument("--limit", type=int, default=None, help="先頭 N 本だけ")
     ap.add_argument("--overwrite", action="store_true", help="既存の h5 を作り直す")
+    ap.add_argument("--cases", nargs="+", default=None, help="抽出をこの症例の HE に限る（一覧 slides.csv は全症例で作り直す）")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -163,6 +170,11 @@ def main() -> None:
         return
 
     targets = he.copy()
+    if args.cases:
+        miss = sorted(set(args.cases) - set(targets["case"]))
+        if miss:
+            raise SystemExit(f"HE の一覧に無い症例: {miss}")
+        targets = targets[targets["case"].isin(args.cases)]
     if args.limit:
         targets = targets.head(args.limit)
 
