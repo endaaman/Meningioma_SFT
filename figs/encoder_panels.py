@@ -27,7 +27,7 @@ from matplotlib.patches import Patch
 from figs import label
 from figs.common import FONT, config, fig_path, out_root, panel, save
 from shift_transfer import FAMILY_COLOR
-from utils.display import ENCODER_COLORS, ENCODER_LABELS, ENCODER_ORDER, FAMILY_LABELS
+from utils.display import ENCODER_COLORS, ENCODER_LABELS, ENCODER_ORDER, FAMILY_LABELS, display_name
 
 NAME = "encoder_panels"
 TASKS = [("sft", "SFT vs meningioma"), ("histotype", "Meningioma subtypes"), ("glioma3", "Glioma groups"), ("family5", "Tumour types")]
@@ -74,7 +74,7 @@ def main() -> None:
         xs = i + rng.uniform(-0.15, 0.15, len(g))
         ax.scatter(xs, g["cos_vs_meni"], s=14, c=[FAMILY_COLOR[f] for f in g["family"]], zorder=3)
         ax.hlines(g["cos_vs_meni"].median(), i - 0.25, i + 0.25, color="0.2", lw=1.2)
-        vals += [{"panel": "b", "encoder": enc, "group": r.group, "value": r.cos_vs_meni} for r in g.itertuples()]
+        vals += [{"panel": "b", "encoder": enc, "group": display_name(r.group), "value": r.cos_vs_meni} for r in g.itertuples()]
     ax.set_xticks(range(nenc))
     ax.set_xticklabels([ENCODER_LABELS[e] for e in ENCODER_ORDER], fontsize=FONT - 2)
     ax.set_ylim(0.3, 1.0)

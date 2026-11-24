@@ -37,7 +37,7 @@ from matplotlib.lines import Line2D
 from figs import label
 from figs.common import CONDITION_COLORS, CONDITION_LABELS, FONT, config, fig_path, out_root, panel, save
 from shift_transfer import FAMILY_COLOR
-from utils.display import FAMILY_LABELS, GLIOMA_GROUP_LABELS
+from utils.display import FAMILY_LABELS, GLIOMA_GROUP_LABELS, display_name
 
 NAME = "borrowed_scaling"
 MIN_N = 5
@@ -190,7 +190,7 @@ def main() -> None:
     ax.axvline(1.0, color="0.6", lw=0.8, ls=":")
     ax.axhline(y[t["kind"].eq("subtype").idxmax()] + 0.5, color="0.85", lw=0.6)
     ax.set_yticks(y)
-    ax.set_yticklabels([GLIOMA_GROUP_LABELS.get(g, g).replace(" meningioma", "") for g in t["group"]], fontsize=FONT - 2.5)
+    ax.set_yticklabels([display_name(GLIOMA_GROUP_LABELS.get(g, g)).replace(" meningioma", "") for g in t["group"]], fontsize=FONT - 2.5)
     ax.tick_params(axis="x", labelsize=FONT - 2)
     ax.set_xlabel("Scale s = EBRAINS / in-house within-site spread", fontsize=FONT - 1)
     f7, fs = tests.loc["families_7"], tests.loc["meningioma_subtypes"]
@@ -224,7 +224,7 @@ def main() -> None:
     save(fig, cfg, NAME)
 
     out = pd.concat([ov.assign(panel="a"), v.assign(panel="bc"),
-                     t[["group", "family", "kind", "scale_s", "scale_s_lo", "scale_s_hi"]].assign(panel="d"), pd.DataFrame(evals)],
+                     t[["group", "family", "kind", "scale_s", "scale_s_lo", "scale_s_hi"]].assign(panel="d", group=t["group"].map(display_name)), pd.DataFrame(evals)],
                     ignore_index=True)
     out.to_csv(fig_path(cfg, NAME, "_values.csv"), index=False)
     pd.set_option("display.width", 200)

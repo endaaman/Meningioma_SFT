@@ -25,6 +25,7 @@ from matplotlib.lines import Line2D
 from figs import label
 from figs.common import FONT, config, out_root, panel, save
 from shift_transfer import FAMILY_COLOR, FAMILY_ORDER, _spread
+from utils.display import display_name
 
 NAME = "tumour_shift_arrows"
 
@@ -55,7 +56,7 @@ def main() -> None:
         ax.scatter([r.x_patho2], [r.y_patho2], s=12, facecolors="white", edgecolors=col, linewidths=0.8, zorder=3)
         ax.scatter([r.x_ebrains], [r.y_ebrains], s=12, color=col, zorder=3)
         ax.plot([label_x + 0.1, r.x_patho2], [ly, r.y_patho2], color=col, lw=0.4, alpha=0.6)
-        name = "Meningioma (all)" if ref else r.group
+        name = "Meningioma (all)" if ref else display_name(r.group)
         ax.text(label_x, ly, name, ha="right", va="center", fontsize=FONT - 2, color=col, fontstyle="italic" if ref else "normal")
         if not ref:
             ax2.annotate("", xy=(r.dx, r.dy), xytext=(0, 0), arrowprops={**style, "lw": 0.8, "mutation_scale": 6})
@@ -89,7 +90,7 @@ def main() -> None:
         axb.scatter([r.cos_vs_meni], [yi], s=18, color=col, zorder=3)
         axb.scatter([r.cos_corrected_vs_meni], [yi], s=18, facecolors="white", edgecolors=col, linewidths=0.9, zorder=3)
     axb.set_yticks(y)
-    axb.set_yticklabels(g["group"], fontsize=FONT - 2)
+    axb.set_yticklabels([display_name(x) for x in g["group"]], fontsize=FONT - 2)
     axb.set_xlim(0.5, 1.0)
     axb.axvline(1, color="0.8", lw=0.6)
     axb.set_xlabel("cos with the meningioma site shift")

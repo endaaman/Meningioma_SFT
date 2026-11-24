@@ -53,8 +53,16 @@ ENCODER_LABELS_JA = {"meanpool": "CONCH の平均", "titan": "TITAN", "meanpool_
 ENCODER_COLORS = {"meanpool": "#1baf7a", "titan": "#2a78d6", "meanpool_virchow": "#882255", "prism": "#eb6834"}
 ENCODER_MARKERS = {"meanpool": "s", "titan": "o", "meanpool_virchow": "^", "prism": "D"}
 # 腫瘍の科（転移テストの 5 科。コード上の名前は shift_transfer / transfer_correction の family のまま）
-FAMILY_LABELS = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "lymphoma": "DLBCL", "metastasis": "Metastasis"}
-FAMILY_LABELS_JA = {"meningioma": "髄膜腫", "SFT": "SFT", "glioma": "グリオーマ", "lymphoma": "DLBCL", "metastasis": "転移"}
+# リンパ腫の表示名は PCNSL（ken 2026-11-25。それまでは DLBCL）。科のキー（lymphoma）と、out/ の CSV にある群の名前
+# （config の shift_transfer.group_names 由来の "DLBCL"）は内部の名前として変えず、図表に出すときに display_name で読み替える
+FAMILY_LABELS = {"meningioma": "Meningioma", "SFT": "SFT", "glioma": "Glioma", "lymphoma": "PCNSL", "metastasis": "Metastasis"}
+FAMILY_LABELS_JA = {"meningioma": "髄膜腫", "SFT": "SFT", "glioma": "グリオーマ", "lymphoma": "PCNSL", "metastasis": "転移"}
+DISPLAY_RENAME = {"DLBCL": "PCNSL"}   # out/ の CSV に入っている表示用の群の名前 → 今の表示名
+
+
+def display_name(s: str) -> str:
+    """out/ の CSV にある群の名前（例 "DLBCL"）を図表の表示名に読み替える（それ以外はそのまま）。"""
+    return DISPLAY_RENAME.get(s, s)
 # 転移テストの当て先 グリオーマの 3 群（manifest の group）。表示名は config の shift_transfer.group_names と同じ。
 # 色は髄膜腫サブタイプの色（config の display.colors.subtypes、tab20 から）に無い 3 色（figs/transfer_structure_preview.py）
 GLIOMA_GROUP_LABELS = {"ast": "Astrocytoma, IDH-mutant", "glm": "Glioblastoma, IDH-wildtype", "odg": "Oligodendroglioma"}

@@ -2,9 +2,9 @@
 
 a 髄膜腫 12 組の樹形図 3 段（補正なし / グリオーマのずれを借りる / 髄膜腫で推定）
 b グリオーマ 3 組の樹形図 3 段（補正なし / 髄膜腫のずれを借りる / グリオーマで推定）
-c 推定元を横に並べた隣り合う組の数（当て先 髄膜腫 12 組・グリオーマ 3 組。推定元 = 補正なし、SFT、DLBCL、転移、もう一方のよくある
+c 推定元を横に並べた隣り合う組の数（当て先 髄膜腫 12 組・グリオーマ 3 組。推定元 = 補正なし、SFT、PCNSL、転移、もう一方のよくある
   腫瘍、同じ腫瘍）。SFT から借りると戻らないこともそのまま見せる
-d 鑑別の腫瘍（SFT ← 髄膜腫、DLBCL ← グリオーマ、転移 ← グリオーマ）の 2 施設の中心の距離（施設内のばらつき = 1）と
+d 鑑別の腫瘍（SFT ← 髄膜腫、PCNSL ← グリオーマ、転移 ← グリオーマ）の 2 施設の中心の距離（施設内のばらつき = 1）と
   近傍の混ざり（院内の 10 近傍に占める EBRAINS の割合 / 期待値、1 = 見分けがつかない）。補正なし → 借りる の 2 点。
   SFT は標本誤差の床（2 施設の中心が一致していても残る値、transfer_rare_target.py の gap_noise_sd）を短い線で添える
 
@@ -80,7 +80,7 @@ def ddx_values(cfg: dict) -> pd.DataFrame:
     gr = pd.read_csv(out / f"correction_{ENCODER}_groups.csv")
     rows = []
     for name, target, src, grp, tab in (("SFT ← meningioma", "paper", "meningioma", "SFT", rt),
-                                        ("DLBCL ← glioma", "lymphoma", "glioma", "lym", gr),
+                                        (f"{FAMILY_LABELS['lymphoma']} ← glioma", "lymphoma", "glioma", "lym", gr),
                                         ("Metastasis ← glioma", "metastasis", "glioma", "met", gr)):
         for cond, s in (("none", "none"), ("borrowed", src)):
             d = tab[(tab["method"] == METHOD) & (tab["source"] == s) & (tab["group"] == grp) & (tab["target"] == target)]

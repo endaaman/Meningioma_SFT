@@ -1,6 +1,6 @@
 """v4 Fig 1（研究の設計）の下書き。プレビュー（登録しない。手で描き直すか本番に上げるかは ken）。
 
-a 2 施設 × 5 腫瘍の格子。行 = EBRAINS（基準、●）/ In-house（■）、列 = Meningioma、SFT | Glioma、DLBCL、Metastasis
+a 2 施設 × 5 腫瘍の格子。行 = EBRAINS（基準、●）/ In-house（■）、列 = Meningioma、SFT | Glioma、PCNSL、Metastasis
   （髄膜腫の隣に SFT、グリオーマの隣にリンパ腫と転移）。よくある腫瘍（実線の枠）と鑑別の腫瘍（破線の枠）を枠の線で分け、
   列の上の矢印で「よくある腫瘍で測ったずれを隣の鑑別の腫瘍に借りる」向きを示す。マスの数字 = 枚数（患者数）で、
   output_dir/cohort_table/table1_counts.csv から読む（手で打たない）
@@ -59,7 +59,7 @@ def grid(ax: plt.Axes, cfg: dict) -> None:
         ax.text(0.32, y, lab, ha="left", va="center", fontsize=FONT - 0.5)
     ax.text(0.15, y_rows[1] - ch / 2 - 0.02, "Cells: slides (patients)", fontsize=FONT - 2.5, color="0.35", va="top")
     # 借りる向き。主 = 髄膜腫 ⇄ グリオーマ（両向き、太く濃い弧）、従 = よくある腫瘍 → 隣の鑑別の腫瘍（細く薄い鉤形。グリオーマからは
-    # 1 本の幹を DLBCL と転移に枝分かれさせる）
+    # 1 本の幹を PCNSL と転移に枝分かれさせる）
     base = y_rows[0] + ch / 2 + 0.40          # 鉤形の足元（見出しの上）
     stub = base + 0.16                         # 鉤形の横線の高さ
     minor = dict(color="0.6", lw=0.8)
