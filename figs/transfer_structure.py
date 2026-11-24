@@ -132,7 +132,11 @@ def figure(cfg: dict) -> tuple[plt.Figure, pd.DataFrame, pd.DataFrame]:
     legend_y = BOTTOM_H
     ax_l = fig.add_axes([x_left / fig_w, legend_y / fig_h, w_left / fig_w, LEGEND_H / fig_h])
     ax_l.axis("off")
-    ax_l.legend(handles=legend_handles(data["meningioma"][-1][2], cfg), loc="center", ncol=9, frameon=False,
+    handles = legend_handles(data["meningioma"][-1][2], cfg)
+    for h in handles:   # 施設の表記を v4 の表記（In-house）に（figs.subtype_structure は v3 の表記のまま）
+        if h.get_label() == "patho2":
+            h.set_label("In-house")
+    ax_l.legend(handles=handles, loc="center", ncol=9, frameon=False,
                 fontsize=18, handlelength=1.6, handletextpad=0.5, columnspacing=1.4)
     ax_r = fig.add_axes([x_right / fig_w, legend_y / fig_h, w_right / fig_w, LEGEND_H / fig_h])
     ax_r.axis("off")

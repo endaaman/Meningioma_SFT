@@ -16,6 +16,7 @@ v3 の Fig 3（髄膜腫 + SFT、EBRAINS 551 / 院内 577 枚、13 組）と同�
                            pair_stats = method_compare の adjacent_pairs と同じ）、pairs_n = 組の数（両施設にある組織型）
     group_gap_sd / knn_mix 組織型ごとの 2 施設の中心の距離 / 施設内のばらつき、院内の 10 近傍に占める EBRAINS の割合 / 期待値
                            （transfer_correction.site_mixing。組織型の中央値。_min5 は両施設 5 枚以上の組織型だけの中央値）
+    site_shift_norm / site_energy  施設の平均どうしの距離と点群のエネルギー距離（method_compare.site_metrics = v3 の Table S3 と同じ）
     nc_histotype_ba_E2P / P2E  組織型の最近傍重心法の balanced accuracy（transfer_correction.nc_ba = nc.py の点推定と同じ。
                            クラスは nc.histotype_set、SFT は入らない）
 確認: v3 の行が out/method_compare/summary.csv（asw_batch / ilisi / adjacent_pairs）と out/nc/histotype/bootstrap.csv
@@ -24,6 +25,9 @@ v3 の Fig 3（髄膜腫 + SFT、EBRAINS 551 / 院内 577 枚、13 組）と同�
 出力 (output_dir/method_compare_meningioma/):
     summary.csv   definition（meningioma = v4 / paper_v3）× condition の指標
     groups.csv    組織型ごとの group_gap_sd / gap / rms / knn_mix（site_mixing）
+    umap/{condition}/coords.csv（ほか umap_plot.run_umap の図）  v4 の Fig 2b 用: 髄膜腫だけの UMAP（補正なし / GAN / 平行移動。
+                  umap_plot.run_umap = v3 の UMAP と同じパラメータ config の umap、条件ごとに当てはめ）
+    structure/{condition}/euc_mean_raw_groups.csv / euc_mean_raw.npz  v4 の Fig 2d 用: 樹形図の元（dendrogram.save_raw、全条件）
     summary.md    v4 と v3 を並べた表と確認
 
 Usage:
@@ -36,9 +40,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from dendrogram import group_means, pair_stats, raw_distance, ward_linkage
+from dendrogram import group_means, pair_stats, raw_distance, save_raw, ward_linkage
 from harmonization import _reduce, _site_values
 from histotype_labels import apply_set
+from method_compare import site_metrics
 from transfer_correction import _md, apply_method, fit_source, nc_ba, site_mixing
 from utils.display import CONDITION_LABELS_JA, CONDITIONS_FIG3
 from utils.loader import load_config, load_data
@@ -46,13 +51,14 @@ from utils.loader import load_config, load_data
 CONDITIONS = CONDITIONS_FIG3 + ["affine_free"]       # 補正なし → Macenko → GAN → ComBat → 平行移動、参考に相似変換
 FIT_HERE = {"combat", "centroid", "affine_free"}     # v4 で髄膜腫だけから当てはめ直す補正
 MIN_N = 5
+UMAP_CONDITIONS = ["original", "gan", "centroid"]   # v4 の Fig 2b（髄膜腫だけ）
 
 
 def _variant(cfg: dict, cond: str) -> pd.DataFrame:
     return load_data(cfg, cfg.get("variants", {}).get(cond, cond))
 
 
-def evaluate(df: pd.DataFrame, cfg: dict, classes: list[str]) -> tuple[dict, list[dict]]:
+def evaluate(df: pd.DataFrame, cfg: dict, classes: list[str], save_tree: Path | None = None) -> tuple[dict, list[dict]]:
     ref = cfg["reference"]
     oth = next(s for s in df["source"].unique() if s != ref)
     X = np.stack(df["embedding"].values).astype(np.float64)
@@ -61,12 +67,15 @@ def evaluate(df: pd.DataFrame, cfg: dict, classes: list[str]) -> tuple[dict, lis
                               cfg.get("harmonization", {}).get("lisi_k", 30))
     g = group_means(df, cfg)
     D = raw_distance(g)
-    ps = pair_stats(D, ward_linkage(D), g)
+    Z = ward_linkage(D)
+    ps = pair_stats(D, Z, g)
+    if save_tree is not None:
+        save_raw(g, D, Z, save_tree)
     mix, per = site_mixing(X, st, lab, ref, cfg)
     big = [r for r in per if r["n_ebrains"] >= MIN_N and r["n_patho2"] >= MIN_N]
     m = np.isin(lab, classes)
     out = {"n_ebrains": int((st == ref).sum()), "n_patho2": int((st != ref).sum()), "asw_site": asw, "ilisi_site": ilisi,
-           "pairs_adjacent": int(ps["adjacent_pairs"]), "pairs_n": int(ps["n_subtypes"]), **mix,
+           "pairs_adjacent": int(ps["adjacent_pairs"]), "pairs_n": int(ps["n_subtypes"]), **mix, **site_metrics(df, cfg),
            "group_gap_sd_min5": float(np.median([r["group_gap_sd"] for r in big])),
            "knn_mix_min5": float(np.median([r["knn_mix"] for r in big])), "n_groups_min5": len(big),
            "nc_histotype_ba_E2P": nc_ba(X[m], st[m], lab[m], classes, ref, oth),
@@ -97,7 +106,12 @@ def main() -> None:
                 df = _variant(cfg, cond)
                 if definition == "meningioma":
                     df = df[~df["subtype"].str.lower().str.contains("sft")].reset_index(drop=True)
-            m, per = evaluate(df, cfg, classes)
+            tree = out_dir / "structure" / cond if definition == "meningioma" else None
+            m, per = evaluate(df, cfg, classes, tree)
+            if definition == "meningioma" and cond in UMAP_CONDITIONS:
+                from umap_plot import run_umap
+                (out_dir / "umap" / cond).mkdir(parents=True, exist_ok=True)
+                run_umap(df, out_dir / "umap" / cond, cfg)
             rows.append({"definition": definition, "condition": cond, **m})
             grows += [{"definition": definition, "condition": cond, **r} for r in per]
             print(f"  [{definition} / {cond}] ASW {m['asw_site']:.4f}  pairs {m['pairs_adjacent']}/{m['pairs_n']}  "
