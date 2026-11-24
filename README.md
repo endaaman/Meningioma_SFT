@@ -52,7 +52,18 @@ meanpool.py          # 平均プーリングのスライド埋め込み（TITAN 
 paper_color.py       # スライドごとの組織の平均色（CIELAB と Ruifrok–Johnston の H/E、32 パッチ）。Fig 2c の元（paper/{version}/color/slide_color.csv。置き場は config の paper.dir）
 stain_response.py    # 埋め込みの施設間シフト方向 u への射影 s と、スライドの H/E 染色バランス（log H/E）の対応。施設内相関・施設差の色による説明割合・応答曲線・補正（GAN/Macenko）による Δs と色変化の対応（out/stain_response/）
 figs/                # 論文の図表を out/ の解析結果から組み立てる（重い計算はしない）
-  __init__.py        # 図表番号の唯一の定義（MAIN / TABLES / SUPP の順序）
+  __init__.py        # 図表番号の唯一の定義。版ごとの登録表 REGISTRY（v3 = 髄膜腫 + SFT、v4 = 腫瘍の種類をまたぐ版）を config の paper.version で選ぶ（既定 v4。v3 にすれば v3 の図表を今までどおり作れる）
+  # --- v4（paper/v4/figures.md 先頭の仕様。出力は paper/v4/{fig,tables}/）---
+  cohort_tumours.py  # Table 1: 腫瘍 × 施設の枚数と患者数（out/cohort_table/table1_counts.csv）
+  meningioma_subtype_counts.py  # Table S1: 髄膜腫のサブタイプ別の枚数と患者数
+  meningioma_scaffold.py  # Fig 2: 髄膜腫で足場（パッチ / 髄膜腫だけの UMAP / 補正法の比較 / 樹形図 補正なし・GAN・平行移動。out/method_compare_meningioma/）
+  tumour_shift_arrows.py  # Fig 3: 12 群の矢印と群ごとの cos（基準は髄膜腫だけのずれ。shift_transfer.py --reference meningioma の出力と groups.csv）
+  transfer_structure.py   # Fig 4: 構造が移る（髄膜腫 12 組・グリオーマ 3 組の樹形図、推定元ごとの組の数、鑑別の腫瘍）。transfer_structure_preview.py を 12 組の定義で本番にしたもの
+  why_translation_preview.py  # Fig 5 のプレビュー 2 案（登録していない、ken の返事待ち）→ paper/v4/fig/_preview_why_translation_{A,B}.*
+  encoder_panels.py  # Fig 6: エンコーダの基礎精度・ずれの向き・組の数・施設差の大きさと借りた後に残る割合
+  glioma_retrieval.py  # Fig 7: グリオーマの参照コホートへの診断名の検索（1 位・5 位以内の一致、3 群の混同行列）
+  shift_mismatch.py  # Fig S1: 腫瘍を食い違わせた対照（5 × 5、基準は髄膜腫だけのずれ）
+  # --- v3（paper.version: v3 のときに登録される）---
   common.py          # 出力先・共通スタイル・保存
   tissue.py / umap_harmonization.py / shift_geometry.py / classification.py / subtype_structure.py / pathology_checks.py  # 図（内容名）
   umap_held_out.py   # Fig 7a–b（held-out 症例）の描画。pathology_checks.py から呼ぶ（単体では登録しない）
@@ -130,6 +141,7 @@ uv run python -u prism_extract.py                          # tmux の担当 wind
 uv run python atlas_retrieval.py                           # 参照コホートへの診断名の検索（参照 = EBRAINS 全体、out/atlas/）。埋め込みはキャッシュ（--reload で読み直し）。--min-n で参照のクラスの最小枚数（既定以外は出力名に _min{n}）、--encoder prism は抽出後
 uv run python dispersion_ratio.py                          # shift_transfer.py の後。ばらつきの比は腫瘍をまたいで共有されるか（out/dispersion_ratio/、Supplementary 用）
 uv run python shift_transfer.py                            # 代表を選び終えてから。Δ の向きの群・科による違い（out/shift_transfer/）。埋め込みはキャッシュ（--reload で読み直し）
+uv run python shift_transfer.py --reference meningioma     # v4 Fig 3 用: 基準を髄膜腫だけのずれにした矢印と食い違いの行列だけ（out/shift_transfer/reference_meningioma/）
 uv run python -u transfer_meanpool.py build                # transfer_manifest.py の後。平均プーリング埋め込みのキャッシュ（out/transfer/embeddings_meanpool.npy。NFS から features を読む）
 uv run python shift_transfer.py --encoder meanpool         # 同様に transfer_correction.py / dispersion_ratio.py --encoder meanpool（集約器の対照。出力は meanpool/ か *_meanpool）
 uv run python transfer_umap.py                             # transfer_correction.py（埋め込みのキャッシュ）の後。5 科の UMAP（out/transfer_umap/）
