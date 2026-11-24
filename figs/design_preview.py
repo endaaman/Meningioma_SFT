@@ -71,19 +71,23 @@ def grid(ax: plt.Axes, cfg: dict) -> None:
             ax.annotate("", xy=(x, base), xytext=(x, stub + 0.004), arrowprops=dict(arrowstyle="-|>", mutation_scale=7, **minor))
     ax.text((xs[0] + cw / 2 + 0.3 + xs[1] + cw / 2) / 2, stub + 0.03, "Δ borrowed", ha="center", va="bottom", fontsize=FONT - 3, color="0.5")
     ax.text((xs[2] + cw / 2 + 0.3 + xs[4] + cw / 2) / 2, stub + 0.03, "Δ borrowed", ha="center", va="bottom", fontsize=FONT - 3, color="0.5")
-    # 主の弧は鉤形より上から出す（鉤形と交差しないように。端は見出しの左寄り）
-    main_y = stub + 0.12
+    # 主の矢印は片向き 2 本（ken 2026-11-25）。上 = 髄膜腫 → グリオーマ、下 = グリオーマ → 髄膜腫（どちらもまっすぐ）。
+    # どちらも鉤形より上から出す（鉤形と交差しないように。端は見出しの左寄り）。ラベルは各矢印のすぐ上
     xa, xb = xs[0] + cw / 2 - 0.3, xs[2] + cw / 2 - 0.3
-    ax.add_patch(FancyArrowPatch((xa, main_y), (xb, main_y), connectionstyle="arc3,rad=-0.22",
-                                 arrowstyle="<|-|>", mutation_scale=11, lw=1.8, color="0.15", shrinkA=0, shrinkB=0))
-    top = main_y + 0.22 * (xb - xa) / 2 + 0.03   # 弧の頂点のおよその高さ
-    ax.text((xa + xb) / 2, top + 0.02, "Δ borrowed in both directions", ha="center", va="bottom",
-            fontsize=FONT - 1.5, color="0.15", fontweight="bold")
+    main = dict(mutation_scale=11, lw=1.8, color="0.15", shrinkA=0, shrinkB=0)
+    lab = dict(ha="center", va="bottom", fontsize=FONT - 1.5, color="0.15", fontweight="bold")
+    y_low = stub + 0.22
+    ax.add_patch(FancyArrowPatch((xb, y_low), (xa, y_low), arrowstyle="-|>", **main))
+    ax.text((xa + xb) / 2, y_low + 0.03, "glioma Δ → meningioma", **lab)
+    y_up = y_low + 0.26   # 上も同じくまっすぐ（弧にすると頂点がラベルに重なる）
+    ax.add_patch(FancyArrowPatch((xa, y_up), (xb, y_up), arrowstyle="-|>", **main))
+    ax.text((xa + xb) / 2, y_up + 0.03, "meningioma Δ → glioma", **lab)
+    top = y_up + 0.12
     ax.legend(handles=[Line2D([], [], color="0.3", lw=1.6, label="Common tumour (shift measured here)"),
                        Line2D([], [], color="0.3", lw=1.0, ls="--", label="Differential tumour (shift borrowed)")],
               loc="upper right", bbox_to_anchor=(1.0, 0.0), fontsize=FONT - 2.5, frameon=False, ncol=2)
     ax.set_xlim(0, xs[-1] + cw + 0.05)
-    ax.set_ylim(y_rows[1] - ch / 2 - 0.12, top + 0.25)
+    ax.set_ylim(y_rows[1] - ch / 2 - 0.12, top + 0.2)
     ax.axis("off")
 
 
