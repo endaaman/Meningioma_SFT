@@ -18,7 +18,7 @@ transfer_rare_target.py # 希少な腫瘍への転移: 当て先 paper に、SFT
 method_compare_meningioma.py # v4 の Fig 2 の材料: 補正の方法の比較（補正なし / Macenko / GAN / ComBat / 平行移動、参考に相似変換）を髄膜腫だけ（SFT を除く 519 / 555 枚、12 組）で、v3（髄膜腫 + SFT、13 組）と並べる。施設の ASW・隣り合う組・中心の距離・近傍の混ざり・組織型の最近傍重心法の BA（v3 と同じ関数。v3 の行は out/method_compare / out/nc と一致を確認）→ out/method_compare_meningioma/
 transfer_scale_origin.py # 診断用（主解析の出力ではない）: 借りた相似変換・ComBat で中心の距離が悪くなるのは倍率の大きさか広げる中心か。恒等式 r_aff = r_tr − (s − 1)(μ_P,g − μ_P,src) の確認と、広げる中心を当て先の院内平均に替えた変種 (i)・当て先自身の倍率の変種 (ii)（TITAN、当て先 glioma / meningioma / lymphoma / metastasis × 推定元）→ out/_diagnostics/scale_origin/
 cohort_table.py      # Table 1 用: 施設 × 群（髄膜腫のサブタイプ = 両施設 12 ＋ 片方だけ 4、SFT、グリオーマ 3 群、DLBCL、転移、小計・全体）の枚数と患者数（manifest から）→ out/cohort_table/table1_counts.csv
-transfer_uncertainty.py # 査読の確認（足すだけ、TITAN）: 主要な指標の患者単位ブートストラップ区間（補正を毎回当てはめ直す、1,000 回）、グリオーマの診断名の検索の 1 位一致の区間、「同じ腫瘍で推定」の当てはめと評価を患者単位の半分に分けた確認（200 回）、SFT と同じ枚数（32 / 22）で髄膜腫・グリオーマのずれを推定した場合（500 回）→ out/transfer_uncertainty/（点推定が既存の出力と一致することを最初に確かめる）
+transfer_uncertainty.py # 査読の確認（足すだけ、TITAN）: 主要な指標の患者単位ブートストラップ区間（補正を毎回当てはめ直す、1,000 回）、診断名の検索の 1 位・5 位以内の区間（グリオーマ / 4 つの腫瘍 = retrieval_tumours、v4 Fig 7 の誤差線）、「同じ腫瘍で推定」の当てはめと評価を患者単位の半分に分けた確認（200 回）、SFT と同じ枚数（32 / 22）で髄膜腫・グリオーマのずれを推定した場合（500 回）→ out/transfer_uncertainty/（点推定が既存の出力と一致することを最初に確かめる）
 review_tables.py     # 査読の確認（既存の出力を表にするだけ）: 群ごとのずれの長さの雑音の補正と髄膜腫に対する比、Fig 7 の EBRAINS の中での値のスライド単位 / 患者単位 → out/review_checks/
 acquisition_table.py # 撮像と標本の条件の表（事実の整理）: WSI のヘッダ（スキャナの型番・ソフト・対物・µm/px・撮像日時）と h5 の属性（パッチの µm/px・数・組織面積）、患者あたりの枚数、院内の症例番号の年（施設 × 腫瘍、記録が無いものは「記録なし」）→ out/acquisition/
 prism_extract.py     # 第 2 のスライドエンコーダ: manifest の全スライドに Virchow（224 px / 0.5 mpp、concat 2560 次元）→ PRISM を足す。書き先は既存の h5（EBRAINS_embeddings / Patho2Gliomas_embeddings / 論文の original）の virchow_2560/…。既存はスキップ、ログ out/transfer/prism_log.csv
@@ -64,7 +64,7 @@ figs/                # 論文の図表を out/ の解析結果から組み立て
   transfer_structure.py   # Fig 4: 構造が移る（髄膜腫 12 組・グリオーマ 3 組の樹形図、推定元ごとの組の数、鑑別の腫瘍）。transfer_structure_preview.py を 12 組の定義で本番にしたもの
   borrowed_scaling.py  # Fig 5: 倍率を含む補正を借りると何が動くか（観察として示す。a 一覧の表 / b 中心の距離・c 近傍の混ざりの散布図 39 通り / d 群ごとの倍率 / e 倍率を掛ける中心）
   encoder_panels.py  # Fig 6: エンコーダの基礎精度・ずれの向き・組の数・施設差の大きさと借りた後に残る割合
-  glioma_retrieval.py  # Fig 7: グリオーマの参照コホートへの診断名の検索（1 位・5 位以内の一致、3 群の混同行列）
+  diagnosis_retrieval.py  # Fig 7: 参照コホートへの診断名の検索（グリオーマ・リンパ腫・転移・SFT の 1 位・5 位以内と誤差線、グリオーマ 3 群の内訳、3 群の混同行列）。誤差線は transfer_uncertainty.py retrieval_tumours
   shift_mismatch.py  # Fig S1: 腫瘍を食い違わせた対照（5 × 5、基準は髄膜腫だけのずれ）
   combat_recentred.py  # Fig S2: Fig 5 の対照。借りた ComBat の中心を当て先で取り直す（中心の距離・近傍の混ざり）
   estimation_sample_size.py  # Fig S3: ずれの推定に要る枚数（a 髄膜腫の院内 n 枚 → グリオーマに残る施設差、b 6 群の自身の n 枚 対 借りる。out/transfer_sample_size/）
@@ -72,6 +72,8 @@ figs/                # 論文の図表を out/ の解析結果から組み立て
   sft_cross_site.py  # Table S3: SFT 対 髄膜腫の施設間分類（4 条件、out/nc/binary/。セルの作り方は v3 の performance.py の関数）
   scale_origin_table.py  # Table S4: 倍率を掛ける中心の全数値と分解（out/_diagnostics/scale_origin/）
   ebrains_composition.py  # Table S5: EBRAINS 側の構成を変えた感度（out/shift_transfer/composition.csv、髄膜腫だけのずれとの cos）
+  uncertainty_checks.py  # Table S6: 主要な指標の区間、検索の 1 位一致の区間と McNemar、当てはめと評価の分離、SFT と同じ枚数での確認（out/transfer_uncertainty/）
+  acquisition_conditions.py  # Table S7: 撮像と標本の条件（out/acquisition/、型番は記録のまま）
   transfer_corrections_all.py  # Supplementary Data 1（CSV だけ）: 借りた補正の全数値（当て先 × 推定元 × 4 法）→ tables/dataS1_*.csv。番号は figs/__init__.py の SUPP_DATA
   # --- v3（paper.version: v3 のときに登録される）---
   common.py          # 出力先・共通スタイル・保存

@@ -62,7 +62,7 @@ V4_MAIN = [
     "transfer_structure",      # Fig 4 構造が移る（主役）: 樹形図（髄膜腫 12 組・グリオーマ 3 組）/ 推定元ごとの組の数 / 鑑別の腫瘍
     "borrowed_scaling",        # Fig 5 倍率を含む補正を借りると何が動くか（観察として。優劣を言わない、ken 2026-11-24）
     "encoder_panels",          # Fig 6 エンコーダで共通なこと、違うこと
-    "glioma_retrieval",        # Fig 7 出口: グリオーマの参照コホートへの診断名の検索
+    "diagnosis_retrieval",     # Fig 7 出口: 参照コホートへの診断名の検索（グリオーマ・リンパ腫・転移・SFT ＋ グリオーマ 3 群の内訳）
 ]
 V4_TABLES = [
     "cohort_tumours",          # Table 1 コホート（腫瘍 × 施設の枚数と患者数）
@@ -78,6 +78,8 @@ V4_SUPP_TABLES = [
     "sft_cross_site",              # SFT 対 髄膜腫の施設間分類（最近傍重心法、4 条件）
     "scale_origin_table",          # 倍率を掛ける中心の全数値（当て先 × 推定元 × 5 変種）
     "ebrains_composition",         # EBRAINS 側の構成を変えた感度
+    "uncertainty_checks",          # 主要な指標の区間（患者単位のブートストラップ）、当てはめと評価の分離、SFT と同じ枚数での確認
+    "acquisition_conditions",      # 撮像と標本の条件（WSI のヘッダと h5 の属性から、型番は記録のまま）
 ]
 # Supplementary Data（表にしない CSV。番号は Supplementary Data n）
 V4_SUPP_DATA = [

@@ -15,6 +15,9 @@
              補正なし 対 髄膜腫から借りる の対応のある差の区間。同じ患者単位のブートストラップで Δ を当てはめ直し、院内の問い合わせも
              再抽出する。参照（EBRAINS の診断名ごとの重心）は固定（参照コホートは与えられたものとして扱う）。
              同じ腫瘍のずれ（family）は atlas_retrieval.py と同じく問い合わせ自身（の複製すべて）を院内側の平均から除く。
+  retrieval_tumours  retrieval を 4 つの腫瘍（グリオーマ全体・リンパ腫・転移・SFT）の 1 位・5 位以内に広げたもの（v4 Fig 7 の誤差線）。
+             同じ再抽出の流れなのでグリオーマの 1 位は retrieval と同じ。補正なし 対 髄膜腫から借りる の対応のある差、良くなった・悪く
+             なった枚数と McNemar の正確検定（点推定のスライドで）。EBRAINS の中（患者単位で除いた値）は問い合わせの患者を再抽出。
   split      「同じ腫瘍で推定」の当てはめと評価の分離。当て先の両施設を、施設 × 群の中で患者単位に半分に分け、片方（A）で補正を
              当てはめ、もう片方（B）で評価する（200 回）。比べる条件はすべて同じ B で評価: 補正なし / A で当てはめ（分離）/
              B 自身で当てはめ（B の中で当てはめと評価が重なる、今の「同じ腫瘍」と同じ形）/ 借りる（借りる元は全スライド）× 3 法。
@@ -27,12 +30,13 @@
 出力（output_dir/transfer_uncertainty/）:
     bootstrap_draws.csv / bootstrap_summary.csv / bootstrap_pairs_freq.csv
     retrieval_draws.csv / retrieval_summary.csv
+    retrieval_tumours_draws.csv / retrieval_tumours_summary.csv / retrieval_tumours_paired.csv
     split_draws.csv / split_summary.csv
     subsample_draws.csv / subsample_summary.csv
     summary.md
 
 Usage:
-    uv run python transfer_uncertainty.py [bootstrap retrieval split subsample] [--n-boot 1000] [--n-split 200] [--n-sub 500]
+    uv run python transfer_uncertainty.py [bootstrap retrieval retrieval_tumours split subsample report] [--n-boot 1000] [--n-split 200] [--n-sub 500]
 """
 from __future__ import annotations
 
@@ -42,6 +46,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist
+from scipy.stats import binomtest
 
 import atlas_retrieval as ar
 import transfer_correction as tc
@@ -298,6 +303,103 @@ def cmd_retrieval(D: Data, cfg: dict, out: Path, n_boot: int, seed: int) -> None
     print(f"  saved: {out}/retrieval_*.csv")
 
 
+# ── retrieval, 4 tumours ──────────────────────────────────────────────────────
+
+TUMOURS = ["glioma", "lymphoma", "metastasis", "SFT"]
+RCONDS = ["none", "meningioma", "family"]
+
+
+def retrieval_tumours_once(S: dict, idx: np.ndarray, D: Data) -> dict:
+    """retrieval_once を 4 つの腫瘍（グリオーマ・リンパ腫・転移・SFT）の院内の問い合わせに広げたもの。1 位と 5 位以内のスライドごとの当たり。"""
+    M = S["M"][idx]
+    fam, site, grp = D.fam[idx], D.site[idx], D.group[idx]
+    d_men = M[(fam == "meningioma") & (site == REF)].mean(0) - M[(fam == "meningioma") & (site != REF)].mean(0)
+    out = {}
+    for t in TUMOURS:
+        qm = (fam == t) & (site != REF)
+        Xq, oq, lq = M[qm], idx[qm], grp[qm]
+        mu_e = M[(fam == t) & (site == REF)].mean(0)
+        copies = pd.Series(oq).map(pd.Series(oq).value_counts()).to_numpy()
+        fam_shift = mu_e - (Xq.sum(0) - copies[:, None] * Xq) / (len(Xq) - copies)[:, None]
+        corr = ar.corr_mask(lq, S["classes"], S["correct"])
+        for cond, Q in (("none", Xq), ("meningioma", Xq + d_men), ("family", Xq + fam_shift)):
+            r = ar.nc_retrieve(ar._dist(Q, S["C"], "euclid"), corr)
+            out[(t, cond)] = {"hit1": r["hit1"], "hit5": r["hit5"], "oid": oq, "label": lq}
+    return out
+
+
+def cmd_retrieval_tumours(D: Data, cfg: dict, out: Path, n_boot: int, seed: int) -> None:
+    """4 つの腫瘍の検索の 1 位・5 位以内の区間（Fig 7）。retrieval と同じ再抽出（同じ seed の流れ）で、グリオーマの 1 位は retrieval と同じ値になる。
+    EBRAINS の中（患者単位で除いた値、atlas_retrieval の ebrains_lpo）は、問い合わせの患者を腫瘍の中で再抽出する（参照は固定）。"""
+    print(f"[retrieval_tumours] {n_boot} draws")
+    S = retrieval_setup(cfg)
+    root = Path(cfg["output_dir"]) / "atlas"
+    ref = pd.read_csv(root / "retrieval_titan.csv")
+    ref = ref[(ref["retrieval"] == "nc_euclid") & (ref["query_label"] == "(all)")].set_index(["condition", "query_family", "metric"])["value"]
+    p0 = retrieval_tumours_once(S, np.arange(len(D.man)), D)
+    for (t, c), r in p0.items():
+        for m, k in (("top1", "hit1"), ("top5", "hit5")):
+            assert np.isclose(r[k].mean(), ref[(c, t, m)], atol=1e-9), (t, c, m)
+    eb = pd.read_csv(root / "per_slide_titan.csv", dtype={"slide_id": str})
+    eb = eb[(eb["retrieval"] == "nc_euclid") & (eb["condition"] == "ebrains_lpo") & eb["family"].isin(TUMOURS) & eb["scorable"]]
+    atlas = pd.read_csv(root / "atlas_titan_slides.csv", dtype={"slide_id": str})
+    eb = eb.assign(patient=eb["slide_id"].map(dict(zip(atlas["slide_id"], atlas["patient"].astype(str)))))
+    assert eb["patient"].notna().all()
+    for t, d in eb.groupby("family"):
+        for m, k in (("top1", "hit1"), ("top5", "hit5")):
+            assert np.isclose(d[k].mean(), ref[("ebrains_lpo", t, m)], atol=1e-9), (t, m)
+    print("  point check vs retrieval_titan.csv: ok (none / meningioma / family / ebrains_lpo × 4 tumours × top1 / top5)")
+    eb_groups = {t: [np.asarray(v) for v in d.groupby("patient").indices.values()] for t, d in eb.reset_index(drop=True).groupby("family")}
+    eb_hits = {t: d.reset_index(drop=True)[["hit1", "hit5"]].to_numpy(float) for t, d in eb.groupby("family")}
+    eb_lab = {t: d.reset_index(drop=True)["label"].to_numpy() for t, d in eb.groupby("family")}
+
+    def by_group(t: str, h1: np.ndarray, h5: np.ndarray, lab: np.ndarray) -> list[tuple[str, float, float]]:
+        out_ = [("(all)", h1.mean(), h5.mean())]
+        if t == "glioma":   # グリオーマの 3 群の内訳（Fig 7c）
+            out_ += [(g, h1[lab == g].mean(), h5[lab == g].mean()) for g in GLIOMA]
+        return out_
+    rng = np.random.default_rng(seed + 1)   # retrieval と同じ流れ（グリオーマの値が retrieval と一致する）
+    rng_eb = np.random.default_rng(seed + 4)
+    rows = []
+    for b in range(n_boot):
+        res = retrieval_tumours_once(S, D.boot_index(rng), D)
+        for (t, c), r in res.items():
+            rows += [{"draw": b, "tumour": t, "group": g, "condition": c, "top1": x1, "top5": x5}
+                     for g, x1, x5 in by_group(t, r["hit1"].astype(float), r["hit5"].astype(float), r["label"])]
+        for t, pats in eb_groups.items():
+            ii = np.concatenate([pats[i] for i in rng_eb.integers(0, len(pats), len(pats))])
+            h = eb_hits[t][ii]
+            rows += [{"draw": b, "tumour": t, "group": g, "condition": "ebrains_lpo", "top1": x1, "top5": x5}
+                     for g, x1, x5 in by_group(t, h[:, 0], h[:, 1], eb_lab[t][ii])]
+    d = pd.DataFrame(rows)
+    d.to_csv(out / "retrieval_tumours_draws.csv", index=False)
+    refg = pd.read_csv(root / "retrieval_titan.csv")
+    refg = refg[(refg["retrieval"] == "nc_euclid") & (refg["query_label"] == "(all)")].set_index(["condition", "query_family", "metric"])
+    srows = []
+    for (t, grp_, c), g in d.groupby(["tumour", "group", "condition"], sort=False):
+        key = t if grp_ == "(all)" else grp_
+        for m in ("top1", "top5"):
+            v = g[m].to_numpy()
+            srows.append({"tumour": t, "group": grp_, "condition": c, "metric": m, "n": int(refg.loc[(c, key, m), "n"]),
+                          "point": float(refg.loc[(c, key, m), "value"]), "median": np.median(v), "q025": np.quantile(v, 0.025),
+                          "q975": np.quantile(v, 0.975)})
+    pd.DataFrame(srows).to_csv(out / "retrieval_tumours_summary.csv", index=False)
+    w = d[d["group"] == "(all)"].pivot_table(index=["draw", "tumour"], columns="condition", values=["top1", "top5"])
+    prows = []
+    for t in TUMOURS:
+        for m, k in (("top1", "hit1"), ("top5", "hit5")):
+            a_, b_ = p0[(t, "none")][k], p0[(t, "meningioma")][k]
+            up, down = int((~a_ & b_).sum()), int((a_ & ~b_).sum())
+            v = (w[(m, "meningioma")] - w[(m, "none")]).xs(t, level="tumour").to_numpy()
+            prows.append({"tumour": t, "metric": m, "n": len(a_), "none": a_.mean(), "borrowed": b_.mean(), "diff": b_.mean() - a_.mean(),
+                          "diff_median": np.median(v), "diff_q025": np.quantile(v, 0.025), "diff_q975": np.quantile(v, 0.975),
+                          "improved": up, "worsened": down,
+                          "mcnemar_exact_p": binomtest(up, up + down, 0.5).pvalue if up + down else np.nan})
+    pd.DataFrame(prows).to_csv(out / "retrieval_tumours_paired.csv", index=False)
+    print(pd.DataFrame(prows).round(4).to_string(index=False))
+    print(f"  saved: {out}/retrieval_tumours_*.csv")
+
+
 # ── split ─────────────────────────────────────────────────────────────────────
 
 def split_halves(D: Data, t: str, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
@@ -458,7 +560,7 @@ def cmd_report(cfg: dict, out: Path) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("commands", nargs="*", choices=["bootstrap", "retrieval", "split", "subsample", "report"],
+    ap.add_argument("commands", nargs="*", choices=["bootstrap", "retrieval", "retrieval_tumours", "split", "subsample", "report"],
                     help="既定（何も書かない）は全部（最後に report）")
     ap.add_argument("--n-boot", type=int, default=1000)
     ap.add_argument("--n-split", type=int, default=200)
@@ -472,12 +574,13 @@ def main() -> None:
         cmd_report(cfg, out)
         return
     D = Data(cfg)
-    for c in args.commands or ["bootstrap", "retrieval", "split", "subsample", "report"]:
+    for c in args.commands or ["bootstrap", "retrieval", "retrieval_tumours", "split", "subsample", "report"]:
         if c == "report":
             cmd_report(cfg, out)
             continue
         {"bootstrap": lambda: cmd_bootstrap(D, cfg, out, args.n_boot, seed),
          "retrieval": lambda: cmd_retrieval(D, cfg, out, args.n_boot, seed),
+         "retrieval_tumours": lambda: cmd_retrieval_tumours(D, cfg, out, args.n_boot, seed),
          "split": lambda: cmd_split(D, cfg, out, args.n_split, seed),
          "subsample": lambda: cmd_subsample(D, cfg, out, args.n_sub, seed)}[c]()
 

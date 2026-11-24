@@ -76,8 +76,7 @@ def main() -> None:
     ax2.set_xticks([])
     ax2.set_yticks([])
     ax2.set_title("Common origin", fontsize=FONT - 2, pad=2)
-    ax2.text(0.0, -0.08, f"in-plane angle {a2.mean():.1f} ± {a2.std(ddof=1):.1f}°, length {l2.mean():.1f} ± {l2.std(ddof=1):.1f}",
-             transform=ax2.transAxes, fontsize=FONT - 2, va="top")
+    # 平面内の角度・長さは図に書かない（平面への射影なので小さく出る。全次元の角度は本文、2026-11-25）。値は標準出力にだけ出す
 
     # b
     g = groups[groups["kind"].isin(["sft", "subtype", "glioma"])].copy()
