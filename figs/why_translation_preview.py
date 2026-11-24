@@ -8,7 +8,7 @@
 案 B（既存の補正をそのまま借りると中心が崩れる）: _preview_why_translation_B
     a 中心の距離（群の中央値）。横軸 = 平行移動を借りたとき、縦軸 = ComBat（丸）・相似変換（三角）を借りたとき。点 = 当て先 × 推定元
       （当て先 paper / meningioma / glioma / lymphoma / metastasis / all、推定元は own・none 以外の全部）。対角線より上なら平行移動の方が良い
-    b 近傍の混ざり（両施設 5 枚以上の群の中央値）。a と同じ形
+    b 近傍の混ざり（両施設 5 枚以上の群の中央値）。a と同じ形だが、こちらは高いほど良いので対角線より上なら借りた ComBat / 相似変換の方が良い
     c 対照: 借りた ComBat / 中心を当て先の施設平均で取り直した ComBat（ComBat (recentred)）/ 同じ腫瘍の ComBat の近傍の混ざり
     d 機構（out/_diagnostics/scale_origin/）: 平行移動 / 借りた相似変換 / 借りた倍率で広げる中心だけ当て先の院内平均に替えたもの、の中心の距離
     入力: output_dir/transfer/correction_titan.csv・correction_titan_groups.csv（transfer_correction.py）、
@@ -98,7 +98,8 @@ def plan_b(cfg: dict) -> pd.DataFrame:
     v = pd.DataFrame(rows)
     fig = plt.figure(figsize=(7.2, 6.4))
     gs = fig.add_gridspec(2, 2, hspace=0.55, wspace=0.32, left=0.09, right=0.98, top=0.95, bottom=0.12)
-    for k, (pref, title) in enumerate((("gap", "Site-centre distance (group median)"), ("knn", f"Neighbour mixing (groups ≥ {MIN_N} per site)"))):
+    for k, (pref, title) in enumerate((("gap", "Site-centre distance (group median; lower is better)"),
+                                       ("knn", f"Neighbour mixing (groups ≥ {MIN_N} per site; higher is better)"))):
         ax = fig.add_subplot(gs[0, k])
         for m, mk in (("combat", "o"), ("affine_free", "^")):
             ax.scatter(v[f"{pref}_centroid"], v[f"{pref}_{m}"], s=16, marker=mk, color=CONDITION_COLORS[m], alpha=0.8,
