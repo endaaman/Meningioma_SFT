@@ -65,6 +65,7 @@ figs/                # 論文の図表を out/ の解析結果から組み立て
   borrowed_scaling.py  # Fig 5: 倍率を含む補正を借りると何が動くか（観察として示す。a 一覧の表 / b 中心の距離・c 近傍の混ざりの散布図 39 通り / d 群ごとの倍率 / e 倍率を掛ける中心）
   encoder_panels.py  # Fig 6: エンコーダの基礎精度・ずれの向き・組の数・施設差の大きさと借りた後に残る割合
   diagnosis_retrieval.py  # Fig 7: 参照コホートへの診断名の検索（グリオーマ・リンパ腫・転移・SFT の 1 位・5 位以内と誤差線、グリオーマ 3 群の内訳、3 群の混同行列）。誤差線は transfer_uncertainty.py retrieval_tumours
+  design_preview.py  # Fig 1 の下書き（プレビュー、登録していない）: 2 施設 × 5 腫瘍の格子（枚数は out/cohort_table/ から）、埋め込みの流れ、「借りる」の模式図（合成の点群）→ paper/v4/fig/_preview_design.*
   shift_mismatch.py  # Fig S1: 腫瘍を食い違わせた対照（5 × 5、基準は髄膜腫だけのずれ）
   combat_recentred.py  # Fig S2: Fig 5 の対照。借りた ComBat の中心を当て先で取り直す（中心の距離・近傍の混ざり）
   estimation_sample_size.py  # Fig S3: ずれの推定に要る枚数（a 髄膜腫の院内 n 枚 → グリオーマに残る施設差、b 6 群の自身の n 枚 対 借りる。out/transfer_sample_size/）
