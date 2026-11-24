@@ -58,19 +58,32 @@ def grid(ax: plt.Axes, cfg: dict) -> None:
         ax.scatter([0.15], [y], marker=mk, s=40, color=colors[site])
         ax.text(0.32, y, lab, ha="left", va="center", fontsize=FONT - 0.5)
     ax.text(0.15, y_rows[1] - ch / 2 - 0.02, "Cells: slides (patients)", fontsize=FONT - 2.5, color="0.35", va="top")
-    # 借りる向き（よくある腫瘍 → 隣の鑑別の腫瘍）。グリオーマからの 2 本は高さを変えて重ねない
-    top = y_rows[0] + ch / 2 + 0.42
-    for src_i, d, rad, dx in ((0, 1, -0.45, 0.1), (2, 3, -0.45, 0.2), (2, 4, -0.3, -0.15)):
-        a = FancyArrowPatch((xs[src_i] + cw / 2 + dx, top), (xs[d] + cw / 2 - 0.1, top), connectionstyle=f"arc3,rad={rad}",
-                            arrowstyle="-|>", mutation_scale=8, lw=0.9, color="0.35")
-        ax.add_patch(a)
-    ax.text(xs[0] + cw, top + 0.24, "Δ borrowed", ha="center", va="bottom", fontsize=FONT - 2.5, color="0.35")
-    ax.text(xs[3] + cw / 2, top + 0.32, "Δ borrowed", ha="center", va="bottom", fontsize=FONT - 2.5, color="0.35")
+    # 借りる向き。主 = 髄膜腫 ⇄ グリオーマ（両向き、太く濃い弧）、従 = よくある腫瘍 → 隣の鑑別の腫瘍（細く薄い鉤形。グリオーマからは
+    # 1 本の幹を DLBCL と転移に枝分かれさせる）
+    base = y_rows[0] + ch / 2 + 0.40          # 鉤形の足元（見出しの上）
+    stub = base + 0.16                         # 鉤形の横線の高さ
+    minor = dict(color="0.6", lw=0.8)
+    for src_i, dsts in ((0, [1]), (2, [3, 4])):
+        x_s = xs[src_i] + cw / 2 + 0.3
+        x_d = [xs[d] + cw / 2 for d in dsts]
+        ax.plot([x_s, x_s, max(x_d)], [base, stub, stub], solid_capstyle="round", **minor)   # 幹 → 横線
+        for x in x_d:
+            ax.annotate("", xy=(x, base), xytext=(x, stub + 0.004), arrowprops=dict(arrowstyle="-|>", mutation_scale=7, **minor))
+    ax.text((xs[0] + cw / 2 + 0.3 + xs[1] + cw / 2) / 2, stub + 0.03, "Δ borrowed", ha="center", va="bottom", fontsize=FONT - 3, color="0.5")
+    ax.text((xs[2] + cw / 2 + 0.3 + xs[4] + cw / 2) / 2, stub + 0.03, "Δ borrowed", ha="center", va="bottom", fontsize=FONT - 3, color="0.5")
+    # 主の弧は鉤形より上から出す（鉤形と交差しないように。端は見出しの左寄り）
+    main_y = stub + 0.12
+    xa, xb = xs[0] + cw / 2 - 0.3, xs[2] + cw / 2 - 0.3
+    ax.add_patch(FancyArrowPatch((xa, main_y), (xb, main_y), connectionstyle="arc3,rad=-0.22",
+                                 arrowstyle="<|-|>", mutation_scale=11, lw=1.8, color="0.15", shrinkA=0, shrinkB=0))
+    top = main_y + 0.22 * (xb - xa) / 2 + 0.03   # 弧の頂点のおよその高さ
+    ax.text((xa + xb) / 2, top + 0.02, "Δ borrowed in both directions", ha="center", va="bottom",
+            fontsize=FONT - 1.5, color="0.15", fontweight="bold")
     ax.legend(handles=[Line2D([], [], color="0.3", lw=1.6, label="Common tumour (shift measured here)"),
                        Line2D([], [], color="0.3", lw=1.0, ls="--", label="Differential tumour (shift borrowed)")],
               loc="upper right", bbox_to_anchor=(1.0, 0.0), fontsize=FONT - 2.5, frameon=False, ncol=2)
     ax.set_xlim(0, xs[-1] + cw + 0.05)
-    ax.set_ylim(y_rows[1] - ch / 2 - 0.12, top + 0.62)
+    ax.set_ylim(y_rows[1] - ch / 2 - 0.12, top + 0.25)
     ax.axis("off")
 
 
