@@ -17,7 +17,8 @@ dispersion_ratio.py の「ばらつきの比は腫瘍に固有」）が、TITAN 
 出力 (output_dir/transfer/):
     embeddings_meanpool.npy       (2301, 768) float32、manifest の並び
     embeddings_meanpool_ids.csv   slide_id, site, n_patches, source（existing_h5 | computed）、manifest の並び
-    既にあれば作り直さない（--reload で作り直す）。
+    既にあれば作り直さない（--reload で作り直す）。manifest が変わって既存のキャッシュが今の manifest を覆わないときは、
+    既存のキャッシュにある (site, slide_id) の行を引き継ぎ、無い行だけ計算して manifest の並びで書き直す（_reuse。--source virchow も同じ）。
 
 読む側（transfer_correction.py / shift_transfer.py の --encoder meanpool）は load_cache() を使う。
 
@@ -92,6 +93,28 @@ def load_cache(cfg: dict, source: str = "conch") -> tuple[pd.DataFrame, np.ndarr
     return man, X[idx].astype(np.float64), ids.iloc[idx].reset_index(drop=True)
 
 
+def _cache_covers(cfg: dict, source: str, man: pd.DataFrame) -> bool:
+    """既存のキャッシュが今の manifest の行を全部含むか（含めば load_cache で引ける）。"""
+    npy, ids_csv = _paths(cfg, source)
+    return npy.exists() and ids_csv.exists() and align_rows(pd.read_csv(ids_csv, dtype={"slide_id": str}), man) is not None
+
+
+def _reuse(cfg: dict, source: str, man: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, pd.DataFrame] | None:
+    """既存のキャッシュ（manifest が変わる前のもの）から、今の manifest の行に当たるものを引く:
+    (manifest の行番号, その行の埋め込み, その行の ids)。キャッシュが無い・壊れていれば None。"""
+    npy, ids_csv = _paths(cfg, source)
+    if not (npy.exists() and ids_csv.exists()):
+        return None
+    ids, X = pd.read_csv(ids_csv, dtype={"slide_id": str}), np.load(npy)
+    if len(X) != len(ids) or ids.duplicated(["site", "slide_id"]).any():
+        return None
+    pos = pd.Series(np.arange(len(ids)), index=pd.MultiIndex.from_frame(ids[["site", "slide_id"]].astype(str)))
+    mk = pd.MultiIndex.from_frame(man[["site", "slide_id"]].astype(str))
+    hit = mk.isin(pos.index)
+    src = pos.loc[mk[hit]].to_numpy()
+    return np.flatnonzero(hit), X[src], ids.iloc[src].reset_index(drop=True)
+
+
 def _paper_h5(cfg: dict, site: str, slide_id: str) -> tuple[Path, str]:
     """髄膜腫+SFT コホートの既存の平均プーリング h5 とキー（meanpool.py の _root / _slide_key と同じ）。"""
     root = Path(cfg["meanpool"]["root"].format(site=site)) / "original"
@@ -136,7 +159,7 @@ def check_definition(cfg: dict, man: pd.DataFrame, X: np.ndarray, n_patches: np.
 def build(cfg: dict, reload: bool, n_check: int) -> None:
     npy, ids_csv = _paths(cfg)
     man = load_manifest(cfg)
-    if not reload and npy.exists() and ids_csv.exists():
+    if not reload and _cache_covers(cfg, "conch", man):
         _, X, ids = load_cache(cfg)
         print(f"  cache: {npy} {X.shape}（--reload で作り直す）")
         X = X.astype(np.float32)
@@ -144,10 +167,15 @@ def build(cfg: dict, reload: bool, n_check: int) -> None:
         X = np.zeros((len(man), 768), dtype=np.float32)
         n_patches = np.zeros(len(man), dtype=np.int64)
         source = np.empty(len(man), dtype=object)
-        todo = [i for i, f in enumerate(man["family"]) if f not in PAPER_FAMILIES]
-        print(f"  {len(man)} slides: existing_h5 {len(man) - len(todo)}, computed {len(todo)}")
+        reused = np.zeros(len(man), bool)
+        if not reload and (ru := _reuse(cfg, "conch", man)) is not None:   # manifest が変わった: 既存の行を引き継ぐ
+            rows_i, Xr, idr = ru
+            X[rows_i], n_patches[rows_i], source[rows_i], reused[rows_i] = Xr, idr["n_patches"].to_numpy(), idr["source"].to_numpy(), True
+            print(f"  既存のキャッシュから {len(rows_i)} / {len(man)} 行を引き継ぐ（残りだけ計算）")
+        todo = [i for i, f in enumerate(man["family"]) if f not in PAPER_FAMILIES and not reused[i]]
+        print(f"  {len(man)} slides: reused {int(reused.sum())}, existing_h5 {sum(1 for i, f in enumerate(man['family']) if f in PAPER_FAMILIES and not reused[i])}, computed {len(todo)}")
         for i, r in enumerate(man.itertuples(index=False)):   # 髄膜腫+SFT コホート: 既存の h5（Sync 側、軽い）
-            if r.family not in PAPER_FAMILIES:
+            if r.family not in PAPER_FAMILIES or reused[i]:
                 continue
             p, key = _paper_h5(cfg, r.site, r.slide_id)
             if not p.exists():
@@ -239,7 +267,7 @@ def build_virchow(cfg: dict, reload: bool, n_check: int, workers: int) -> None:
     part_npy, part_csv = _partial_paths(cfg)
     man = load_manifest(cfg)
     key = _virchow_key(cfg)
-    if not reload and npy.exists() and ids_csv.exists():
+    if not reload and _cache_covers(cfg, "virchow", man):
         _, X, ids = load_cache(cfg, "virchow")
         print(f"  cache: {npy} {X.shape}（--reload で作り直す）")
         X = X.astype(np.float32)
@@ -265,8 +293,14 @@ def build_virchow(cfg: dict, reload: bool, n_check: int, workers: int) -> None:
             part_npy.unlink(missing_ok=True)
             part_csv.unlink(missing_ok=True)
             P = np.lib.format.open_memmap(part_npy, mode="w+", dtype=np.float32, shape=(len(man), dim))
-            P.flush()
             done = pd.DataFrame(columns=["idx", "slide_id", "site", "n_patches", "n_coordinates"])
+            if not reload and (ru := _reuse(cfg, "virchow", man)) is not None and ru[1].shape[1] == dim:
+                rows_i, Xr, idr = ru   # manifest が変わった: 既存のキャッシュの行を済みとして途中経過に入れる（coordinates の行数は未確認 = -1）
+                P[rows_i] = Xr.astype(np.float32)
+                done = pd.DataFrame({"idx": rows_i, "slide_id": man["slide_id"].iloc[rows_i].to_numpy(), "site": man["site"].iloc[rows_i].to_numpy(),
+                                     "n_patches": idr["n_patches"].to_numpy(), "n_coordinates": -1})
+                print(f"  既存のキャッシュから {len(rows_i)} / {len(man)} 行を引き継ぐ（残りだけ計算）", flush=True)
+            P.flush()
             done.to_csv(part_csv, index=False)
         finished = set(done["idx"].astype(int))
         todo = [i for i in range(len(man)) if i not in finished]
