@@ -22,6 +22,7 @@ shift_transfer.py    # 転移テストの予備解析: 髄膜腫+SFT コホー�
 transfer_meanpool.py # 転移テストの全スライドの平均プーリング埋め込み（CONCH v1.5 パッチ平均、meanpool.py と同じ定義。髄膜腫+SFT コホートは既存の meanpool h5、グリオーマ側は h5 の features から計算）→ out/transfer/embeddings_meanpool.npy。shift_transfer / transfer_correction / dispersion_ratio の --encoder meanpool が読む（集約器の対照）。--source virchow は Virchow のタイル特徴（h5_prism の virchow_2560/features、2560 次元）の平均 → embeddings_meanpool_virchow.npy（PRISM の集約器の対照、--encoder meanpool_virchow が読む。NFS を読むので --workers 4 まで、途中から再開できる、約 1.5 時間）
 transfer_umap.py     # 全 2,301 枚（5 科 × 2 施設）の UMAP: 補正なしで 1 回当てはめ、Δ_paper / 自分の科の Δ で補正した院内を transform で写す（補正なし / +Δ_paper / +own と科ごとの小図）。768 次元での院内の 15 近傍に占める EBRAINS の割合を併記（out/transfer_umap/）
 transfer_sample_size.py # 別の腫瘍に移せる Δ に要る枚数と種類数（平行移動のみ）: 推定元の院内 n 枚（200 回）→ 他の科の残差・施設 ASW・NC BA・対と、全枚数の 10% 以内に入る n。当て先以外の k 科の科ごと平均 vs まとめ（out/transfer_sample_size/）。Fig S4 の作り直し
+transfer_rare_crossover.py # 例数の少ない腫瘍の Δ は自前の n 枚で推定するか、よくある腫瘍から借りるか（平行移動のみ）: 当て先の群 SFT / lym / met / ast / glm / odg（参考に髄膜腫のサブタイプ）の院内 n 枚で推定（500 回）vs 髄膜腫・グリオーマ（自分の科なら自分を除いた残り）の全枚数の Δ を、推定に使っていない残りの group_gap_sd（transfer_correction.site_mixing）と EBRAINS 全体の重心への最近傍（hit1、titan / prism）で比べる。床・理論値・交点 n*（out/transfer_sample_size/rare_crossover_*。既存の出力とは別名）
 transfer_color.py    # 転移テストの全 2,301 枚の色（32 パッチの L*a*b*・H/E とスライド内のばらつき）と、科ごとの色の幅の比 vs 埋め込みの倍率 s（色を除いた s も）、施設軸 Δ_paper への射影の H 応答・平均色で説明できる施設差（out/transfer_color/）。build（WSI を読む、長い）→ analyze
 encoder_baseline.py   # エンコーダの基礎精度: 4 つのスライド埋め込みが施設内（EBRAINS 内・patho2 内）で SFT vs 髄膜腫 / 主要 5 組織型 / グリオーマ 3 群 / 5 科をどれだけ解けるか。最近傍重心法・患者単位の層化 5 分割 CV（seed 42）の BA と macro F1 に、施設をまたぐ値（correction_{encoder}.csv の none / own）を参考に並べる（out/encoder_baseline/）。転移テストの埋め込みキャッシュを読むだけ
 encoder_comparison.py # 同じ解析を 4 つのスライド埋め込み（CONCH の平均 / TITAN / Virchow の平均 / PRISM。パッチ平均 → 集約器 が隣り合う並び）で並べた表と図（各解析の出力を読むだけ。ただし施設差の相対的な大きさ ‖Δ_paper‖ / 群内 RMS と Δ_f の分解は転移テストの埋め込みキャッシュ out/transfer/embeddings_{encoder}.npy から計算。out/encoder_comparison/）。v4 Fig 6 の材料。出力の無いエンコーダの列は空欄
@@ -128,6 +129,7 @@ uv run python -u transfer_meanpool.py build                # transfer_manifest.p
 uv run python shift_transfer.py --encoder meanpool         # 同様に transfer_correction.py / dispersion_ratio.py --encoder meanpool（集約器の対照。出力は meanpool/ か *_meanpool）
 uv run python transfer_umap.py                             # transfer_correction.py（埋め込みのキャッシュ）の後。5 科の UMAP（out/transfer_umap/）
 uv run python transfer_sample_size.py                      # 同。枚数 n・種類数 k vs 転移の指標（out/transfer_sample_size/。--summary-only で CSV から図だけ）
+uv run python transfer_rare_crossover.py                   # 4 エンコーダの transfer_correction.py・transfer_rare_target.py・atlas_retrieval.py の後（その出力と突き合わせる）。自前の n 枚 vs 借りる Δ の交点（約 40 分、Virchow の平均が半分以上、--n-jobs 12）
 uv run python transfer_color.py build --workers 4           # transfer_manifest.py の後。全スライドの色（h5 のパッチ画素か元 WSI。NFS を読むので 4 並列まで、途中から再開できる。約 4 時間）
 uv run python transfer_color.py analyze                     # build と transfer_correction.py（埋め込みのキャッシュ）の後（out/transfer_color/）
 uv run python shift_time.py                                # 論文には出さない。院内の Δ の経年安定性（out/shift_time/、--plot-only で図だけ）
